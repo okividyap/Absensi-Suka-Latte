@@ -94,6 +94,32 @@
     return `${withSec}${getTimezoneOffsetSuffix(tz || "Asia/Makassar")}`;
   }
 
+  function normalizeTimeInput(val, fallback = "07:00") {
+    if (!val || !String(val).trim()) return fallback + (fallback.length === 5 ? ":00" : "");
+    let s = String(val).trim().replace(/\./g, ":");
+    const m = s.match(/^(\d{1,2}):(\d{2})(:(\d{2}))?$/);
+    if (m) {
+      const hh = m[1].padStart(2, "0");
+      const mm = m[2];
+      const ss = m[4] || "00";
+      return `${hh}:${mm}:${ss}`;
+    }
+    return s;
+  }
+
+  function normalizeDateInput(val, fallback) {
+    if (!val || !String(val).trim()) return fallback || new Date().toISOString().slice(0, 10);
+    let s = String(val).trim();
+    const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (dmy) {
+      const dd = dmy[1].padStart(2, "0");
+      const mm = dmy[2].padStart(2, "0");
+      const yyyy = dmy[3];
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return s;
+  }
+
   // ==========================================================================
   // 2. KAMERA SELFIE LANGSUNG & GEOLOCATION GPS ASLI PERANGKAT
   // ==========================================================================
@@ -512,7 +538,7 @@
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
-              <form id="form-edit-employee">
+              <form id="form-edit-employee" novalidate>
                 <input type="hidden" name="target_user_id" value="${esc(emp.id)}" />
                 <div class="card-subtle" style="margin-bottom:14px;font-size:12px;">
                   Akun Google Terhubung: <strong>${esc(emp.email)}</strong>
@@ -570,7 +596,7 @@
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="submit" class="btn btn-primary">💾 Simpan Perubahan Profil</button>
+                  <button type="button" id="btn-save-employee" class="btn btn-primary" data-action="submit-edit-employee">💾 Simpan Perubahan Profil</button>
                 </div>
               </form>
             </div>
@@ -592,7 +618,7 @@
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
-              <form id="form-reject-first-login">
+              <form id="form-reject-first-login" novalidate>
                 <input type="hidden" name="target_user_id" value="${esc(emp.id)}" />
                 <p style="font-size:12.5px;color:var(--stone-600);margin-bottom:12px;">
                   Anda akan menolak permintaan akses login pertama dari <strong>${esc(emp.full_name)}</strong> (<code>${esc(emp.email)}</code>).
@@ -603,7 +629,7 @@
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="submit" class="btn btn-danger">Konfirmasi Tolak Akses</button>
+                  <button type="button" class="btn btn-danger" data-action="submit-reject-first-login">Konfirmasi Tolak Akses</button>
                 </div>
               </form>
             </div>
@@ -628,7 +654,7 @@
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
-              <form id="form-change-role">
+              <form id="form-change-role" novalidate>
                 <input type="hidden" name="target_user_id" value="${esc(emp.id)}" />
                 <input type="hidden" name="new_role" value="${esc(uiState.modal.newRole)}" />
                 <div class="card-subtle" style="margin-bottom:12px;font-size:12.5px;">
@@ -641,7 +667,7 @@
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="submit" class="btn btn-primary">Simpan Perubahan Role</button>
+                  <button type="button" id="btn-save-change-role" class="btn btn-primary" data-action="submit-change-role">Simpan Perubahan Role</button>
                 </div>
               </form>
             </div>
@@ -676,7 +702,7 @@
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
-              <form id="form-admin-edit-att">
+              <form id="form-admin-edit-att" novalidate>
                 <input type="hidden" name="attendance_id" value="${esc(rec.id)}" />
                 <div class="card-subtle" style="margin-bottom:12px;font-size:12px;">
                   Karyawan: <strong>${esc(emp ? emp.full_name : "-")}</strong> • Tanggal Kerja: <strong>${esc(rec.work_date)}</strong><br/>
@@ -709,7 +735,7 @@
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="submit" class="btn btn-primary">💾 Simpan Koreksi Kehadiran</button>
+                  <button type="button" id="btn-save-admin-edit-att" class="btn btn-primary" data-action="submit-admin-edit-att">💾 Simpan Koreksi Kehadiran</button>
                 </div>
               </form>
             </div>
@@ -734,7 +760,7 @@
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
-              <form id="form-review-corr">
+              <form id="form-review-corr" novalidate>
                 <input type="hidden" name="correction_id" value="${esc(corr.id)}" />
                 <input type="hidden" name="decision" value="${esc(uiState.modal.decision)}" />
                 <div class="card-subtle" style="margin-bottom:12px;font-size:12px;">
@@ -747,7 +773,7 @@
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="submit" class="btn ${isApprove ? "btn-emerald" : "btn-danger"}">
+                  <button type="button" class="btn ${isApprove ? "btn-emerald" : "btn-danger"}" data-action="submit-review-corr">
                     ${isApprove ? "Konfirmasi Setujui" : "Konfirmasi Tolak"}
                   </button>
                 </div>
@@ -772,7 +798,7 @@
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
-              <form id="form-member-corr">
+              <form id="form-member-corr" novalidate>
                 <input type="hidden" name="attendance_id" value="${esc(rec.id)}" />
                 <div class="card-subtle" style="margin-bottom:12px;font-size:12px;">
                   Tanggal Kerja: <strong>${esc(rec.work_date)}</strong> • Permintaan akan ditinjau oleh Admin / Super Admin.
@@ -793,7 +819,7 @@
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="submit" class="btn btn-primary">Kirim Pengajuan ke Admin</button>
+                  <button type="button" class="btn btn-primary" data-action="submit-member-corr">Kirim Pengajuan ke Admin</button>
                 </div>
               </form>
             </div>
@@ -813,7 +839,7 @@
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
-              <form id="form-member-leave">
+              <form id="form-member-leave" novalidate>
                 <div class="form-group">
                   <label class="form-label">Jenis Pengajuan *</label>
                   <select class="form-select" name="type">
@@ -842,7 +868,7 @@
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="submit" class="btn btn-primary">Kirim Pengajuan</button>
+                  <button type="button" class="btn btn-primary" data-action="submit-member-leave">Kirim Pengajuan</button>
                 </div>
               </form>
             </div>
@@ -1287,6 +1313,896 @@
   }
 
   // ==========================================================================
+  // 5.C HANDLER LENGKAP SEMUA FITUR EDIT SISTEM (TANPA PERLU BUKA VS CODE)
+  // ==========================================================================
+
+  // 1. Simpan / Edit Jadwal Shift (Normalisasi Format Jam . dan : otomatis)
+  async function handleSaveShift(btn) {
+    Core.assertManagerAccess("SaveShift");
+    const form = document.getElementById("form-save-shift");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const id = String(fd.get("id") || "").trim();
+    const name = String(fd.get("name") || "").trim();
+    if (!name) {
+      showBanner(false, "Nama jadwal shift wajib diisi.");
+      return;
+    }
+
+    const rawStart = fd.get("start_time");
+    const rawEnd = fd.get("end_time");
+    const startTime = normalizeTimeInput(rawStart, "07:00");
+    const endTime = normalizeTimeInput(rawEnd, "15:00");
+    const graceMins = Math.max(0, parseInt(fd.get("grace_period_minutes") || "0", 10) || 0);
+    const earlyMins = Math.max(0, parseInt(fd.get("early_checkout_threshold_minutes") || "0", 10) || 0);
+    const effectiveFrom = normalizeDateInput(fd.get("effective_from"), new Date().toISOString().slice(0, 10));
+    const status = String(fd.get("status") || "active");
+    const crossesMidnight = form.querySelector('[name="crosses_midnight"]')?.checked || fd.get("crosses_midnight") === "on";
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Perubahan Shift...";
+    }
+
+    try {
+      const payload = {
+        name,
+        start_time: startTime,
+        end_time: endTime,
+        grace_period_minutes: graceMins,
+        early_checkout_threshold_minutes: earlyMins,
+        effective_from: effectiveFrom,
+        status,
+        crosses_midnight: Boolean(crossesMidnight),
+        updated_at: new Date().toISOString(),
+      };
+
+      const s = Core.state;
+      if (id) {
+        const { error } = await s.supabase.from("work_shifts").update(payload).eq("id", id);
+        if (error) throw error;
+        await Core.logSecurityEvent(
+          "SHIFT_UPDATED",
+          "work_shifts",
+          id,
+          `Mengedit jadwal shift '${payload.name}' (${payload.start_time.slice(0, 5)}-${payload.end_time.slice(0, 5)}).`
+        );
+      } else {
+        const { error } = await s.supabase.from("work_shifts").insert(payload);
+        if (error) throw error;
+        await Core.logSecurityEvent(
+          "SHIFT_CREATED",
+          "work_shifts",
+          payload.name,
+          `Menambahkan jadwal shift baru '${payload.name}'.`
+        );
+      }
+      uiState.editingShiftId = null;
+      await Core.refreshAllData();
+      showBanner(true, `Jadwal shift '${payload.name}' (${payload.start_time.slice(0, 5)} – ${payload.end_time.slice(0, 5)}) berhasil disimpan!`);
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan Perubahan Shift";
+      }
+      showBanner(false, "Gagal menyimpan jadwal shift: " + (err.message || err));
+    }
+  }
+
+  // 2. Hapus / Arsipkan Jadwal Shift
+  async function handleDeleteShift(btn) {
+    Core.assertManagerAccess("DeleteShift");
+    const shiftId = btn ? btn.getAttribute("data-id") : null;
+    if (!shiftId) return;
+    const shift = Core.state.shifts.find((x) => x.id === shiftId);
+    if (!shift) return;
+
+    if (!confirm(`Apakah Anda yakin ingin menghapus jadwal shift '${shift.name}'?`)) return;
+
+    try {
+      const { error } = await Core.state.supabase.from("work_shifts").delete().eq("id", shiftId);
+      if (error) {
+        // Jika terdapat data riwayat absensi terikat, arsipkan agar aman
+        await Core.state.supabase.from("work_shifts").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", shiftId);
+        await Core.logSecurityEvent("SHIFT_ARCHIVED", "work_shifts", shiftId, `Shift '${shift.name}' diarsipkan karena memiliki data riwayat absensi.`);
+        showBanner(true, `Shift '${shift.name}' dialihkan ke status Diarsipkan agar data riwayat absensi tetap aman.`);
+      } else {
+        await Core.logSecurityEvent("SHIFT_DELETED", "work_shifts", shiftId, `Menghapus shift '${shift.name}'.`);
+        showBanner(true, `Shift '${shift.name}' berhasil dihapus.`);
+      }
+      if (uiState.editingShiftId === shiftId) uiState.editingShiftId = null;
+      await Core.refreshAllData();
+    } catch (err) {
+      showBanner(false, "Gagal memproses shift: " + (err.message || err));
+    }
+  }
+
+  // 3. Simpan / Edit Outlet & Radius Geofence GPS
+  async function handleSaveOutlet(btn) {
+    Core.assertManagerAccess("SaveOutlet");
+    const form = document.getElementById("form-save-outlet");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const id = String(fd.get("id") || "").trim();
+    const name = String(fd.get("name") || "").trim();
+    const address = String(fd.get("address") || "").trim();
+    const latStr = String(fd.get("latitude") || "").replace(",", ".");
+    const lngStr = String(fd.get("longitude") || "").replace(",", ".");
+    const lat = parseFloat(latStr);
+    const lng = parseFloat(lngStr);
+
+    if (!name) {
+      showBanner(false, "Nama outlet wajib diisi.");
+      return;
+    }
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      showBanner(false, "Koordinat Latitude dan Longitude harus berupa angka desimal valid (contoh: -5.147665, 119.432732).");
+      return;
+    }
+
+    const radius = Math.max(10, parseInt(fd.get("geofence_radius_meters") || "150", 10) || 150);
+    const minAcc = Math.max(5, parseInt(fd.get("minimum_gps_accuracy_meters") || "100", 10) || 100);
+    const timezone = String(fd.get("timezone") || "Asia/Makassar");
+    const status = String(fd.get("status") || "active");
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Perubahan Outlet...";
+    }
+
+    try {
+      const payload = {
+        name,
+        address,
+        latitude: lat,
+        longitude: lng,
+        geofence_radius_meters: radius,
+        minimum_gps_accuracy_meters: minAcc,
+        timezone,
+        status,
+        updated_at: new Date().toISOString(),
+      };
+
+      const s = Core.state;
+      if (id) {
+        const { error } = await s.supabase.from("outlets").update(payload).eq("id", id);
+        if (error) throw error;
+        await Core.logSecurityEvent(
+          "OUTLET_GEOFENCE_UPDATED",
+          "outlets",
+          id,
+          `Mengedit outlet '${payload.name}' (${lat}, ${lng} • radius ${payload.geofence_radius_meters}m).`
+        );
+        uiState.editingOutletId = id;
+      } else {
+        const { data: created, error } = await s.supabase.from("outlets").insert(payload).select().single();
+        if (error) throw error;
+        await Core.logSecurityEvent(
+          "OUTLET_CREATED",
+          "outlets",
+          created?.id || payload.name,
+          `Menambahkan outlet baru '${payload.name}'.`
+        );
+        uiState.editingOutletId = created ? created.id : null;
+      }
+      await Core.refreshAllData();
+      showBanner(true, `Pengaturan outlet '${payload.name}' & radius GPS geofence (${radius}m) berhasil disimpan!`);
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan Perubahan Outlet";
+      }
+      showBanner(false, "Gagal menyimpan outlet: " + (err.message || err));
+    }
+  }
+
+  // 4. Hapus / Arsipkan Outlet
+  async function handleDeleteOutlet(btn) {
+    Core.assertManagerAccess("DeleteOutlet");
+    const outletId = btn ? btn.getAttribute("data-id") : null;
+    if (!outletId) return;
+    const out = Core.state.outlets.find((o) => o.id === outletId);
+    if (!out) return;
+
+    if (Core.state.outlets.filter((o) => o.status === "active").length <= 1 && out.status === "active") {
+      showBanner(false, "Sistem minimal harus memiliki satu outlet aktif untuk operasional.");
+      return;
+    }
+
+    if (!confirm(`Apakah Anda yakin ingin menghapus outlet '${out.name}'?`)) return;
+
+    try {
+      const { error } = await Core.state.supabase.from("outlets").delete().eq("id", outletId);
+      if (error) {
+        await Core.state.supabase.from("outlets").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", outletId);
+        showBanner(true, `Outlet '${out.name}' dialihkan ke status Diarsipkan agar data riwayat absensi tetap aman.`);
+      } else {
+        await Core.logSecurityEvent("OUTLET_DELETED", "outlets", outletId, `Menghapus outlet '${out.name}'.`);
+        showBanner(true, `Outlet '${out.name}' berhasil dihapus.`);
+      }
+      if (uiState.editingOutletId === outletId) uiState.editingOutletId = null;
+      await Core.refreshAllData();
+    } catch (err) {
+      showBanner(false, "Gagal memproses outlet: " + (err.message || err));
+    }
+  }
+
+  // 5. Simpan Seluruh Aturan Absensi & Zona Waktu WITA
+  async function handleSaveRules(btn) {
+    Core.assertManagerAccess("SaveAttendanceRules");
+    const form = document.getElementById("form-save-rules");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+
+    const newSettings = {
+      ...s.settings,
+      require_selfie_photo: form.querySelector('[name="require_selfie_photo"]')?.checked ?? true,
+      require_gps_validation: form.querySelector('[name="require_gps_validation"]')?.checked ?? true,
+      strict_geofence_enforcement: form.querySelector('[name="strict_geofence_enforcement"]')?.checked ?? true,
+      operational_timezone: String(fd.get("operational_timezone") || "Asia/Makassar"),
+      clock_skew_warning_threshold_seconds: Math.max(30, parseInt(fd.get("clock_skew_warning_threshold_seconds") || "120", 10) || 120),
+      allow_member_request_corrections: form.querySelector('[name="allow_member_request_corrections"]')?.checked ?? true,
+      allow_member_request_leaves: form.querySelector('[name="allow_member_request_leaves"]')?.checked ?? true,
+    };
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Aturan Absensi...";
+    }
+
+    try {
+      const { error } = await s.supabase.from("system_settings").upsert({
+        key: "operational_config",
+        value: newSettings,
+        updated_by: s.currentUser.id,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      await Core.logSecurityEvent(
+        "ATTENDANCE_RULES_UPDATED",
+        "system_settings",
+        "operational_config",
+        `Memperbarui aturan absensi & zona waktu (${newSettings.operational_timezone}).`
+      );
+      await Core.refreshAllData();
+      showBanner(true, "Seluruh aturan transaksi absensi & zona waktu WITA berhasil diperbarui!");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan Seluruh Aturan Absensi";
+      }
+      showBanner(false, "Gagal menyimpan aturan: " + (err.message || err));
+    }
+  }
+
+  // 6. Simpan / Edit Kalender Kerja, Libur & Izin
+  async function handleSaveCalendar(btn) {
+    Core.assertManagerAccess("SaveCalendar");
+    const form = document.getElementById("form-save-calendar");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+    const id = String(fd.get("id") || "").trim();
+    const empId = String(fd.get("employee_id") || "").trim();
+    const title = String(fd.get("title") || "").trim();
+    const reason = String(fd.get("reason") || "").trim();
+    const dateStart = normalizeDateInput(fd.get("date_start"));
+    const dateEnd = normalizeDateInput(fd.get("date_end"));
+
+    if (!title) {
+      showBanner(false, "Judul keterangan kalender wajib diisi.");
+      return;
+    }
+    if (!reason) {
+      showBanner(false, "Alasan / catatan keterangan wajib diisi.");
+      return;
+    }
+
+    const payload = {
+      employee_id: empId || null,
+      type: String(fd.get("type") || "holiday"),
+      title,
+      date_start: dateStart,
+      date_end: dateEnd,
+      reason,
+      status: "approved",
+      approved_by: s.currentUser.id,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan ke Kalender...";
+    }
+
+    try {
+      if (id) {
+        const { error } = await s.supabase.from("holidays_and_leaves").update(payload).eq("id", id);
+        if (error) throw error;
+        await Core.logSecurityEvent("CALENDAR_UPDATED", "holidays_and_leaves", id, `Mengedit jadwal kalender '${payload.title}'.`);
+      } else {
+        const { error } = await s.supabase.from("holidays_and_leaves").insert(payload);
+        if (error) throw error;
+        await Core.logSecurityEvent("CALENDAR_CREATED", "holidays_and_leaves", payload.title, `Menambahkan jadwal kalender '${payload.title}'.`);
+      }
+      uiState.editingCalendarId = null;
+      await Core.refreshAllData();
+      showBanner(true, `Entri kalender '${payload.title}' berhasil disimpan!`);
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan ke Kalender";
+      }
+      showBanner(false, "Gagal menyimpan kalender: " + (err.message || err));
+    }
+  }
+
+  // 7. Simpan Branding & Tampilan Aplikasi
+  async function handleSaveBranding(btn) {
+    Core.assertManagerAccess("SaveBranding");
+    const form = document.getElementById("form-save-branding");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+
+    const newSettings = {
+      ...s.settings,
+      brand_display_name: String(fd.get("brand_display_name") || "").trim(),
+      brand_subtitle: String(fd.get("brand_subtitle") || "").trim(),
+      brand_tagline: String(fd.get("brand_tagline") || "").trim(),
+      welcome_message: String(fd.get("welcome_message") || "").trim(),
+      theme_preset: String(fd.get("theme_preset") || "classic_latte"),
+    };
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Branding...";
+    }
+
+    try {
+      const { error } = await s.supabase.from("system_settings").upsert({
+        key: "operational_config",
+        value: newSettings,
+        updated_by: s.currentUser.id,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      await Core.logSecurityEvent(
+        "BRANDING_UPDATED",
+        "system_settings",
+        "operational_config",
+        `Memperbarui identitas tampilan & tema (${newSettings.theme_preset}).`
+      );
+      await Core.refreshAllData();
+      showBanner(true, "Tampilan branding & tema Suka Latte berhasil disimpan langsung!");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan Perubahan Branding";
+      }
+      showBanner(false, "Gagal menyimpan branding: " + (err.message || err));
+    }
+  }
+
+  // 8. Simpan Kebijakan Keamanan & Retensi Arsip Foto Bulanan
+  async function handleSaveSecurity(btn) {
+    Core.assertSuperAdminAccess("SaveSecurityPolicy");
+    const form = document.getElementById("form-save-security");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+
+    const newSettings = {
+      ...s.settings,
+      photo_retention_policy_months: parseInt(fd.get("photo_retention_policy_months") || "0", 10) || 0,
+      session_timeout_minutes: Math.max(15, parseInt(fd.get("session_timeout_minutes") || "120", 10) || 120),
+    };
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Kebijakan Keamanan...";
+    }
+
+    try {
+      const { error } = await s.supabase.from("system_settings").upsert({
+        key: "operational_config",
+        value: newSettings,
+        updated_by: s.currentUser.id,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      await Core.logSecurityEvent(
+        "SECURITY_POLICY_UPDATED",
+        "system_settings",
+        "operational_config",
+        `Memperbarui retensi arsip foto (${newSettings.photo_retention_policy_months} bulan) & timeout sesi.`
+      );
+      await Core.refreshAllData();
+      showBanner(true, "Kebijakan keamanan & retensi arsip bulanan berhasil diperbarui!");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan Kebijakan Keamanan";
+      }
+      showBanner(false, "Gagal menyimpan kebijakan keamanan: " + (err.message || err));
+    }
+  }
+
+  // 9. Pra-Setujui Email Google Karyawan
+  async function handlePreapproveEmail(btn) {
+    Core.assertManagerAccess("PreapproveEmployeeEmail");
+    const form = document.getElementById("form-preapprove-email");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+    const email = String(fd.get("email") || "").trim().toLowerCase();
+    const empCode = String(fd.get("employee_code") || "").trim().toUpperCase();
+    const fullName = String(fd.get("full_name") || "").trim();
+    const pos = String(fd.get("position_title") || "Barista / Crew").trim();
+    const phone = String(fd.get("phone") || "").trim();
+
+    if (!email || !empCode || !fullName) {
+      showBanner(false, "Alamat email Google, ID Karyawan, dan Nama Lengkap wajib diisi.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Pra-Persetujuan...";
+    }
+
+    try {
+      const { error } = await s.supabase.from("preapproved_emails").insert({
+        email,
+        employee_code: empCode,
+        full_name: fullName,
+        phone,
+        position_title: pos,
+        outlet_id: fd.get("outlet_id") || null,
+        shift_id: fd.get("shift_id") || null,
+        created_by: s.currentUser.id,
+      });
+      if (error) throw error;
+      await Core.logSecurityEvent(
+        "PREAPPROVED_EMAIL_ADDED",
+        "preapproved_emails",
+        email,
+        `Menambahkan pra-persetujuan login Google untuk ${fullName} (${email}).`
+      );
+      form.reset();
+      await Core.refreshAllData();
+      showBanner(
+        true,
+        `Email ${email} berhasil dipra-setujui! Saat ia login Google pertama kali, akunnya langsung aktif otomatis.`
+      );
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "+ Simpan ke Daftar Pra-Persetujuan";
+      }
+      showBanner(false, "Gagal menyimpan pra-persetujuan: " + (err.message || err));
+    }
+  }
+
+  // 10. Setujui Login Pertama Akun Google Karyawan
+  async function handleApproveFirstLogin(btn) {
+    Core.assertManagerAccess("ApproveGoogleFirstLogin");
+    const form = btn ? btn.closest(".form-approve-first-login") : null;
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+    const targetUserId = form.getAttribute("data-userid");
+    const empCode = String(fd.get("employee_code") || "").trim();
+    const posTitle = String(fd.get("position_title") || "Barista / Crew").trim();
+    const outletId = fd.get("outlet_id") || null;
+    const shiftId = fd.get("shift_id") || null;
+
+    if (!empCode) {
+      showBanner(false, "ID Karyawan wajib ditentukan.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyetujui Akun...";
+    }
+
+    try {
+      const { error } = await s.supabase.rpc("review_google_first_login", {
+        p_target_user_id: targetUserId,
+        p_decision: "approve",
+        p_employee_code: empCode,
+        p_position_title: posTitle,
+        p_outlet_id: outletId,
+        p_shift_id: shiftId,
+        p_note: "Disetujui oleh Pengelola",
+      });
+      if (error) throw error;
+      await Core.refreshAllData();
+      showBanner(
+        true,
+        "Login pertama karyawan berhasil disetujui! Akun Google tersebut sekarang akan langsung masuk otomatis setiap kali login."
+      );
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "✓ Setujui Login Pertama &amp; Aktifkan";
+      }
+      showBanner(false, "Gagal menyetujui akun: " + (err.message || err));
+    }
+  }
+
+  // 11. Tolak Permintaan Login Pertama Akun Google
+  async function handleRejectFirstLogin(btn) {
+    Core.assertManagerAccess("RejectGoogleFirstLogin");
+    const form = document.getElementById("form-reject-first-login");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+    const targetId = String(fd.get("target_user_id"));
+    const note = String(fd.get("note") || "").trim();
+    if (!note) {
+      showBanner(false, "Alasan penolakan wajib diisi untuk Audit Log.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Memproses...";
+    }
+
+    try {
+      const { error } = await s.supabase.rpc("review_google_first_login", {
+        p_target_user_id: targetId,
+        p_decision: "reject",
+        p_note: note,
+      });
+      if (error) throw error;
+      uiState.modal = null;
+      await Core.refreshAllData();
+      showBanner(true, "Permintaan login pertama telah ditolak.");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Konfirmasi Tolak Akses";
+      }
+      showBanner(false, "Gagal menolak akun: " + (err.message || err));
+    }
+  }
+
+  // 12. Edit Penuh Profil & Penugasan Karyawan
+  async function handleEditEmployee(btn) {
+    Core.assertManagerAccess("SubmitEditEmployee");
+    const form = document.getElementById("form-edit-employee");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+    const targetId = String(fd.get("target_user_id"));
+    const targetEmp = s.profiles.find((p) => p.id === targetId);
+    const statusVal = targetEmp && targetEmp.role === "super_admin" ? "active" : String(fd.get("status") || "active");
+    const empCode = String(fd.get("employee_code") || "").trim();
+    const fullName = String(fd.get("full_name") || "").trim();
+    const posTitle = String(fd.get("position_title") || "").trim();
+    const phone = String(fd.get("phone") || "").trim();
+
+    if (!empCode || !fullName) {
+      showBanner(false, "ID Karyawan dan Nama Lengkap wajib diisi.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Profil...";
+    }
+
+    try {
+      const { error } = await s.supabase.rpc("update_employee_by_manager", {
+        p_target_user_id: targetId,
+        p_employee_code: empCode,
+        p_full_name: fullName,
+        p_phone: phone,
+        p_position_title: posTitle,
+        p_outlet_id: fd.get("outlet_id") || null,
+        p_shift_id: fd.get("shift_id") || null,
+        p_status: statusVal,
+      });
+      if (error) throw error;
+      uiState.modal = null;
+      await Core.refreshAllData();
+      showBanner(true, `Data profil ${fullName} berhasil diperbarui!`);
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan Perubahan Profil";
+      }
+      showBanner(false, "Gagal mengedit profil karyawan: " + (err.message || err));
+    }
+  }
+
+  // 13. Promosi / Demosi Role oleh Super Admin
+  async function handleChangeRole(btn) {
+    Core.assertSuperAdminAccess("SubmitChangeRole");
+    const form = document.getElementById("form-change-role");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+    const targetId = String(fd.get("target_user_id"));
+    const newRole = String(fd.get("new_role"));
+    const reason = String(fd.get("reason") || "").trim();
+
+    if (!reason) {
+      showBanner(false, "Alasan perubahan jabatan sistem wajib diisi.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Memproses Role...";
+    }
+
+    try {
+      const { error } = await s.supabase.rpc("change_employee_role_by_super_admin", {
+        p_target_user_id: targetId,
+        p_new_role: newRole,
+        p_reason: reason,
+      });
+      if (error) throw error;
+      uiState.modal = null;
+      await Core.refreshAllData();
+      showBanner(true, "Perubahan role pengguna berhasil disimpan ke database & Audit Log.");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Simpan Perubahan Role";
+      }
+      showBanner(false, "Gagal mengubah role: " + (err.message || err));
+    }
+  }
+
+  // 14. Edit Administratif Catatan Kehadiran oleh Pengelola
+  async function handleAdminEditAttendance(btn) {
+    Core.assertManagerAccess("SubmitAdminEditAttendance");
+    const form = document.getElementById("form-admin-edit-att");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+    const tz = s.settings.operational_timezone || "Asia/Makassar";
+    const checkInIso = localInputToIso(fd.get("check_in_local"), tz);
+    const checkOutIso = localInputToIso(fd.get("check_out_local"), tz);
+    const reason = String(fd.get("reason") || "").trim();
+
+    if (!reason) {
+      showBanner(false, "Alasan pengeditan catatan kehadiran wajib diisi untuk Audit Log.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Perubahan Kehadiran...";
+    }
+
+    try {
+      const { error } = await s.supabase.rpc("admin_direct_edit_attendance", {
+        p_attendance_id: String(fd.get("attendance_id")),
+        p_check_in_at: checkInIso,
+        p_check_out_at: checkOutIso,
+        p_status: String(fd.get("status")),
+        p_reason: reason,
+      });
+      if (error) throw error;
+      uiState.modal = null;
+      await Core.refreshAllData();
+      showBanner(true, "Catatan kehadiran berhasil diperbarui (bukti foto selfie asli tetap utuh di cloud)!");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan Koreksi Kehadiran";
+      }
+      showBanner(false, "Gagal mengedit kehadiran: " + (err.message || err));
+    }
+  }
+
+  // 15. Tinjau Permintaan Koreksi Absensi Anggota
+  async function handleReviewCorrection(btn) {
+    Core.assertManagerAccess("SubmitReviewCorrection");
+    const form = document.getElementById("form-review-corr");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Keputusan...";
+    }
+
+    try {
+      const { error } = await s.supabase.rpc("process_attendance_correction", {
+        p_correction_id: String(fd.get("correction_id")),
+        p_decision: String(fd.get("decision")),
+        p_review_note: String(fd.get("review_note") || "").trim(),
+      });
+      if (error) throw error;
+      uiState.modal = null;
+      await Core.refreshAllData();
+      showBanner(true, "Keputusan peninjauan koreksi absensi berhasil disimpan.");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Konfirmasi";
+      }
+      showBanner(false, "Gagal memproses koreksi: " + (err.message || err));
+    }
+  }
+
+  // 16. Pengajuan Koreksi Absensi Pribadi oleh Anggota
+  async function handleMemberCorrection(btn) {
+    const form = document.getElementById("form-member-corr");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+    const tz = s.settings.operational_timezone || "Asia/Makassar";
+    const attId = String(fd.get("attendance_id"));
+    const rec = s.attendance.find((a) => a.id === attId && a.employee_id === s.currentUser.id);
+    if (!rec) {
+      showBanner(false, "Catatan kehadiran tidak ditemukan.");
+      return;
+    }
+
+    const propIn = localInputToIso(fd.get("check_in_local"), tz);
+    const propOut = localInputToIso(fd.get("check_out_local"), tz);
+    const reason = String(fd.get("reason") || "").trim();
+
+    if (!reason) {
+      showBanner(false, "Alasan pengajuan koreksi wajib diisi.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Mengirim Pengajuan...";
+    }
+
+    try {
+      const { error } = await s.supabase.from("attendance_corrections").insert({
+        attendance_id: rec.id,
+        requested_by: s.currentUser.id,
+        employee_id: s.currentUser.id,
+        work_date: rec.work_date,
+        reason,
+        supporting_note: "Diajukan mandiri oleh Anggota",
+        original_values: {
+          check_in_at: rec.check_in_at,
+          check_out_at: rec.check_out_at,
+          attendance_status: rec.attendance_status,
+        },
+        proposed_values: {
+          check_in_at: propIn,
+          check_out_at: propOut,
+          attendance_status: "selesai",
+        },
+      });
+      if (error) throw error;
+      await Core.logSecurityEvent(
+        "MEMBER_REQUESTED_CORRECTION",
+        "attendance_corrections",
+        rec.id,
+        `Anggota mengajukan koreksi absensi tanggal ${rec.work_date}.`
+      );
+      uiState.modal = null;
+      await Core.refreshAllData();
+      showBanner(true, "Pengajuan koreksi berhasil dikirim dan menunggu persetujuan Admin.");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Kirim Pengajuan ke Admin";
+      }
+      showBanner(false, "Gagal mengirim pengajuan koreksi: " + (err.message || err));
+    }
+  }
+
+  // 17. Pengajuan Izin / Sakit / Cuti Pribadi oleh Anggota
+  async function handleMemberLeave(btn) {
+    const form = document.getElementById("form-member-leave");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const s = Core.state;
+    const title = String(fd.get("title") || "").trim();
+    const reason = String(fd.get("reason") || "").trim();
+    const dateStart = normalizeDateInput(fd.get("date_start"));
+    const dateEnd = normalizeDateInput(fd.get("date_end"));
+
+    if (!title || !reason) {
+      showBanner(false, "Judul dan keterangan pengajuan wajib diisi.");
+      return;
+    }
+
+    const payload = {
+      employee_id: s.currentUser.id,
+      type: String(fd.get("type") || "izin"),
+      title,
+      date_start: dateStart,
+      date_end: dateEnd,
+      reason,
+      status: "pending",
+    };
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Mengirim Pengajuan...";
+    }
+
+    try {
+      const { error } = await s.supabase.from("holidays_and_leaves").insert(payload);
+      if (error) throw error;
+      await Core.logSecurityEvent(
+        "MEMBER_REQUESTED_LEAVE",
+        "holidays_and_leaves",
+        payload.type,
+        `Anggota mengajukan ${payload.type}: ${payload.title} (${payload.date_start} s/d ${payload.date_end}).`
+      );
+      uiState.modal = null;
+      await Core.refreshAllData();
+      showBanner(true, "Pengajuan izin/sakit/cuti berhasil dikirim ke Admin.");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Kirim Pengajuan";
+      }
+      showBanner(false, "Gagal mengirim pengajuan izin: " + (err.message || err));
+    }
+  }
+
+  // 18. Simpan Konfigurasi Koneksi Cloud Supabase
+  async function handleCloudConnect(btn) {
+    const form = document.getElementById("form-cloud-connect");
+    if (!form) return;
+
+    const fd = new FormData(form);
+    const res = Core.saveCloudCredentials(
+      fd.get("supabase_url"),
+      fd.get("supabase_anon_key")
+    );
+    if (!res.ok) {
+      showBanner(false, res.message);
+      return;
+    }
+    uiState.banner = { ok: true, message: res.message };
+    await Core.initializeApp(render);
+  }
+
+  // ==========================================================================
   // 6. PENANGANAN KLIK TOMBOL (EVENT DELEGATION DENGAN PROTEKSI HAK AKSES)
   // ==========================================================================
   document.addEventListener("click", async (ev) => {
@@ -1301,16 +2217,94 @@
         return;
       }
 
-      if (action.startsWith("submit-") && action !== "submit-attendance") {
-        const targetForm = btn.closest("form");
-        if (targetForm) {
-          if (typeof targetForm.requestSubmit === "function") {
-            targetForm.requestSubmit(btn);
-          } else {
-            targetForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-          }
-          return;
-        }
+      if (action === "submit-save-shift") {
+        await handleSaveShift(btn);
+        return;
+      }
+
+      if (action === "delete-shift") {
+        await handleDeleteShift(btn);
+        return;
+      }
+
+      if (action === "submit-save-outlet") {
+        await handleSaveOutlet(btn);
+        return;
+      }
+
+      if (action === "delete-outlet") {
+        await handleDeleteOutlet(btn);
+        return;
+      }
+
+      if (action === "submit-save-rules") {
+        await handleSaveRules(btn);
+        return;
+      }
+
+      if (action === "submit-save-calendar") {
+        await handleSaveCalendar(btn);
+        return;
+      }
+
+      if (action === "submit-save-branding") {
+        await handleSaveBranding(btn);
+        return;
+      }
+
+      if (action === "submit-save-security") {
+        await handleSaveSecurity(btn);
+        return;
+      }
+
+      if (action === "submit-preapprove-email") {
+        await handlePreapproveEmail(btn);
+        return;
+      }
+
+      if (action === "submit-approve-first-login") {
+        await handleApproveFirstLogin(btn);
+        return;
+      }
+
+      if (action === "submit-reject-first-login") {
+        await handleRejectFirstLogin(btn);
+        return;
+      }
+
+      if (action === "submit-edit-employee") {
+        await handleEditEmployee(btn);
+        return;
+      }
+
+      if (action === "submit-admin-edit-att") {
+        await handleAdminEditAttendance(btn);
+        return;
+      }
+
+      if (action === "submit-change-role") {
+        await handleChangeRole(btn);
+        return;
+      }
+
+      if (action === "submit-review-corr") {
+        await handleReviewCorrection(btn);
+        return;
+      }
+
+      if (action === "submit-member-corr") {
+        await handleMemberCorrection(btn);
+        return;
+      }
+
+      if (action === "submit-member-leave") {
+        await handleMemberLeave(btn);
+        return;
+      }
+
+      if (action === "submit-cloud-connect") {
+        await handleCloudConnect(btn);
+        return;
       }
 
       if (action === "dismiss-banner") {
@@ -1696,490 +2690,39 @@
   });
 
   // ==========================================================================
-  // 7. PENANGANAN SUBMIT FORMULIR (FULL IN-APP EDITING TANPA VS CODE)
+  // 7. PENANGANAN SUBMIT FORMULIR (DELEGASI KE HANDLER RESMI)
   // ==========================================================================
   document.addEventListener("submit", async (ev) => {
     const rawTarget = ev.target;
-    const form = rawTarget && typeof rawTarget.closest === "function" ? rawTarget.closest("form") : (rawTarget && rawTarget.tagName === "FORM" ? rawTarget : null);
+    const form =
+      rawTarget && typeof rawTarget.closest === "function"
+        ? rawTarget.closest("form")
+        : rawTarget && rawTarget.tagName === "FORM"
+        ? rawTarget
+        : null;
     if (!form) return;
     ev.preventDefault();
 
-    const fd = new FormData(form);
-    const s = Core.state;
-    const tz = s.settings.operational_timezone || "Asia/Makassar";
-
     try {
-      // 1. Koneksi Awal Cloud Supabase
-      if (form.id === "form-cloud-connect") {
-        const res = Core.saveCloudCredentials(
-          fd.get("supabase_url"),
-          fd.get("supabase_anon_key")
-        );
-        if (!res.ok) {
-          showBanner(false, res.message);
-          return;
-        }
-        uiState.banner = { ok: true, message: res.message };
-        await Core.initializeApp(render);
-        return;
-      }
-
-      // 2. Konfirmasi & Penguncian Super Admin Pertama (Bootstrap 1x Seumur Hidup)
-      if (form.id === "form-complete-bootstrap") {
-        await handleCompleteBootstrap();
-        return;
-      }
-
-      // 3. Setujui Login Pertama Akun Google Karyawan (Login berikutnya otomatis masuk!)
-      if (form.classList.contains("form-approve-first-login")) {
-        Core.assertManagerAccess("ApproveGoogleFirstLogin");
-        const targetUserId = form.getAttribute("data-userid");
-        const { error } = await s.supabase.rpc("review_google_first_login", {
-          p_target_user_id: targetUserId,
-          p_decision: "approve",
-          p_employee_code: String(fd.get("employee_code") || "").trim(),
-          p_position_title: String(fd.get("position_title") || "Barista / Crew").trim(),
-          p_outlet_id: fd.get("outlet_id") || null,
-          p_shift_id: fd.get("shift_id") || null,
-          p_note: "Disetujui oleh Pengelola",
-        });
-        if (error) throw error;
-        await Core.refreshAllData();
-        showBanner(
-          true,
-          "Login pertama karyawan berhasil disetujui! Mulai sekarang akun Google tersebut akan langsung masuk otomatis setiap kali login."
-        );
-        return;
-      }
-
-      // 4. Tolak Login Pertama Akun Google
-      if (form.id === "form-reject-first-login") {
-        Core.assertManagerAccess("RejectGoogleFirstLogin");
-        const { error } = await s.supabase.rpc("review_google_first_login", {
-          p_target_user_id: String(fd.get("target_user_id")),
-          p_decision: "reject",
-          p_note: String(fd.get("note") || "").trim(),
-        });
-        if (error) throw error;
-        uiState.modal = null;
-        await Core.refreshAllData();
-        showBanner(true, "Permintaan login pertama telah ditolak.");
-        return;
-      }
-
-      // 5. Pra-Setujui Alamat Gmail Karyawan
-      if (form.id === "form-preapprove-email") {
-        Core.assertManagerAccess("PreapproveEmployeeEmail");
-        const email = String(fd.get("email") || "").trim().toLowerCase();
-        const empCode = String(fd.get("employee_code") || "").trim().toUpperCase();
-        const fullName = String(fd.get("full_name") || "").trim();
-        const pos = String(fd.get("position_title") || "Barista / Crew").trim();
-        const phone = String(fd.get("phone") || "").trim();
-
-        const { error } = await s.supabase.from("preapproved_emails").insert({
-          email,
-          employee_code: empCode,
-          full_name: fullName,
-          phone,
-          position_title: pos,
-          outlet_id: fd.get("outlet_id") || null,
-          shift_id: fd.get("shift_id") || null,
-          created_by: s.currentUser.id,
-        });
-        if (error) throw error;
-        await Core.logSecurityEvent(
-          "PREAPPROVED_EMAIL_ADDED",
-          "preapproved_emails",
-          email,
-          `Menambahkan pra-persetujuan login Google untuk ${fullName} (${email}).`
-        );
-        form.reset();
-        await Core.refreshAllData();
-        showBanner(
-          true,
-          `Email ${email} berhasil dipra-setujui! Saat ia login Google pertama kali, akunnya langsung aktif otomatis.`
-        );
-        return;
-      }
-
-      // 6. Edit Penuh Profil Karyawan
-      if (form.id === "form-edit-employee") {
-        Core.assertManagerAccess("SubmitEditEmployee");
-        const targetId = String(fd.get("target_user_id"));
-        const targetEmp = s.profiles.find((p) => p.id === targetId);
-        const statusVal =
-          targetEmp && targetEmp.role === "super_admin"
-            ? "active"
-            : String(fd.get("status") || "active");
-
-        const { error } = await s.supabase.rpc("update_employee_by_manager", {
-          p_target_user_id: targetId,
-          p_employee_code: String(fd.get("employee_code") || "").trim(),
-          p_full_name: String(fd.get("full_name") || "").trim(),
-          p_phone: String(fd.get("phone") || "").trim(),
-          p_position_title: String(fd.get("position_title") || "").trim(),
-          p_outlet_id: fd.get("outlet_id") || null,
-          p_shift_id: fd.get("shift_id") || null,
-          p_status: statusVal,
-        });
-        if (error) throw error;
-        uiState.modal = null;
-        await Core.refreshAllData();
-        showBanner(true, "Data karyawan berhasil diperbarui.");
-        return;
-      }
-
-      // 7. Promosi / Demosi Role oleh Super Admin
-      if (form.id === "form-change-role") {
-        Core.assertSuperAdminAccess("SubmitChangeRole");
-        const { error } = await s.supabase.rpc("change_employee_role_by_super_admin", {
-          p_target_user_id: String(fd.get("target_user_id")),
-          p_new_role: String(fd.get("new_role")),
-          p_reason: String(fd.get("reason") || "").trim(),
-        });
-        if (error) throw error;
-        uiState.modal = null;
-        await Core.refreshAllData();
-        showBanner(true, "Perubahan role pengguna berhasil disimpan ke database & Audit Log.");
-        return;
-      }
-
-      // 8. Tambah / Edit Jadwal Shift
-      if (form.id === "form-save-shift") {
-        Core.assertManagerAccess("SaveShift");
-        const id = String(fd.get("id") || "").trim();
-        const payload = {
-          name: String(fd.get("name") || "").trim(),
-          start_time: String(fd.get("start_time") || "07:00"),
-          end_time: String(fd.get("end_time") || "15:00"),
-          grace_period_minutes: Number(fd.get("grace_period_minutes") || 0),
-          early_checkout_threshold_minutes: Number(
-            fd.get("early_checkout_threshold_minutes") || 0
-          ),
-          effective_from: String(fd.get("effective_from")),
-          status: String(fd.get("status") || "active"),
-          crosses_midnight: fd.get("crosses_midnight") === "on",
-          updated_at: new Date().toISOString(),
-        };
-
-        if (id) {
-          const { error } = await s.supabase.from("work_shifts").update(payload).eq("id", id);
-          if (error) throw error;
-          await Core.logSecurityEvent(
-            "SHIFT_UPDATED",
-            "work_shifts",
-            id,
-            `Mengedit jadwal shift '${payload.name}' (${payload.start_time}-${payload.end_time}).`
-          );
-        } else {
-          const { error } = await s.supabase.from("work_shifts").insert(payload);
-          if (error) throw error;
-          await Core.logSecurityEvent(
-            "SHIFT_CREATED",
-            "work_shifts",
-            payload.name,
-            `Menambahkan jadwal shift baru '${payload.name}'.`
-          );
-        }
-        uiState.editingShiftId = null;
-        await Core.refreshAllData();
-        showBanner(true, `Jadwal shift '${payload.name}' berhasil disimpan.`);
-        return;
-      }
-
-      // 9. Tambah / Edit Outlet & Geofence GPS
-      if (form.id === "form-save-outlet") {
-        Core.assertManagerAccess("SaveOutlet");
-        const id = String(fd.get("id") || "").trim();
-        const lat = parseFloat(String(fd.get("latitude")));
-        const lng = parseFloat(String(fd.get("longitude")));
-        if (Number.isNaN(lat) || Number.isNaN(lng)) {
-          showBanner(false, "Koordinat Latitude dan Longitude harus berupa angka desimal yang valid.");
-          return;
-        }
-        const payload = {
-          name: String(fd.get("name") || "").trim(),
-          address: String(fd.get("address") || "").trim(),
-          latitude: lat,
-          longitude: lng,
-          geofence_radius_meters: Number(fd.get("geofence_radius_meters") || 150),
-          minimum_gps_accuracy_meters: Number(fd.get("minimum_gps_accuracy_meters") || 100),
-          timezone: String(fd.get("timezone") || "Asia/Makassar"),
-          status: String(fd.get("status") || "active"),
-          updated_at: new Date().toISOString(),
-        };
-
-        if (id) {
-          const { error } = await s.supabase.from("outlets").update(payload).eq("id", id);
-          if (error) throw error;
-          await Core.logSecurityEvent(
-            "OUTLET_GEOFENCE_UPDATED",
-            "outlets",
-            id,
-            `Mengedit outlet '${payload.name}' (${lat}, ${lng} • radius ${payload.geofence_radius_meters}m).`
-          );
-          uiState.editingOutletId = id;
-        } else {
-          const { data: created, error } = await s.supabase
-            .from("outlets")
-            .insert(payload)
-            .select()
-            .single();
-          if (error) throw error;
-          await Core.logSecurityEvent(
-            "OUTLET_CREATED",
-            "outlets",
-            created?.id || payload.name,
-            `Menambahkan outlet baru '${payload.name}'.`
-          );
-          uiState.editingOutletId = created ? created.id : null;
-        }
-        await Core.refreshAllData();
-        showBanner(true, `Pengaturan outlet '${payload.name}' & radius geofence berhasil disimpan.`);
-        return;
-      }
-
-      // 10. Simpan Aturan Absensi & Zona Waktu
-      if (form.id === "form-save-rules") {
-        Core.assertManagerAccess("SaveAttendanceRules");
-        const newSettings = {
-          ...s.settings,
-          require_selfie_photo: fd.get("require_selfie_photo") === "on",
-          require_gps_validation: fd.get("require_gps_validation") === "on",
-          strict_geofence_enforcement: fd.get("strict_geofence_enforcement") === "on",
-          operational_timezone: String(fd.get("operational_timezone") || "Asia/Makassar"),
-          clock_skew_warning_threshold_seconds: Number(
-            fd.get("clock_skew_warning_threshold_seconds") || 120
-          ),
-          allow_member_request_corrections: fd.get("allow_member_request_corrections") === "on",
-          allow_member_request_leaves: fd.get("allow_member_request_leaves") === "on",
-        };
-
-        const { error } = await s.supabase.from("system_settings").upsert({
-          key: "operational_config",
-          value: newSettings,
-          updated_by: s.currentUser.id,
-          updated_at: new Date().toISOString(),
-        });
-        if (error) throw error;
-        await Core.logSecurityEvent(
-          "ATTENDANCE_RULES_UPDATED",
-          "system_settings",
-          "operational_config",
-          `Memperbarui aturan absensi & zona waktu (${newSettings.operational_timezone}).`
-        );
-        await Core.refreshAllData();
-        showBanner(true, "Seluruh aturan transaksi absensi & zona waktu berhasil diperbarui.");
-        return;
-      }
-
-      // 11. Edit Administratif Catatan Kehadiran oleh Pengelola
-      if (form.id === "form-admin-edit-att") {
-        Core.assertManagerAccess("SubmitAdminEditAttendance");
-        const checkInIso = localInputToIso(fd.get("check_in_local"), tz);
-        const checkOutIso = localInputToIso(fd.get("check_out_local"), tz);
-
-        const { error } = await s.supabase.rpc("admin_direct_edit_attendance", {
-          p_attendance_id: String(fd.get("attendance_id")),
-          p_check_in_at: checkInIso,
-          p_check_out_at: checkOutIso,
-          p_status: String(fd.get("status")),
-          p_reason: String(fd.get("reason") || "").trim(),
-        });
-        if (error) throw error;
-        uiState.modal = null;
-        await Core.refreshAllData();
-        showBanner(true, "Catatan kehadiran berhasil diperbarui (foto selfie asli tetap utuh).");
-        return;
-      }
-
-      // 12. Tinjau Permintaan Koreksi Absensi
-      if (form.id === "form-review-corr") {
-        Core.assertManagerAccess("SubmitReviewCorrection");
-        const { error } = await s.supabase.rpc("process_attendance_correction", {
-          p_correction_id: String(fd.get("correction_id")),
-          p_decision: String(fd.get("decision")),
-          p_review_note: String(fd.get("review_note") || "").trim(),
-        });
-        if (error) throw error;
-        uiState.modal = null;
-        await Core.refreshAllData();
-        showBanner(true, "Keputusan peninjauan koreksi absensi berhasil disimpan.");
-        return;
-      }
-
-      // 13. Pengajuan Koreksi Absensi Pribadi oleh Anggota
-      if (form.id === "form-member-corr") {
-        const attId = String(fd.get("attendance_id"));
-        const rec = s.attendance.find(
-          (a) => a.id === attId && a.employee_id === s.currentUser.id
-        );
-        if (!rec) throw new Error("Catatan kehadiran tidak ditemukan.");
-
-        const propIn = localInputToIso(fd.get("check_in_local"), tz);
-        const propOut = localInputToIso(fd.get("check_out_local"), tz);
-        const reason = String(fd.get("reason") || "").trim();
-
-        const { error } = await s.supabase.from("attendance_corrections").insert({
-          attendance_id: rec.id,
-          requested_by: s.currentUser.id,
-          employee_id: s.currentUser.id,
-          work_date: rec.work_date,
-          reason,
-          supporting_note: "Diajukan mandiri oleh Anggota",
-          original_values: {
-            check_in_at: rec.check_in_at,
-            check_out_at: rec.check_out_at,
-            attendance_status: rec.attendance_status,
-          },
-          proposed_values: {
-            check_in_at: propIn,
-            check_out_at: propOut,
-            attendance_status: "selesai",
-          },
-        });
-        if (error) throw error;
-        await Core.logSecurityEvent(
-          "MEMBER_REQUESTED_CORRECTION",
-          "attendance_corrections",
-          rec.id,
-          `Anggota mengajukan koreksi absensi tanggal ${rec.work_date}.`
-        );
-        uiState.modal = null;
-        await Core.refreshAllData();
-        showBanner(true, "Pengajuan koreksi berhasil dikirim dan menunggu persetujuan Admin.");
-        return;
-      }
-
-      // 14. Pengajuan Izin / Sakit / Cuti Pribadi oleh Anggota
-      if (form.id === "form-member-leave") {
-        const payload = {
-          employee_id: s.currentUser.id,
-          type: String(fd.get("type") || "izin"),
-          title: String(fd.get("title") || "").trim(),
-          date_start: String(fd.get("date_start")),
-          date_end: String(fd.get("date_end")),
-          reason: String(fd.get("reason") || "").trim(),
-          status: "pending",
-        };
-        const { error } = await s.supabase.from("holidays_and_leaves").insert(payload);
-        if (error) throw error;
-        await Core.logSecurityEvent(
-          "MEMBER_REQUESTED_LEAVE",
-          "holidays_and_leaves",
-          payload.type,
-          `Anggota mengajukan ${payload.type}: ${payload.title} (${payload.date_start} s/d ${payload.date_end}).`
-        );
-        uiState.modal = null;
-        await Core.refreshAllData();
-        showBanner(true, "Pengajuan izin/sakit/cuti berhasil dikirim ke Admin.");
-        return;
-      }
-
-      // 15. Tambah / Edit Kalender Kerja, Hari Libur, Izin oleh Pengelola
-      if (form.id === "form-save-calendar") {
-        Core.assertManagerAccess("SaveCalendar");
-        const id = String(fd.get("id") || "").trim();
-        const empId = String(fd.get("employee_id") || "").trim();
-        const payload = {
-          employee_id: empId || null,
-          type: String(fd.get("type") || "holiday"),
-          title: String(fd.get("title") || "").trim(),
-          date_start: String(fd.get("date_start")),
-          date_end: String(fd.get("date_end")),
-          reason: String(fd.get("reason") || "").trim(),
-          status: "approved",
-          approved_by: s.currentUser.id,
-          reviewed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        if (id) {
-          const { error } = await s.supabase
-            .from("holidays_and_leaves")
-            .update(payload)
-            .eq("id", id);
-          if (error) throw error;
-          await Core.logSecurityEvent(
-            "CALENDAR_UPDATED",
-            "holidays_and_leaves",
-            id,
-            `Mengedit jadwal kalender '${payload.title}'.`
-          );
-        } else {
-          const { error } = await s.supabase.from("holidays_and_leaves").insert(payload);
-          if (error) throw error;
-          await Core.logSecurityEvent(
-            "CALENDAR_CREATED",
-            "holidays_and_leaves",
-            payload.title,
-            `Menambahkan jadwal kalender '${payload.title}'.`
-          );
-        }
-        uiState.editingCalendarId = null;
-        await Core.refreshAllData();
-        showBanner(true, `Entri kalender '${payload.title}' berhasil disimpan.`);
-        return;
-      }
-
-      // 16. Simpan Branding & Tampilan
-      if (form.id === "form-save-branding") {
-        Core.assertManagerAccess("SaveBranding");
-        const newSettings = {
-          ...s.settings,
-          brand_display_name: String(fd.get("brand_display_name") || "").trim(),
-          brand_subtitle: String(fd.get("brand_subtitle") || "").trim(),
-          brand_tagline: String(fd.get("brand_tagline") || "").trim(),
-          welcome_message: String(fd.get("welcome_message") || "").trim(),
-          theme_preset: String(fd.get("theme_preset") || "classic_latte"),
-        };
-
-        const { error } = await s.supabase.from("system_settings").upsert({
-          key: "operational_config",
-          value: newSettings,
-          updated_by: s.currentUser.id,
-          updated_at: new Date().toISOString(),
-        });
-        if (error) throw error;
-        await Core.logSecurityEvent(
-          "BRANDING_UPDATED",
-          "system_settings",
-          "operational_config",
-          `Memperbarui identitas tampilan & tema (${newSettings.theme_preset}).`
-        );
-        await Core.refreshAllData();
-        showBanner(true, "Tampilan branding & tema Suka Latte berhasil diperbarui.");
-        return;
-      }
-
-      // 17. Simpan Kebijakan Keamanan & Retensi Foto (Khusus Super Admin)
-      if (form.id === "form-save-security") {
-        Core.assertSuperAdminAccess("SaveSecurityPolicy");
-        const newSettings = {
-          ...s.settings,
-          photo_retention_policy_months: Number(fd.get("photo_retention_policy_months") || 0),
-          session_timeout_minutes: Number(fd.get("session_timeout_minutes") || 120),
-        };
-
-        const { error } = await s.supabase.from("system_settings").upsert({
-          key: "operational_config",
-          value: newSettings,
-          updated_by: s.currentUser.id,
-          updated_at: new Date().toISOString(),
-        });
-        if (error) throw error;
-        await Core.logSecurityEvent(
-          "SECURITY_POLICY_UPDATED",
-          "system_settings",
-          "operational_config",
-          `Memperbarui retensi arsip foto (${newSettings.photo_retention_policy_months} bulan) & timeout sesi.`
-        );
-        await Core.refreshAllData();
-        showBanner(true, "Kebijakan keamanan & retensi arsip bulanan berhasil disimpan.");
-        return;
-      }
+      if (form.id === "form-save-shift") return await handleSaveShift(form.querySelector("#btn-save-shift") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-save-outlet") return await handleSaveOutlet(form.querySelector("#btn-save-outlet") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-save-rules") return await handleSaveRules(form.querySelector("#btn-save-rules") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-save-calendar") return await handleSaveCalendar(form.querySelector("#btn-save-calendar") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-save-branding") return await handleSaveBranding(form.querySelector("#btn-save-branding") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-save-security") return await handleSaveSecurity(form.querySelector("#btn-save-security") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-preapprove-email") return await handlePreapproveEmail(form.querySelector("#btn-save-preapprove") || form.querySelector('button[type="submit"]'));
+      if (form.classList.contains("form-approve-first-login")) return await handleApproveFirstLogin(form.querySelector('[data-action="submit-approve-first-login"]') || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-reject-first-login") return await handleRejectFirstLogin(form.querySelector('[data-action="submit-reject-first-login"]') || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-edit-employee") return await handleEditEmployee(form.querySelector("#btn-save-employee") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-change-role") return await handleChangeRole(form.querySelector("#btn-save-change-role") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-admin-edit-att") return await handleAdminEditAttendance(form.querySelector("#btn-save-admin-edit-att") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-review-corr") return await handleReviewCorrection(form.querySelector('[data-action="submit-review-corr"]') || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-member-corr") return await handleMemberCorrection(form.querySelector('[data-action="submit-member-corr"]') || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-member-leave") return await handleMemberLeave(form.querySelector('[data-action="submit-member-leave"]') || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-complete-bootstrap") return await handleCompleteBootstrap();
+      if (form.id === "form-cloud-connect") return await handleCloudConnect(form.querySelector('button[type="submit"]'));
     } catch (err) {
-      showBanner(false, err.message || "Gagal menyimpan perubahan ke server.");
+      showBanner(false, err.message || "Gagal memproses formulir.");
     }
   });
 

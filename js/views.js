@@ -1142,7 +1142,7 @@
                 ${pendingUsers
                   .map(
                     (p, idx) => `
-                  <form class="card-subtle form-approve-first-login" data-userid="${esc(p.id)}">
+                  <form class="card-subtle form-approve-first-login" data-userid="${esc(p.id)}" novalidate>
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
                       <div style="display:flex;align-items:center;gap:10px;">
                         ${renderAvatarHtml(p)}
@@ -1186,7 +1186,7 @@
                     </div>
                     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
                       <button type="button" class="btn btn-danger btn-sm" data-action="reject-first-login" data-userid="${esc(p.id)}">✕ Tolak Akses</button>
-                      <button type="submit" class="btn btn-emerald btn-sm">✓ Setujui Login Pertama &amp; Aktifkan</button>
+                      <button type="button" class="btn btn-emerald btn-sm" data-action="submit-approve-first-login">✓ Setujui Login Pertama &amp; Aktifkan</button>
                     </div>
                   </form>`
                   )
@@ -1202,7 +1202,7 @@
           <p style="font-size:12px;color:var(--stone-600);margin-bottom:12px;">
             Opsional: Daftarkan alamat Gmail karyawan terlebih dahulu agar saat mereka login Google pertama kali langsung aktif tanpa perlu menunggu.
           </p>
-          <form id="form-preapprove-email">
+          <form id="form-preapprove-email" novalidate>
             <div class="form-group">
               <label class="form-label">Alamat Email Google (Gmail) *</label>
               <input type="email" class="form-input" name="email" placeholder="nama.karyawan@gmail.com" required />
@@ -1241,7 +1241,7 @@
                 </select>
               </div>
             </div>
-            <button type="submit" class="btn btn-primary" style="width:100%;">+ Simpan ke Daftar Pra-Persetujuan</button>
+            <button type="button" id="btn-save-preapprove" class="btn btn-primary" style="width:100%;" data-action="submit-preapprove-email">+ Simpan ke Daftar Pra-Persetujuan</button>
           </form>
 
           ${
@@ -1377,20 +1377,22 @@
           <h3 style="font-size:15px;font-weight:800;margin-bottom:12px;">
             ${editing ? `✏️ Edit Shift: ${esc(editing.name)}` : "+ Buat Jadwal Shift Baru"}
           </h3>
-          <form id="form-save-shift">
+          <form id="form-save-shift" novalidate>
             <input type="hidden" name="id" value="${esc(editing ? editing.id : "")}" />
             <div class="form-group">
               <label class="form-label">Nama Shift *</label>
-              <input class="form-input" name="name" value="${esc(editing ? editing.name : "")}" placeholder="Contoh: Shift Pagi (Opening)" required />
+              <input class="form-input" id="shift-name-input" name="name" value="${esc(editing ? editing.name : "")}" placeholder="Contoh: Shift Pagi (Opening)" required />
             </div>
             <div class="grid-2" style="gap:10px;">
               <div class="form-group">
                 <label class="form-label">Jam Mulai *</label>
-                <input type="time" class="form-input mono" name="start_time" value="${esc(editing ? String(editing.start_time).slice(0, 5) : "07:00")}" required />
+                <input type="text" class="form-input mono" id="shift-start-time-input" name="start_time" value="${esc(editing ? String(editing.start_time).slice(0, 5) : "07:00")}" placeholder="Contoh: 07:00 atau 07.00" required />
+                <span style="font-size:10px;color:var(--stone-500);margin-top:2px;display:block;">Format 24 jam (misal 14:30 atau 14.30)</span>
               </div>
               <div class="form-group">
                 <label class="form-label">Jam Selesai *</label>
-                <input type="time" class="form-input mono" name="end_time" value="${esc(editing ? String(editing.end_time).slice(0, 5) : "15:00")}" required />
+                <input type="text" class="form-input mono" id="shift-end-time-input" name="end_time" value="${esc(editing ? String(editing.end_time).slice(0, 5) : "15:00")}" placeholder="Contoh: 15:00 atau 15.00" required />
+                <span style="font-size:10px;color:var(--stone-500);margin-top:2px;display:block;">Format 24 jam (misal 22:30 atau 22.30)</span>
               </div>
             </div>
             <div class="grid-2" style="gap:10px;">
@@ -1420,13 +1422,14 @@
               <input type="checkbox" name="crosses_midnight" ${editing && editing.crosses_midnight ? "checked" : ""} />
               Shift melewati tengah malam (Crosses Midnight)
             </label>
-            <div style="display:flex;gap:8px;">
-              <button type="submit" class="btn btn-primary" style="flex:1;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" id="btn-save-shift" class="btn btn-primary" style="flex:1;" data-action="submit-save-shift">
                 ${editing ? "💾 Simpan Perubahan Shift" : "+ Tambah Jadwal Shift"}
               </button>
               ${
                 editing
-                  ? `<button type="button" class="btn btn-outline" data-action="cancel-edit-shift">Batal</button>`
+                  ? `<button type="button" class="btn btn-outline" data-action="cancel-edit-shift">Batal</button>
+                     <button type="button" class="btn btn-danger btn-sm" data-action="delete-shift" data-id="${esc(editing.id)}" title="Hapus atau Arsipkan Shift">🗑️ Hapus Shift</button>`
                   : ""
               }
             </div>
@@ -1450,9 +1453,14 @@
                     Jam: ${String(sh.start_time).slice(0, 5)} – ${String(sh.end_time).slice(0, 5)} • Toleransi Terlambat: ${sh.grace_period_minutes} mnt • Pulang Cepat: ${sh.early_checkout_threshold_minutes} mnt
                   </div>
                 </div>
-                <button class="btn btn-primary btn-sm" data-action="edit-shift" data-id="${esc(sh.id)}">
-                  ✏️ Edit Shift
-                </button>
+                <div style="display:flex;gap:6px;">
+                  <button class="btn btn-primary btn-sm" data-action="edit-shift" data-id="${esc(sh.id)}">
+                    ✏️ Edit Shift
+                  </button>
+                  <button class="btn btn-outline btn-sm" data-action="delete-shift" data-id="${esc(sh.id)}" title="Hapus atau Arsipkan Shift">
+                    🗑️ Hapus
+                  </button>
+                </div>
               </div>`
               )
               .join("")}
@@ -1491,15 +1499,15 @@
               .join("")}
           </div>
 
-          <form id="form-save-outlet">
+          <form id="form-save-outlet" novalidate>
             <input type="hidden" name="id" value="${esc(editing ? editing.id : "")}" />
             <div class="form-group">
               <label class="form-label">Nama Outlet *</label>
-              <input class="form-input" name="name" value="${esc(editing ? editing.name : "")}" placeholder="Contoh: Suka Latte Cabang Utama" required />
+              <input class="form-input" id="outlet-name-input" name="name" value="${esc(editing ? editing.name : "")}" placeholder="Contoh: Suka Latte Cabang Utama" required />
             </div>
             <div class="form-group">
               <label class="form-label">Alamat Lengkap *</label>
-              <input class="form-input" name="address" value="${esc(editing ? editing.address : "")}" placeholder="Jl. ..." required />
+              <input class="form-input" id="outlet-address-input" name="address" value="${esc(editing ? editing.address : "")}" placeholder="Jl. ..." required />
             </div>
             <div style="margin-bottom:10px;">
               <button type="button" class="btn btn-emerald btn-sm" style="width:100%;" data-action="fill-outlet-current-gps">
@@ -1543,9 +1551,16 @@
                 </select>
               </div>
             </div>
-            <button type="submit" class="btn btn-primary" style="width:100%;">
-              💾 ${editing ? "Simpan Perubahan Outlet & Radius GPS" : "Simpan Outlet Baru"}
-            </button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" id="btn-save-outlet" class="btn btn-primary" style="flex:1;" data-action="submit-save-outlet">
+                💾 ${editing ? "Simpan Perubahan Outlet & Radius GPS" : "Simpan Outlet Baru"}
+              </button>
+              ${
+                editing && s.outlets.length > 1
+                  ? `<button type="button" class="btn btn-danger btn-sm" data-action="delete-outlet" data-id="${esc(editing.id)}" title="Hapus atau Arsipkan Outlet">🗑️ Hapus Outlet</button>`
+                  : ""
+              }
+            </div>
           </form>
         </div>
 
@@ -1572,7 +1587,7 @@
     return `
       <div class="card">
         <h3 style="font-size:16px;font-weight:800;margin-bottom:14px;">Edit Aturan Transaksi Absensi &amp; Zona Waktu Operasional</h3>
-        <form id="form-save-rules">
+        <form id="form-save-rules" novalidate>
           <div class="grid-2">
             <div class="card-subtle" style="display:flex;flex-direction:column;gap:12px;">
               <div style="font-weight:800;font-size:13.5px;">Validasi Kamera Selfie &amp; Lokasi Geofence</div>
@@ -1614,7 +1629,7 @@
             </div>
           </div>
           <div style="margin-top:16px;display:flex;justify-content:flex-end;">
-            <button type="submit" class="btn btn-primary">💾 Simpan Seluruh Aturan Absensi</button>
+            <button type="button" id="btn-save-rules" class="btn btn-primary" data-action="submit-save-rules">💾 Simpan Seluruh Aturan Absensi</button>
           </div>
         </form>
       </div>
@@ -1689,7 +1704,7 @@
           <h3 style="font-size:15px;font-weight:800;margin-bottom:12px;">
             ${editing ? `✏️ Edit Entri Kalender` : "+ Tambah Hari Libur / Izin / Sakit / Cuti"}
           </h3>
-          <form id="form-save-calendar">
+          <form id="form-save-calendar" novalidate>
             <input type="hidden" name="id" value="${esc(editing ? editing.id : "")}" />
             <div class="form-group">
               <label class="form-label">Jenis Keterangan</label>
@@ -1716,7 +1731,7 @@
             </div>
             <div class="form-group">
               <label class="form-label">Judul Keterangan *</label>
-              <input class="form-input" name="title" value="${esc(editing ? editing.title : "")}" placeholder="Contoh: Libur Hari Raya / Izin Kesehatan" required />
+              <input class="form-input" id="calendar-title-input" name="title" value="${esc(editing ? editing.title : "")}" placeholder="Contoh: Libur Hari Raya / Izin Kesehatan" required />
             </div>
             <div class="grid-2" style="gap:10px;">
               <div class="form-group">
@@ -1733,7 +1748,7 @@
               <textarea class="form-textarea" name="reason" rows="2" required>${esc(editing ? editing.reason : "")}</textarea>
             </div>
             <div style="display:flex;gap:8px;">
-              <button type="submit" class="btn btn-primary" style="flex:1;">
+              <button type="button" id="btn-save-calendar" class="btn btn-primary" style="flex:1;" data-action="submit-save-calendar">
                 💾 ${editing ? "Simpan Perubahan" : "Simpan ke Kalender"}
               </button>
               ${
@@ -1795,10 +1810,10 @@
       <div class="grid-12">
         <div class="col-6 card">
           <h3 style="font-size:15px;font-weight:800;margin-bottom:12px;">Edit Branding &amp; Tampilan Aplikasi</h3>
-          <form id="form-save-branding">
+          <form id="form-save-branding" novalidate>
             <div class="form-group">
               <label class="form-label">Nama Tampilan Utama</label>
-              <input class="form-input" name="brand_display_name" value="${esc(cfg.brand_display_name)}" required />
+              <input class="form-input" id="branding-name-input" name="brand_display_name" value="${esc(cfg.brand_display_name)}" required />
             </div>
             <div class="grid-2" style="gap:10px;">
               <div class="form-group">
@@ -1822,7 +1837,7 @@
                 <option value="warm_cream" ${cfg.theme_preset === "warm_cream" ? "selected" : ""}>Warm Home Cream</option>
               </select>
             </div>
-            <button type="submit" class="btn btn-primary" style="width:100%;">💾 Simpan Perubahan Branding</button>
+            <button type="button" id="btn-save-branding" class="btn btn-primary" style="width:100%;" data-action="submit-save-branding">💾 Simpan Perubahan Branding</button>
           </form>
         </div>
 
@@ -1889,7 +1904,7 @@
       <div class="grid-2">
         <div class="card">
           <h3 style="font-size:15px;font-weight:800;margin-bottom:12px;">Kebijakan Sesi &amp; Retensi Arsip Foto Bulanan</h3>
-          <form id="form-save-security">
+          <form id="form-save-security" novalidate>
             <div class="form-group">
               <label class="form-label">Kebijakan Retensi Penyimpanan Foto Absensi</label>
               <select class="form-select" name="photo_retention_policy_months" ${!isSuper ? "disabled" : ""}>
@@ -1903,7 +1918,7 @@
               <label class="form-label">Batas Timeout Sesi (Menit)</label>
               <input type="number" class="form-input" name="session_timeout_minutes" min="15" max="1440" value="${cfg.session_timeout_minutes || 120}" ${!isSuper ? "disabled" : ""} />
             </div>
-            <button type="submit" class="btn btn-primary" ${!isSuper ? "disabled" : ""}>💾 Simpan Kebijakan Keamanan</button>
+            <button type="button" id="btn-save-security" class="btn btn-primary" data-action="submit-save-security" ${!isSuper ? "disabled" : ""}>💾 Simpan Kebijakan Keamanan</button>
           </form>
         </div>
 
