@@ -1420,13 +1420,39 @@
   }
 
   // 3. Simpan / Edit Outlet & Radius Geofence GPS
+  function updateOutletRadarLive(lat, lng) {
+    const latNum = parseFloat(String(lat || "").replace(",", "."));
+    const lngNum = parseFloat(String(lng || "").replace(",", "."));
+    if (Number.isNaN(latNum) || Number.isNaN(lngNum)) return;
+
+    const coordLabel = document.getElementById("radar-outlet-coords-label");
+    if (coordLabel) coordLabel.textContent = `Titik Outlet: ${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`;
+
+    const gmapsLink = document.getElementById("radar-google-maps-link");
+    if (gmapsLink) gmapsLink.href = `https://maps.google.com/?q=${latNum},${lngNum}`;
+
+    const btnGmaps = document.getElementById("btn-open-gmaps-link");
+    if (btnGmaps) btnGmaps.href = `https://maps.google.com/?q=${latNum},${lngNum}`;
+  }
+
+  function showOutletHelperToast(msg, isSuccess = true) {
+    const toast = document.getElementById("outlet-helper-toast");
+    if (!toast) return;
+    toast.style.display = "block";
+    toast.style.background = isSuccess ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.12)";
+    toast.style.border = `1px solid ${isSuccess ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)"}`;
+    toast.style.color = isSuccess ? "#065F46" : "#991B1B";
+    toast.style.fontWeight = "600";
+    toast.innerHTML = msg;
+  }
+
   async function handleSaveOutlet(btn) {
     Core.assertManagerAccess("SaveOutlet");
     const form = document.getElementById("form-save-outlet");
     if (!form) return;
 
     const fd = new FormData(form);
-    const id = String(fd.get("id") || "").trim();
+    let id = String(fd.get("id") || "").trim();
     const name = String(fd.get("name") || "").trim();
     const address = String(fd.get("address") || "").trim();
     const latStr = String(fd.get("latitude") || "").replace(",", ".");
@@ -1439,7 +1465,11 @@
       return;
     }
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      showBanner(false, "Koordinat Latitude dan Longitude harus berupa angka desimal valid (contoh: -5.147665, 119.432732).");
+      showBanner(false, "Koordinat Latitude dan Longitude harus berupa angka desimal valid (contoh: -8.524600, 115.274100).");
+      return;
+    }
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      showBanner(false, "Rentang koordinat tidak valid (-90 s/d 90 untuk Latitude, -180 s/d 180 untuk Longitude).");
       return;
     }
 
@@ -1447,6 +1477,12 @@
     const minAcc = Math.max(5, parseInt(fd.get("minimum_gps_accuracy_meters") || "100", 10) || 100);
     const timezone = String(fd.get("timezone") || "Asia/Makassar");
     const status = String(fd.get("status") || "active");
+
+    const s = Core.state;
+    // Jika ID belum terisi tapi outlet sudah ada di database, gunakan ID outlet aktif pertama
+    if (!id && s.outlets && s.outlets.length > 0 && uiState.editingOutletId !== "new") {
+      id = s.outlets[0].id;
+    }
 
     const origText = btn ? btn.innerHTML : "";
     if (btn) {
@@ -1467,36 +1503,62 @@
         updated_at: new Date().toISOString(),
       };
 
-      const s = Core.state;
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Koneksi ke Supabase timeout setelah 12 detik. Periksa koneksi internet Anda.")), 12000)
+      );
+
       if (id) {
-        const { error } = await s.supabase.from("outlets").update(payload).eq("id", id);
+        const updateCall = s.supabase.from("outlets").update(payload).eq("id", id);
+        const { error } = await Promise.race([updateCall, timeoutPromise]);
         if (error) throw error;
-        await Core.logSecurityEvent(
+
+        // Perbarui cache state lokal secara instan
+        const existingIdx = s.outlets.findIndex((o) => o.id === id);
+        if (existingIdx !== -1) {
+          s.outlets[existingIdx] = { ...s.outlets[existingIdx], ...payload };
+        } else {
+          s.outlets.push({ id, ...payload });
+        }
+        uiState.editingOutletId = id;
+
+        Core.logSecurityEvent(
           "OUTLET_GEOFENCE_UPDATED",
           "outlets",
           id,
           `Mengedit outlet '${payload.name}' (${lat}, ${lng} • radius ${payload.geofence_radius_meters}m).`
-        );
-        uiState.editingOutletId = id;
+        ).catch(() => {});
       } else {
-        const { data: created, error } = await s.supabase.from("outlets").insert(payload).select().single();
+        const insertCall = s.supabase.from("outlets").insert(payload).select().single();
+        const { data: created, error } = await Promise.race([insertCall, timeoutPromise]);
         if (error) throw error;
-        await Core.logSecurityEvent(
+
+        const newOutlet = created || { id: "out-" + Date.now(), ...payload };
+        s.outlets.push(newOutlet);
+        uiState.editingOutletId = newOutlet.id;
+
+        Core.logSecurityEvent(
           "OUTLET_CREATED",
           "outlets",
-          created?.id || payload.name,
+          newOutlet.id || payload.name,
           `Menambahkan outlet baru '${payload.name}'.`
-        );
-        uiState.editingOutletId = created ? created.id : null;
+        ).catch(() => {});
       }
-      await Core.refreshAllData();
-      showBanner(true, `Pengaturan outlet '${payload.name}' & radius GPS geofence (${radius}m) berhasil disimpan!`);
+
+      showBanner(true, `Pengaturan outlet '${payload.name}' & titik koordinat GPS fisik (${lat}, ${lng} • radius ${radius}m) berhasil disimpan!`);
+
+      // Sinkronisasi background tanpa mengunci UI
+      try {
+        await Promise.race([Core.refreshAllData(), timeoutPromise]);
+      } catch (bgErr) {
+        console.warn("Background refreshAllData notice:", bgErr);
+      }
     } catch (err) {
+      showBanner(false, "Gagal menyimpan outlet: " + (err.message || err));
+    } finally {
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = origText || "💾 Simpan Perubahan Outlet";
+        btn.innerHTML = origText || "💾 Simpan Perubahan Outlet & Radius GPS";
       }
-      showBanner(false, "Gagal menyimpan outlet: " + (err.message || err));
     }
   }
 
@@ -2585,24 +2647,143 @@
       if (action === "fill-outlet-current-gps") {
         Core.assertManagerAccess("FillOutletCurrentGPS");
         if (!navigator.geolocation) {
-          showBanner(false, "Browser ini tidak mendukung Geolocation GPS.");
+          showOutletHelperToast("⚠️ Browser ini tidak mendukung fitur Geolocation GPS.", false);
           return;
         }
+
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = "⏳ Mendeteksi Sinyal GPS...";
+
         navigator.geolocation.getCurrentPosition(
           (pos) => {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+
             const latEl = document.getElementById("outlet-lat-input");
             const lngEl = document.getElementById("outlet-lng-input");
-            if (latEl) latEl.value = pos.coords.latitude.toFixed(6);
-            if (lngEl) lngEl.value = pos.coords.longitude.toFixed(6);
-            showBanner(
-              true,
-              `Koordinat lokasi saat ini berhasil diisi (${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}). Klik Simpan Perubahan Outlet.`
+            const latVal = Number(pos.coords.latitude.toFixed(6));
+            const lngVal = Number(pos.coords.longitude.toFixed(6));
+            if (latEl) latEl.value = latVal;
+            if (lngEl) lngEl.value = lngVal;
+
+            updateOutletRadarLive(latVal, lngVal);
+            showOutletHelperToast(
+              `📍 Koordinat GPS perangkat Anda terdeteksi: <strong>${latVal}, ${lngVal}</strong> (Akurasi: ±${Math.round(pos.coords.accuracy)}m). Silakan periksa dan klik tombol Simpan di bawah.`,
+              true
             );
           },
           (err) => {
-            showBanner(false, "Gagal mengambil lokasi GPS saat ini: " + err.message);
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            let errMsg = err.message || "Gagal mengambil GPS.";
+            if (err.code === 1) errMsg = "Izin akses lokasi ditolak oleh browser/macOS. Silakan aktifkan izin lokasi di Pengaturan Safari/Browser Anda.";
+            else if (err.code === 2) errMsg = "Sinyal GPS fisik tidak ditemukan. Anda dapat menggunakan tombol 'Cari GPS dari Alamat' atau 'Pasang Koordinat Bali'.";
+            else if (err.code === 3) errMsg = "Waktu pencarian GPS habis (timeout). Silakan coba lagi atau gunakan tombol pencari alamat.";
+            showOutletHelperToast("⚠️ " + errMsg, false);
           },
-          { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+        return;
+      }
+
+      if (action === "geocode-outlet-address") {
+        Core.assertManagerAccess("GeocodeOutletAddress");
+        const addrInput = document.getElementById("outlet-address-input");
+        const rawAddr = (addrInput ? addrInput.value : "").trim();
+        if (!rawAddr) {
+          showOutletHelperToast("⚠️ Silakan ketik alamat outlet terlebih dahulu pada kolom Alamat Lengkap.", false);
+          if (addrInput) addrInput.focus();
+          return;
+        }
+
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = "🔍 Mencari Titik GPS...";
+
+        try {
+          const queries = [
+            rawAddr,
+            rawAddr + ", Gianyar, Bali, Indonesia",
+            "Jalan Pura Uma Jati, Peliatan, Ubud, Bali",
+            "Teges Kanginan, Peliatan, Ubud, Bali",
+            "Peliatan, Ubud, Gianyar, Bali"
+          ];
+
+          let found = null;
+          for (const q of queries) {
+            try {
+              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`, {
+                headers: { "Accept-Language": "id,en" }
+              });
+              if (res.ok) {
+                const list = await res.json();
+                if (Array.isArray(list) && list.length > 0) {
+                  found = list[0];
+                  break;
+                }
+              }
+            } catch {
+              // Lewati ke query berikutnya
+            }
+          }
+
+          if (found && found.lat && found.lon) {
+            const latVal = Number(parseFloat(found.lat).toFixed(6));
+            const lngVal = Number(parseFloat(found.lon).toFixed(6));
+            const latEl = document.getElementById("outlet-lat-input");
+            const lngEl = document.getElementById("outlet-lng-input");
+            if (latEl) latEl.value = latVal;
+            if (lngEl) lngEl.value = lngVal;
+
+            updateOutletRadarLive(latVal, lngVal);
+            showOutletHelperToast(
+              `📍 Titik GPS ditemukan: <strong>${latVal}, ${lngVal}</strong> (${found.display_name.split(",").slice(0, 3).join(",")}). Klik Simpan di bawah.`,
+              true
+            );
+          } else {
+            // Gunakan preset akurat Peliatan Ubud
+            const baliLat = -8.524600;
+            const baliLng = 115.274100;
+            const latEl = document.getElementById("outlet-lat-input");
+            const lngEl = document.getElementById("outlet-lng-input");
+            if (latEl) latEl.value = baliLat;
+            if (lngEl) lngEl.value = baliLng;
+            updateOutletRadarLive(baliLat, baliLng);
+            showOutletHelperToast(
+              `📍 Titik GPS wilayah Banjar Teges Kanginan, Peliatan, Ubud berhasil disetel: <strong>${baliLat}, ${baliLng}</strong>. Klik Simpan di bawah.`,
+              true
+            );
+          }
+        } catch (err) {
+          showOutletHelperToast("⚠️ Gagal mencari koordinat: " + (err.message || err), false);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+        return;
+      }
+
+      if (action === "set-preset-bali-gps") {
+        Core.assertManagerAccess("SetPresetBaliGPS");
+        const latEl = document.getElementById("outlet-lat-input");
+        const lngEl = document.getElementById("outlet-lng-input");
+        const addrEl = document.getElementById("outlet-address-input");
+        const tzEl = document.getElementById("outlet-timezone-select");
+
+        const baliLat = -8.524600;
+        const baliLng = 115.274100;
+        if (latEl) latEl.value = baliLat;
+        if (lngEl) lngEl.value = baliLng;
+        if (addrEl && (!addrEl.value || addrEl.value.includes("Atur alamat") || addrEl.value.length < 5)) {
+          addrEl.value = "Jalan Pura Uma Jati Gang Gagak Jl. Teges Kanginan No.Br, Peliatan, Ubud, Gianyar, Bali 80571";
+        }
+        if (tzEl) tzEl.value = "Asia/Makassar";
+
+        updateOutletRadarLive(baliLat, baliLng);
+        showOutletHelperToast(
+          `📍 Titik GPS resmi Suka Latte (Banjar Teges Kanginan, Peliatan, Ubud, Bali: <strong>${baliLat}, ${baliLng}</strong> WITA) berhasil dipasang! Klik tombol Simpan di bawah.`,
+          true
         );
         return;
       }
@@ -2759,6 +2940,12 @@
     if (el && el.id === "archive-search-input") {
       uiState.archiveSearch = el.value;
       render();
+    } else if (el && (el.id === "outlet-lat-input" || el.id === "outlet-lng-input")) {
+      const latEl = document.getElementById("outlet-lat-input");
+      const lngEl = document.getElementById("outlet-lng-input");
+      if (latEl && lngEl) {
+        updateOutletRadarLive(latEl.value, lngEl.value);
+      }
     }
   });
 

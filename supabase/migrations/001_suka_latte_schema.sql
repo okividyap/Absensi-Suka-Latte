@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.outlets (
 
 -- Outlet awal default (dapat diedit penuh melalui Control Panel tanpa VS Code)
 INSERT INTO public.outlets (name, address, latitude, longitude, geofence_radius_meters, minimum_gps_accuracy_meters, timezone, status)
-SELECT 'Suka Latte Café & Catering', 'Atur alamat & titik koordinat resmi melalui Control Panel -> Outlet & GPS', -5.147665, 119.432732, 150, 100, 'Asia/Makassar', 'active'
+SELECT 'Suka Latte Café & Catering', 'Jalan Pura Uma Jati Gang Gagak Jl. Teges Kanginan No.Br, Peliatan, Ubud, Gianyar, Bali 80571', -8.524600, 115.274100, 150, 100, 'Asia/Makassar', 'active'
 WHERE NOT EXISTS (SELECT 1 FROM public.outlets);
 
 -- -----------------------------------------------------------------------------

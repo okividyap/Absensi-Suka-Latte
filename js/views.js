@@ -390,8 +390,11 @@
             }
           </svg>
           <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--coffee-300);margin-top:6px;flex-wrap:wrap;gap:6px;">
-            <span class="mono">Titik Outlet: ${Number(outlet.latitude).toFixed(6)}, ${Number(outlet.longitude).toFixed(6)}</span>
-            <a href="https://www.openstreetmap.org/?mlat=${outlet.latitude}&mlon=${outlet.longitude}#map=18/${outlet.latitude}/${outlet.longitude}" target="_blank" rel="noreferrer" style="color:var(--coffee-200);">Buka Peta Eksternal ↗</a>
+            <span id="radar-outlet-coords-label" class="mono">Titik Outlet: ${Number(outlet.latitude).toFixed(6)}, ${Number(outlet.longitude).toFixed(6)}</span>
+            <div style="display:flex;gap:10px;">
+              <a id="radar-google-maps-link" href="https://maps.google.com/?q=${outlet.latitude},${outlet.longitude}" target="_blank" rel="noreferrer" style="color:var(--coffee-200);text-decoration:underline;">📍 Buka Google Maps ↗</a>
+              <a href="https://www.openstreetmap.org/?mlat=${outlet.latitude}&mlon=${outlet.longitude}#map=18/${outlet.latitude}/${outlet.longitude}" target="_blank" rel="noreferrer" style="color:var(--coffee-200);">OpenStreetMap ↗</a>
+            </div>
           </div>
         </div>
       </div>
@@ -1503,42 +1506,62 @@
             <input type="hidden" name="id" value="${esc(editing ? editing.id : "")}" />
             <div class="form-group">
               <label class="form-label">Nama Outlet *</label>
-              <input class="form-input" id="outlet-name-input" name="name" value="${esc(editing ? editing.name : "")}" placeholder="Contoh: Suka Latte Cabang Utama" required />
+              <input class="form-input" id="outlet-name-input" name="name" value="${esc(editing ? editing.name : "Suka Latte Café & Catering")}" placeholder="Contoh: Suka Latte Café & Catering" required />
             </div>
             <div class="form-group">
               <label class="form-label">Alamat Lengkap *</label>
-              <input class="form-input" id="outlet-address-input" name="address" value="${esc(editing ? editing.address : "")}" placeholder="Jl. ..." required />
+              <input class="form-input" id="outlet-address-input" name="address" value="${esc(editing ? editing.address : "Jalan Pura Uma Jati Gang Gagak Jl. Teges Kanginan No.Br, Peliatan, Ubud, Gianyar, Bali 80571")}" placeholder="Jl. Pura Uma Jati Gang Gagak Jl. Teges Kanginan No.Br, Peliatan" required />
             </div>
-            <div style="margin-bottom:10px;">
-              <button type="button" class="btn btn-emerald btn-sm" style="width:100%;" data-action="fill-outlet-current-gps">
-                📍 Gunakan Koordinat GPS Lokasi Saya Saat Ini
-              </button>
+
+            <!-- Bantuan Penentuan Titik GPS Akurat Suka Latte -->
+            <div style="background:var(--coffee-50);border:1px solid var(--coffee-200);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+              <div style="font-size:11.5px;font-weight:700;color:var(--coffee-900);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+                <span>🎯 Alat Bantu Titik GPS Fisik Outlet</span>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                <button type="button" class="btn btn-emerald btn-sm" style="flex:1;min-width:180px;" data-action="fill-outlet-current-gps" id="btn-fill-gps" title="Gunakan koordinat GPS perangkat fisik saat ini">
+                  📍 Gunakan GPS Lokasi Saya Saat Ini
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" style="flex:1;min-width:160px;" data-action="geocode-outlet-address" id="btn-geocode-addr" title="Cari koordinat otomatis berdasarkan nama alamat di atas">
+                  🔍 Cari GPS dari Alamat
+                </button>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" style="flex:1;font-size:11px;" data-action="set-preset-bali-gps" id="btn-preset-bali" title="Pasang koordinat presisi Suka Latte Banjar Teges Kanginan, Peliatan, Ubud, Bali">
+                  ⭐ Pasang Koordinat Suka Latte Bali (Peliatan, Ubud)
+                </button>
+                <a id="btn-open-gmaps-link" href="https://maps.google.com/?q=${editing ? editing.latitude : -8.524600},${editing ? editing.longitude : 115.274100}" target="_blank" rel="noreferrer" class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;" title="Buka Google Maps di tab baru">
+                  🗺️ Buka di Google Maps ↗
+                </a>
+              </div>
+              <div id="outlet-helper-toast" style="display:none;font-size:11.5px;margin-top:8px;padding:8px 10px;border-radius:6px;line-height:1.4;"></div>
             </div>
+
             <div class="grid-2" style="gap:10px;">
               <div class="form-group">
                 <label class="form-label">Latitude *</label>
-                <input class="form-input mono" id="outlet-lat-input" name="latitude" value="${editing ? editing.latitude : -5.147665}" required />
+                <input class="form-input mono" id="outlet-lat-input" name="latitude" value="${editing ? editing.latitude : -8.524600}" required />
               </div>
               <div class="form-group">
                 <label class="form-label">Longitude *</label>
-                <input class="form-input mono" id="outlet-lng-input" name="longitude" value="${editing ? editing.longitude : 119.432732}" required />
+                <input class="form-input mono" id="outlet-lng-input" name="longitude" value="${editing ? editing.longitude : 115.274100}" required />
               </div>
             </div>
             <div class="grid-2" style="gap:10px;">
               <div class="form-group">
                 <label class="form-label">Radius Geofence (Meter) *</label>
-                <input type="number" class="form-input" name="geofence_radius_meters" min="10" max="5000" value="${editing ? editing.geofence_radius_meters : 150}" required />
+                <input type="number" class="form-input" id="outlet-radius-input" name="geofence_radius_meters" min="10" max="5000" value="${editing ? editing.geofence_radius_meters : 150}" required />
               </div>
               <div class="form-group">
                 <label class="form-label">Batas Akurasi GPS (Meter) *</label>
-                <input type="number" class="form-input" name="minimum_gps_accuracy_meters" min="5" max="1000" value="${editing ? editing.minimum_gps_accuracy_meters : 100}" required />
+                <input type="number" class="form-input" id="outlet-accuracy-input" name="minimum_gps_accuracy_meters" min="5" max="1000" value="${editing ? editing.minimum_gps_accuracy_meters : 100}" required />
               </div>
             </div>
             <div class="grid-2" style="gap:10px;">
               <div class="form-group">
                 <label class="form-label">Zona Waktu Outlet</label>
-                <select class="form-select" name="timezone">
-                  <option value="Asia/Makassar" ${!editing || editing.timezone === "Asia/Makassar" ? "selected" : ""}>Asia/Makassar (WITA)</option>
+                <select class="form-select" id="outlet-timezone-select" name="timezone">
+                  <option value="Asia/Makassar" ${!editing || editing.timezone === "Asia/Makassar" ? "selected" : ""}>Asia/Makassar (WITA - Bali & Makassar)</option>
                   <option value="Asia/Jakarta" ${editing && editing.timezone === "Asia/Jakarta" ? "selected" : ""}>Asia/Jakarta (WIB)</option>
                   <option value="Asia/Jayapura" ${editing && editing.timezone === "Asia/Jayapura" ? "selected" : ""}>Asia/Jayapura (WIT)</option>
                 </select>
@@ -1551,7 +1574,7 @@
                 </select>
               </div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
               <button type="button" id="btn-save-outlet" class="btn btn-primary" style="flex:1;" data-action="submit-save-outlet">
                 💾 ${editing ? "Simpan Perubahan Outlet & Radius GPS" : "Simpan Outlet Baru"}
               </button>
@@ -1564,13 +1587,13 @@
           </form>
         </div>
 
-        <div class="col-7">
+        <div class="col-7" id="radar-preview-wrapper">
           ${renderGeofenceMapCard(
             editing || {
               name: "Pratinjau Outlet Baru",
-              address: "Isi alamat dan koordinat di sebelah kiri",
-              latitude: -5.147665,
-              longitude: 119.432732,
+              address: "Jalan Pura Uma Jati Gang Gagak Jl. Teges Kanginan No.Br, Peliatan, Ubud, Gianyar, Bali 80571",
+              latitude: -8.524600,
+              longitude: 115.274100,
               geofence_radius_meters: 150,
               minimum_gps_accuracy_meters: 100,
             },
