@@ -1,7 +1,23 @@
+# Environment & Secrets
 .env
 .env.*
 !.env.example
+
+# Dependencies & Builds
 node_modules/
-.DS_Store
+dist/
+build/
+out/
+.next/
+
+# Deployment & Caches
 .vercel/
+.cache/
+*.tsbuildinfo
 *.log
+npm-debug.log*
+yarn-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
