@@ -861,6 +861,105 @@ window.SUKA_LATTE_CONFIG = {
     return target || null;
   }
 
+  function canDeleteEmployee(targetProfile) {
+    if (!isManager() || !targetProfile || !state.currentUser) return false;
+    if (targetProfile.id === state.currentUser.id) return false;
+    if (targetProfile.role === "super_admin") return false;
+    return isSuperAdmin() || targetProfile.role === "member";
+  }
+
+  async function deleteEmployeeAccount(targetUserId, reason) {
+    assertManagerAccess("DeleteEmployeeAccount");
+    if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
+    const target = state.profiles.find((p) => p.id === targetUserId);
+    if (!target) throw new Error("Data karyawan tidak ditemukan.");
+    if (!canDeleteEmployee(target)) {
+      throw new Error("Anda tidak memiliki izin untuk menghapus akun ini.");
+    }
+
+    const cleanReason = String(reason || "").trim() || "Karyawan resign";
+
+    const rpcRes = await withTimeout(
+      state.supabase.rpc("delete_member_by_manager", {
+        p_target_user_id: targetUserId,
+        p_reason: cleanReason,
+      }),
+      15000,
+      "Penghapusan member timeout setelah 15 detik. Periksa koneksi internet lalu coba lagi."
+    );
+
+    if (!rpcRes.error) {
+      const paths = Array.isArray(rpcRes.data?.photo_paths) ? rpcRes.data.photo_paths.filter(Boolean) : [];
+      if (paths.length > 0) {
+        try {
+          await state.supabase.storage.from("attendance-photos").remove(paths);
+        } catch {
+          // Best-effort cleanup foto storage
+        }
+      }
+      state.profiles = state.profiles.filter((p) => p.id !== targetUserId);
+      state.attendance = state.attendance.filter((a) => a.employee_id !== targetUserId);
+      state.corrections = state.corrections.filter((c) => c.employee_id !== targetUserId);
+      state.holidaysAndLeaves = state.holidaysAndLeaves.filter((h) => h.employee_id !== targetUserId);
+      state.preapprovedEmails = state.preapprovedEmails.filter(
+        (pe) => String(pe.email || "").toLowerCase() !== String(target.email || "").toLowerCase()
+      );
+      setTimeout(() => {
+        refreshProfilesAndAuditInBackground();
+      }, 50);
+      return { mode: "hard_deleted", target };
+    }
+
+    const msg = String(rpcRes.error.message || "");
+    const code = String(rpcRes.error.code || "");
+    const isMissingRpc =
+      code === "PGRST202" ||
+      code === "42883" ||
+      msg.includes("Could not find the function") ||
+      msg.includes("does not exist");
+
+    if (!isMissingRpc) {
+      throw rpcRes.error;
+    }
+
+    // Fallback aman jika migrasi RPC 004 belum dijalankan di SQL Editor:
+    // Nonaktifkan akun secara permanen + tandai resign agar tidak bisa login/absen & hilang dari daftar aktif.
+    const updRes = await withTimeout(
+      state.supabase.rpc("update_employee_by_manager", {
+        p_target_user_id: targetUserId,
+        p_employee_code: target.employee_code,
+        p_full_name: target.full_name,
+        p_phone: target.phone || "",
+        p_position_title: `Resign (${cleanReason})`.slice(0, 60),
+        p_outlet_id: target.outlet_id || (state.outlets[0]?.id ?? null),
+        p_shift_id: target.shift_id || (state.shifts[0]?.id ?? null),
+        p_status: "inactive",
+      }),
+      15000,
+      "Penonaktifan member resign timeout setelah 15 detik."
+    );
+    if (updRes.error) throw updRes.error;
+
+    try {
+      await state.supabase.from("preapproved_emails").delete().ilike("email", target.email);
+    } catch {
+      // Abaikan jika belum ada di preapproved_emails
+    }
+    await logSecurityEvent(
+      "EMPLOYEE_REMOVED_RESIGNED",
+      "profiles",
+      targetUserId,
+      `Member ${target.full_name} (${target.employee_code}) dinonaktifkan/dikeluarkan karena resign: ${cleanReason}.`
+    );
+
+    target.status = "inactive";
+    target.position_title = `Resign (${cleanReason})`.slice(0, 60);
+    setTimeout(() => {
+      refreshProfilesAndAuditInBackground();
+    }, 50);
+    return { mode: "deactivated", target };
+  }
+
   window.SukaCore = {
     state,
     DEFAULT_SETTINGS,
@@ -890,6 +989,8 @@ window.SUKA_LATTE_CONFIG = {
     signOut,
     selectMyActiveShift,
     changeEmployeeRoleFast,
+    canDeleteEmployee,
+    deleteEmployeeAccount,
     uploadPrivateSelfieAndSubmit,
   };
 })();

@@ -1410,7 +1410,7 @@
             <select id="rep-emp-select" class="form-select">
               <option value="all">Semua Karyawan</option>
               ${s.profiles
-                .filter((p) => p.first_login_approved)
+                .filter((p) => p.first_login_approved && p.status === "active")
                 .map(
                   (p) =>
                     `<option value="${esc(p.id)}" ${uiState.reportEmpId === p.id ? "selected" : ""}>${esc(p.full_name)} (${esc(p.employee_code)})</option>`
@@ -1563,7 +1563,11 @@
     const pendingUsers = s.profiles.filter(
       (p) => p.status === "pending_approval" || (!p.first_login_approved && p.status !== "rejected")
     );
-    const managedUsers = s.profiles.filter((p) => p.first_login_approved || p.status === "rejected");
+    const activeUsers = s.profiles.filter((p) => p.first_login_approved && p.status === "active");
+    const resignedUsers = s.profiles.filter(
+      (p) => (p.first_login_approved && p.status !== "active") || p.status === "rejected"
+    );
+    const managedUsers = activeUsers;
 
     return `
       <!-- BAGIAN A: ANTREAN PERSETUJUAN LOGIN PERTAMA AKUN GOOGLE -->
@@ -1631,7 +1635,12 @@
                         </select>
                       </div>
                     </div>
-                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                      ${
+                        Core.canDeleteEmployee(p)
+                          ? `<button type="button" class="btn btn-outline btn-sm" style="color:var(--rose-700);border-color:#fecdd3;" data-action="delete-employee" data-userid="${esc(p.id)}">🗑️ Hapus</button>`
+                          : ""
+                      }
                       <button type="button" class="btn btn-danger btn-sm" data-action="reject-first-login" data-userid="${esc(p.id)}">✕ Tolak Akses</button>
                       <button type="button" class="btn btn-emerald btn-sm" data-action="submit-approve-first-login">✓ Setujui Login Pertama &amp; Aktifkan</button>
                     </div>
@@ -1714,11 +1723,14 @@
           }
         </div>
 
-        <!-- BAGIAN C: DAFTAR SELURUH KARYAWAN + TOMBOL EDIT PENUH -->
+        <!-- BAGIAN C: DAFTAR KARYAWAN AKTIF + EDIT & HAPUS RESIGN -->
         <div class="col-7 card">
-          <h3 style="font-size:15px;font-weight:800;margin-bottom:12px;">
-            3. Daftar Karyawan Terdaftar &amp; Edit Penuh (${managedUsers.length} Akun)
+          <h3 style="font-size:15px;font-weight:800;margin-bottom:4px;">
+            3. Daftar Karyawan Aktif (${managedUsers.length} Akun)
           </h3>
+          <p style="font-size:11.5px;color:var(--stone-500);margin-bottom:12px;">
+            Klik <strong>🗑️ Hapus</strong> jika ada member/karyawan yang resign agar akses &amp; datanya langsung dibersihkan.
+          </p>
           <div style="display:flex;flex-direction:column;gap:10px;">
             ${managedUsers
               .map((emp) => {
@@ -1728,6 +1740,7 @@
                   Core.isSuperAdmin() ||
                   emp.role === "member" ||
                   emp.id === s.currentUser.id;
+                const canDeleteThis = Core.canDeleteEmployee(emp);
                 return `
                   <div class="card-subtle" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
                     <div style="display:flex;align-items:center;gap:10px;">
@@ -1760,11 +1773,53 @@
                                <button type="button" class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(emp.id)}" data-newrole="member" title="Turunkan dengan catatan khusus">📝</button>`
                           : ""
                       }
+                      ${
+                        canDeleteThis
+                          ? `<button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(emp.id)}">
+                              🗑️ Hapus
+                            </button>`
+                          : ""
+                      }
                     </div>
                   </div>`;
               })
               .join("")}
           </div>
+
+          ${
+            resignedUsers.length > 0
+              ? `<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border-soft);">
+                  <div style="font-size:12.5px;font-weight:800;color:var(--stone-700);margin-bottom:8px;">
+                    Arsip Akun Nonaktif / Ditolak / Resign (${resignedUsers.length})
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:8px;">
+                    ${resignedUsers
+                      .map(
+                        (emp) => `
+                      <div class="card-subtle" style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;opacity:0.86;">
+                        <div>
+                          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <strong style="font-size:13px;">${esc(emp.full_name)}</strong>
+                            <span class="mono" style="font-size:11px;color:var(--stone-500);">(${esc(emp.employee_code)})</span>
+                            <span class="badge badge-danger">${emp.status === "inactive" ? "NONAKTIF / RESIGN" : "DITOLAK"}</span>
+                          </div>
+                          <div style="font-size:11px;color:var(--stone-500);">${esc(emp.email)} • ${esc(emp.position_title)}</div>
+                        </div>
+                        <div style="display:flex;gap:6px;">
+                          <button type="button" class="btn btn-outline btn-sm" data-action="open-edit-employee" data-userid="${esc(emp.id)}">✏️ Pulihkan</button>
+                          ${
+                            Core.canDeleteEmployee(emp)
+                              ? `<button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(emp.id)}">🗑️ Hapus</button>`
+                              : ""
+                          }
+                        </div>
+                      </div>`
+                      )
+                      .join("")}
+                  </div>
+                </div>`
+              : ""
+          }
         </div>
       </div>
     `;
@@ -1774,7 +1829,7 @@
   function renderCpRoles() {
     const s = Core.state;
     const isSuper = Core.isSuperAdmin();
-    const approvedUsers = s.profiles.filter((p) => p.first_login_approved);
+    const approvedUsers = s.profiles.filter((p) => p.first_login_approved && p.status === "active");
 
     return `
       <div class="card">
@@ -1812,10 +1867,12 @@
                       ? `<div style="display:flex;gap:6px;">
                            <button type="button" class="btn btn-amber btn-sm" style="flex:1;" data-action="quick-change-role" data-userid="${esc(u.id)}" data-newrole="admin">⚡ Jadikan Admin (1-Klik)</button>
                            <button type="button" class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(u.id)}" data-newrole="admin" title="Promosi dengan alasan khusus">📝</button>
+                           <button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(u.id)}" title="Hapus member resign">🗑️</button>
                          </div>`
                       : `<div style="display:flex;gap:6px;">
                            <button type="button" class="btn btn-outline btn-sm" style="flex:1;" data-action="quick-change-role" data-userid="${esc(u.id)}" data-newrole="member">⬇️ Jadikan Anggota (1-Klik)</button>
                            <button type="button" class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(u.id)}" data-newrole="member" title="Turunkan dengan alasan khusus">📝</button>
+                           <button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(u.id)}" title="Hapus admin/member resign">🗑️</button>
                          </div>`
                     : `<div style="font-size:11px;color:var(--stone-500);">Perubahan role hanya oleh Super Admin</div>`
                 }
@@ -2205,7 +2262,7 @@
               <select class="form-select" name="employee_id">
                 <option value="">-- Berlaku untuk Seluruh Outlet --</option>
                 ${s.profiles
-                  .filter((p) => p.first_login_approved)
+                  .filter((p) => p.first_login_approved && p.status === "active")
                   .map(
                     (p) =>
                       `<option value="${esc(p.id)}" ${editing && editing.employee_id === p.id ? "selected" : ""}>${esc(p.full_name)} (${esc(p.employee_code)})</option>`
