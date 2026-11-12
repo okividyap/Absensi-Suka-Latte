@@ -1254,12 +1254,12 @@
     // 1. Layar Loading Awal
     if (s.loading) {
       appEl.innerHTML = `
-        <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--coffee-950);color:var(--cream);gap:14px;padding:20px;text-align:center;">
-          <div class="brand-logo-wrap lg">
+        <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at top right,#2e190d 0%,#120b07 58%,#090503 100%);color:var(--cream);gap:14px;padding:24px;text-align:center;">
+          <div class="brand-logo-wrap lg" style="box-shadow:0 16px 36px rgba(212,163,97,0.32);">
             <img src="assets/branding/suka-logo.png" alt="Suka Latte" />
           </div>
-          <div style="font-size:15px;font-weight:800;letter-spacing:0.04em;">MEMUAT SUKA LATTE ATTENDANCE SYSTEM...</div>
-          <div style="font-size:12px;color:var(--coffee-300);">Memverifikasi sesi Google OAuth &amp; kebijakan keamanan server</div>
+          <div style="font-size:16px;font-weight:800;letter-spacing:0.05em;color:var(--gold-200);">SUKA LATTE ATTENDANCE SYSTEM</div>
+          <div style="font-size:12px;color:var(--coffee-300);">Menyiapkan sesi Google &amp; data operasional resmi...</div>
         </div>
       `;
       return;
@@ -1401,21 +1401,22 @@
             </div>
 
             <div class="clock-card">
-              <div style="font-size:10px;font-weight:800;color:var(--coffee-300);text-transform:uppercase;letter-spacing:0.05em;">
+              <div class="clock-label">
                 Waktu Resmi Server (${esc(tz)})
               </div>
               <div id="live-server-clock-time" class="clock-time mono">${esc(parts.timeString)}</div>
-              <div id="live-server-clock-date" style="font-size:11px;color:var(--coffee-300);">
-                Tanggal: ${esc(parts.dateString)} • 📁 ${esc(parts.archiveFolderLabel)}
+              <div id="live-server-clock-date" class="clock-date">
+                ${esc(parts.dateString)} • 📁 ${esc(parts.archiveFolderLabel)}
               </div>
             </div>
 
+            <div class="nav-section-title">Navigasi Utama</div>
             <nav class="nav-list">
               ${navItems
                 .map(
                   (item) => `
                 <button class="nav-btn ${uiState.activeNav === item.id ? "active" : ""}" data-action="nav" data-target="${item.id}">
-                  <span>${item.icon} &nbsp;${esc(item.label)}</span>
+                  <span class="nav-btn-left"><span>${item.icon}</span><span>${esc(item.label)}</span></span>
                   ${item.count ? `<span class="count-pill">${item.count}</span>` : ""}
                 </button>`
                 )
@@ -1424,19 +1425,17 @@
 
             ${
               isManager
-                ? `<div>
-                    <div style="font-size:10.5px;font-weight:800;color:var(--coffee-400);text-transform:uppercase;margin-bottom:4px;">
-                      Pintasan Edit Cepat Tanpa VS Code
-                    </div>
+                ? `<div style="margin-top:16px;">
+                    <div class="nav-section-title">Pintasan Pengelola</div>
                     <div class="shortcut-grid">
                       <button class="shortcut-btn" data-action="jump-cp" data-tab="employees">👥 Setujui Login</button>
                       <button class="shortcut-btn" data-action="jump-cp" data-tab="shifts">⏱ Edit Shift</button>
-                      <button class="shortcut-btn" data-action="jump-cp" data-tab="outlets">📍 Edit GPS Outlet</button>
-                      <button class="shortcut-btn" data-action="jump-cp" data-tab="rules">⚙️ Edit Aturan</button>
+                      <button class="shortcut-btn" data-action="jump-cp" data-tab="outlets">📍 Edit GPS</button>
+                      <button class="shortcut-btn" data-action="jump-cp" data-tab="roles">🛡️ Role &amp; Admin</button>
                     </div>
                   </div>`
-                : `<div style="background:rgba(44,26,14,0.6);border:1px solid var(--coffee-800);border-radius:12px;padding:12px;font-size:11px;color:var(--coffee-300);line-height:1.55;">
-                    🔒 <strong>Mode Privasi Anggota:</strong> Akun Anda hanya menampilkan absensi dan riwayat milik Anda sendiri.
+                : `<div style="margin-top:16px;background:rgba(255,255,255,0.05);border:1px solid rgba(218,175,118,0.18);border-radius:12px;padding:12px;font-size:11px;color:var(--coffee-200);line-height:1.55;">
+                    🔒 <strong style="color:var(--gold-200);">Privasi Akun Anggota:</strong> Halaman ini menampilkan absensi &amp; riwayat pribadi Anda saja.
                   </div>`
             }
           </div>

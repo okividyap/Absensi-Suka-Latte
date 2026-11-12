@@ -137,126 +137,155 @@
     const isFileProto = window.location.protocol === "file:";
 
     return `
-      <div style="min-height:100vh;background:linear-gradient(135deg,var(--coffee-950),var(--coffee-900));display:flex;align-items:center;justify-content:center;padding:20px;">
-        <div class="modal-window" style="max-width:860px;">
-          <div class="grid-12" style="gap:0;">
-            <!-- KIRI: BRANDING ASLI SUKA LATTE -->
-            <div class="col-5" style="background:var(--coffee-900);color:var(--cream);padding:28px;display:flex;flex-direction:column;justify-content:space-between;">
-              <div>
-                <div class="brand-box" style="margin-bottom:20px;">
-                  <div class="brand-logo-wrap lg">
-                    <img src="assets/branding/suka-logo.png" alt="Logo Asli Suka Latte" />
-                  </div>
-                  <div>
-                    <div class="brand-title" style="font-size:15px;">${esc(s.settings.brand_display_name)}</div>
-                    <div class="brand-sub">SUKA LATTE • ${esc(s.settings.brand_subtitle)}</div>
-                    <div class="brand-tagline">"${esc(s.settings.brand_tagline)}"</div>
-                  </div>
+      <div class="login-page">
+        <div class="login-shell">
+          <!-- KIRI: BRANDING & STANDAR HOSPITALITY SUKA LATTE -->
+          <div class="login-showcase">
+            <div>
+              <div class="brand-box" style="margin-bottom:22px;">
+                <div class="brand-logo-wrap lg">
+                  <img src="assets/branding/suka-logo.png" alt="Logo Asli Suka Latte" />
                 </div>
-                <div style="background:rgba(24,14,7,0.55);border:1px solid var(--coffee-700);border-radius:14px;padding:14px;font-size:11.5px;line-height:1.65;color:var(--coffee-200);">
-                  <strong style="color:var(--white);display:block;margin-bottom:6px;">Privasi &amp; Keamanan Akun:</strong>
-                  • Login wajib menggunakan <strong>Akun Google</strong> pribadi masing-masing karyawan.<br/>
-                  • Login pertama memerlukan <strong>persetujuan Admin / Super Admin</strong>.<br/>
-                  • Setelah disetujui sekali, login berikutnya pada akun Google yang sama akan <strong>langsung masuk otomatis</strong>.<br/>
-                  • Bukti foto selfie &amp; lokasi GPS hanya diambil saat transaksi absensi.
+                <div>
+                  <div class="brand-title" style="font-size:16px;">${esc(s.settings.brand_display_name)}</div>
+                  <div class="brand-sub">SUKA LATTE • ${esc(s.settings.brand_subtitle)}</div>
+                  <div class="brand-tagline">"${esc(s.settings.brand_tagline)}"</div>
                 </div>
               </div>
-              <div style="font-size:11px;color:var(--coffee-300);margin-top:20px;">
-                Zona Waktu Operasional: <strong>${esc(s.settings.operational_timezone)}</strong>
+
+              <div style="margin-bottom:18px;">
+                <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold-300);margin-bottom:6px;">
+                  Portal Kehadiran Resmi Karyawan
+                </div>
+                <h2 class="font-serif" style="font-size:24px;line-height:1.25;color:var(--white);font-weight:700;">
+                  Presensi Cepat, Akurat &amp; Transparan
+                </h2>
+              </div>
+
+              <div class="login-feature-list">
+                <div class="login-feature-item">
+                  <span style="font-size:16px;">🔐</span>
+                  <div style="font-size:12px;line-height:1.5;color:var(--coffee-100);">
+                    <strong style="color:var(--white);display:block;">Login Akun Google Pribadi</strong>
+                    Masuk sekali klik. Setelah persetujuan pertama oleh Admin, akses berikutnya langsung aktif otomatis.
+                  </div>
+                </div>
+                <div class="login-feature-item">
+                  <span style="font-size:16px;">📸</span>
+                  <div style="font-size:12px;line-height:1.5;color:var(--coffee-100);">
+                    <strong style="color:var(--white);display:block;">Selfie Kamera Langsung &amp; GPS Outlet</strong>
+                    Foto dan titik lokasi hanya diambil saat Anda menekan Check In atau Check Out.
+                  </div>
+                </div>
+                <div class="login-feature-item">
+                  <span style="font-size:16px;">⏱️</span>
+                  <div style="font-size:12px;line-height:1.5;color:var(--coffee-100);">
+                    <strong style="color:var(--white);display:block;">Waktu Server Resmi (${esc(s.settings.operational_timezone)})</strong>
+                    Perhitungan jam hadir, terlambat (&gt;15 menit), dan durasi kerja dicatat objektif di server.
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- KANAN: LOGIN GOOGLE / KONFIRMASI SUPER ADMIN PERTAMA -->
-            <div class="col-7" style="padding:32px;display:flex;flex-direction:column;justify-content:center;">
-              ${
-                uiState.banner
-                  ? `<div style="margin-bottom:16px;padding:12px;border-radius:12px;background:${uiState.banner.ok ? "var(--emerald-50)" : "var(--rose-50)"};color:${uiState.banner.ok ? "var(--emerald-900)" : "var(--rose-800)"};font-size:12px;font-weight:700;">
-                      ${esc(uiState.banner.message)}
-                    </div>`
-                  : ""
-              }
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--gold-200);border-top:1px solid rgba(218,175,118,0.18);padding-top:14px;">
+              <span>SUKA LATTE CAFÉ &amp; CATERING</span>
+              <span class="mono">${esc(s.settings.operational_timezone)}</span>
+            </div>
+          </div>
 
-              ${
-                s.initError
-                  ? `<div style="margin-bottom:16px;padding:12px;border-radius:12px;background:var(--rose-50);color:var(--rose-800);font-size:12px;">
-                      <strong>Info Sistem:</strong> ${esc(s.initError)}
-                    </div>`
-                  : ""
-              }
+          <!-- KANAN: LOGIN GOOGLE / KONFIRMASI SUPER ADMIN PERTAMA -->
+          <div class="login-auth-panel">
+            ${
+              uiState.banner
+                ? `<div style="margin-bottom:16px;padding:12px 14px;border-radius:12px;background:${uiState.banner.ok ? "var(--emerald-50)" : "var(--rose-50)"};color:${uiState.banner.ok ? "var(--emerald-800)" : "var(--rose-800)"};border:1px solid ${uiState.banner.ok ? "#a7f3d0" : "#fecdd3"};font-size:12px;font-weight:700;">
+                    ${esc(uiState.banner.message)}
+                  </div>`
+                : ""
+            }
 
-              ${
-                isFileProto
-                  ? `<div style="margin-bottom:16px;padding:12px;border-radius:12px;background:var(--amber-50);border:1px solid #fde68a;color:var(--amber-800);font-size:11.5px;">
-                      Gunakan <code>http://localhost:8080</code> (klik 2x <code>Jalankan-Server-Lokal.command</code>) atau domain HTTPS Vercel agar Google OAuth berfungsi.
-                    </div>`
-                  : ""
-              }
+            ${
+              s.initError
+                ? `<div style="margin-bottom:16px;padding:12px 14px;border-radius:12px;background:var(--rose-50);color:var(--rose-800);border:1px solid #fecdd3;font-size:12px;">
+                    <strong>Info Sistem:</strong> ${esc(s.initError)}
+                  </div>`
+                : ""
+            }
 
-              ${
-                !isBootstrapDone
-                  ? hasGoogleSession
-                    ? `<!-- TAHAP 2 BOOTSTRAP: AKUN GOOGLE SUDAH TERVERIFIKASI, KUNCI SEBAGAI SUPER ADMIN PERTAMA -->
-                       <span class="badge badge-super" style="align-self:flex-start;margin-bottom:10px;">Inisialisasi Pertama • Satu Super Admin Tunggal</span>
-                       <h2 style="font-size:20px;font-weight:800;margin-bottom:6px;">Konfirmasi Akun Super Admin Pertama</h2>
-                       <p style="font-size:12.5px;color:var(--stone-600);margin-bottom:16px;">
-                         Akun Google Anda telah terverifikasi. Setelah dikunci, akun ini menjadi <strong>satu-satunya Super Admin</strong> di Suka Latte dan proses inisialisasi akan ditutup permanen.
-                       </p>
-                       <div class="card-subtle" style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-                         ${renderAvatarHtml(s.googleIdentity)}
-                         <div>
-                           <div style="font-weight:800;font-size:14px;">${esc(s.googleIdentity?.full_name)}</div>
-                           <div style="font-size:12px;color:var(--stone-600);">${esc(s.googleIdentity?.email)}</div>
+            ${
+              isFileProto
+                ? `<div style="margin-bottom:16px;padding:12px 14px;border-radius:12px;background:var(--amber-50);border:1px solid #fde68a;color:var(--amber-800);font-size:11.5px;">
+                    Gunakan domain HTTPS resmi atau <code>http://localhost:8080</code> agar Google OAuth berfungsi.
+                  </div>`
+                : ""
+            }
+
+            ${
+              !isBootstrapDone
+                ? hasGoogleSession
+                  ? `<!-- TAHAP 2 BOOTSTRAP: AKUN GOOGLE SUDAH TERVERIFIKASI, KUNCI SEBAGAI SUPER ADMIN PERTAMA -->
+                     <span class="badge badge-super" style="align-self:flex-start;margin-bottom:12px;">Inisialisasi Pertama • Satu Super Admin Tunggal</span>
+                     <h2 style="font-size:21px;font-weight:800;margin-bottom:6px;color:var(--coffee-950);">Konfirmasi Akun Super Admin Pertama</h2>
+                     <p style="font-size:12.5px;color:var(--stone-600);margin-bottom:16px;">
+                       Akun Google Anda telah terverifikasi. Setelah dikunci, akun ini menjadi <strong>Super Admin utama</strong> di Suka Latte dan proses inisialisasi ditutup permanen.
+                     </p>
+                     <div class="card-subtle" style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                       ${renderAvatarHtml(s.googleIdentity)}
+                       <div>
+                         <div style="font-weight:800;font-size:14px;">${esc(s.googleIdentity?.full_name)}</div>
+                         <div style="font-size:12px;color:var(--stone-600);">${esc(s.googleIdentity?.email)}</div>
+                       </div>
+                     </div>
+                     <form id="form-complete-bootstrap">
+                       <div class="grid-2" style="gap:10px;">
+                         <div class="form-group">
+                           <label class="form-label">ID Karyawan Super Admin</label>
+                           <input class="form-input mono" id="bootstrap-employee-code" name="employee_code" value="SL-0001" required />
+                         </div>
+                         <div class="form-group">
+                           <label class="form-label">Nomor Telepon / WhatsApp</label>
+                           <input class="form-input" id="bootstrap-phone" name="phone" placeholder="0811xxxx" />
                          </div>
                        </div>
-                       <form id="form-complete-bootstrap">
-                         <div class="grid-2" style="gap:10px;">
-                           <div class="form-group">
-                             <label class="form-label">ID Karyawan Super Admin</label>
-                             <input class="form-input mono" id="bootstrap-employee-code" name="employee_code" value="SL-0001" required />
-                           </div>
-                           <div class="form-group">
-                             <label class="form-label">Nomor Telepon / WhatsApp</label>
-                             <input class="form-input" id="bootstrap-phone" name="phone" placeholder="0811xxxx" />
-                           </div>
-                         </div>
-                         <button type="submit" id="btn-submit-bootstrap" class="btn btn-primary" style="width:100%;padding:12px;margin-bottom:8px;" data-action="submit-bootstrap">
-                           🔒 Tetapkan Sebagai Super Admin &amp; Kunci Sistem
-                         </button>
-                         <button type="button" class="btn btn-outline" style="width:100%;" data-action="logout">
-                           Ganti Akun Google Lain
-                         </button>
-                       </form>`
-                    : `<!-- TAHAP 1 BOOTSTRAP: BELUM ADA SUPER ADMIN -->
-                       <span class="badge badge-warning" style="align-self:flex-start;margin-bottom:10px;">Instalasi Baru • Menunggu Super Admin Pertama</span>
-                       <h2 style="font-size:21px;font-weight:800;margin-bottom:8px;">Inisialisasi Super Admin Suka Latte</h2>
-                       <p style="font-size:12.5px;color:var(--stone-600);margin-bottom:20px;line-height:1.6;">
-                         Sistem baru terpasang dan belum memiliki pengelola. Silakan masuk menggunakan <strong>Akun Google Pemilik (Owner)</strong> untuk membentuk akun Super Admin tunggal dan mengunci sistem.
-                       </p>
-                       <button class="btn-google" data-action="google-login">
-                         ${GOOGLE_G_ICON_SVG}
-                         <span>Lanjutkan dengan Akun Google (Super Admin Pertama)</span>
-                       </button>`
-                  : `<!-- LOGIN HARIAN NORMAL: WAJIB AKUN GOOGLE -->
-                     <span class="badge badge-success" style="align-self:flex-start;margin-bottom:10px;">Autentikasi Resmi Karyawan</span>
-                     <h2 style="font-size:22px;font-weight:800;margin-bottom:8px;">Masuk ke Suka Latte Attendance</h2>
-                     <p style="font-size:12.5px;color:var(--stone-600);margin-bottom:22px;line-height:1.6;">
-                       Gunakan <strong>Akun Google</strong> Anda untuk masuk. Karyawan yang baru pertama kali login akan menunggu persetujuan Admin satu kali; karyawan yang sudah disetujui akan langsung masuk otomatis.
+                       <button type="submit" id="btn-submit-bootstrap" class="btn btn-primary btn-lg" style="width:100%;margin-bottom:10px;" data-action="submit-bootstrap">
+                         🔒 Tetapkan Sebagai Super Admin &amp; Kunci Sistem
+                       </button>
+                       <button type="button" class="btn btn-outline" style="width:100%;" data-action="logout">
+                         Ganti Akun Google Lain
+                       </button>
+                     </form>`
+                  : `<!-- TAHAP 1 BOOTSTRAP: BELUM ADA SUPER ADMIN -->
+                     <span class="badge badge-warning" style="align-self:flex-start;margin-bottom:12px;">Instalasi Baru • Menunggu Super Admin Pertama</span>
+                     <h2 style="font-size:22px;font-weight:800;margin-bottom:8px;color:var(--coffee-950);">Inisialisasi Super Admin Suka Latte</h2>
+                     <p style="font-size:13px;color:var(--stone-600);margin-bottom:22px;line-height:1.6;">
+                       Sistem belum memiliki pengelola. Silakan masuk menggunakan <strong>Akun Google Pemilik (Owner)</strong> untuk membentuk akun Super Admin tunggal.
                      </p>
                      <button class="btn-google" data-action="google-login">
                        ${GOOGLE_G_ICON_SVG}
-                       <span>Masuk dengan Akun Google</span>
+                       <span>Lanjutkan dengan Akun Google (Super Admin Pertama)</span>
                      </button>`
-              }
+                : `<!-- LOGIN HARIAN NORMAL: WAJIB AKUN GOOGLE -->
+                   <span class="badge badge-success" style="align-self:flex-start;margin-bottom:12px;">Autentikasi Resmi Karyawan</span>
+                   <h2 style="font-size:24px;font-weight:800;margin-bottom:8px;color:var(--coffee-950);letter-spacing:-0.02em;">Selamat Datang Kembali</h2>
+                   <p style="font-size:13px;color:var(--stone-600);margin-bottom:24px;line-height:1.6;">
+                     Masuk dengan <strong>Akun Google</strong> Anda untuk Check In / Check Out hari ini dan melihat riwayat kehadiran pribadi.
+                   </p>
+                   <button class="btn-google" data-action="google-login">
+                     ${GOOGLE_G_ICON_SVG}
+                     <span>Masuk dengan Akun Google</span>
+                   </button>
+                   <div style="margin-top:18px;padding:12px 14px;border-radius:12px;background:var(--coffee-50);border:1px solid var(--border-soft);font-size:11.5px;color:var(--stone-600);line-height:1.5;">
+                     💡 <strong>Baru pertama kali masuk?</strong> Login Google terlebih dahulu lalu hubungi Admin atau Super Admin agar akun Anda langsung disetujui.
+                   </div>`
+            }
 
-              ${
-                !isBootstrapDone
-                  ? `<div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--coffee-200);display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--stone-500);">
-                       <span>Server Supabase Terhubung</span>
-                       <button style="text-decoration:underline;color:var(--coffee-700);font-weight:700;" data-action="reset-cloud-config">Ubah Koneksi Server</button>
-                     </div>`
-                  : ""
-              }
-            </div>
+            ${
+              !isBootstrapDone
+                ? `<div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--coffee-200);display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--stone-500);">
+                     <span>Server Supabase Terhubung</span>
+                     <button style="background:transparent;border:none;text-decoration:underline;color:var(--coffee-700);font-weight:700;cursor:pointer;" data-action="reset-cloud-config">Ubah Koneksi Server</button>
+                   </div>`
+                : ""
+            }
           </div>
         </div>
       </div>
@@ -551,63 +580,88 @@
     const selectedShiftId = myShift ? myShift.id : u.shift_id;
 
     return `
+      <!-- 3 LANGKAH MUDAH UNTUK KARYAWAN -->
+      <div class="staff-steps-grid">
+        <div class="staff-step-card ${selectedShiftId ? "active" : ""}">
+          <div class="staff-step-num">${canCheckIn ? "1" : "✓"}</div>
+          <div>
+            <div class="staff-step-title">1. Pilih Shift Kerja</div>
+            <div class="staff-step-desc">Pilih <strong>Shift Pagi</strong> atau <strong>Shift Siang</strong> sesuai jadwal jaga Anda.</div>
+          </div>
+        </div>
+        <div class="staff-step-card ${myToday?.check_in_at ? "active" : ""}">
+          <div class="staff-step-num">${myToday?.check_in_at ? "✓" : "2"}</div>
+          <div>
+            <div class="staff-step-title">2. Ambil Selfie &amp; Lokasi</div>
+            <div class="staff-step-desc">Klik tombol hijau/amber, izinkan kamera &amp; GPS dalam radius outlet.</div>
+          </div>
+        </div>
+        <div class="staff-step-card ${myToday?.check_out_at ? "active" : ""}">
+          <div class="staff-step-num">${myToday?.check_out_at ? "✓" : "3"}</div>
+          <div>
+            <div class="staff-step-title">3. Status Tercatat Otomatis</div>
+            <div class="staff-step-desc">Jam masuk, jam pulang &amp; bukti foto langsung tampil rapi di bawah.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="hero-banner">
         <div class="grid-12" style="align-items:center;">
           <div class="col-7">
-            <span class="badge" style="background:rgba(255,255,255,0.14);color:var(--coffee-200);margin-bottom:8px;">
-              ⏱ Jadwal Shift Anda Hari Ini (${esc(parts.dateString)})
+            <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:10px;">
+              ⏱ Jadwal Hari Ini • ${esc(parts.dateString)} (${esc(tz)})
             </span>
-            <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;">Selamat Bertugas, ${esc(u.full_name)}</h1>
-            <p style="font-size:13px;color:var(--coffee-200);margin-bottom:12px;">
-              ID: <strong class="mono">${esc(u.employee_code)}</strong> •
-              Outlet: <strong>${esc(myOutlet ? myOutlet.name : "-")}</strong> •
-              Shift Aktif: <strong>${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)} WITA)` : "-")}</strong>
+            <h1 style="font-size:25px;font-weight:800;margin-bottom:6px;letter-spacing:-0.02em;">Selamat Bertugas, ${esc(u.full_name)}</h1>
+            <p style="font-size:13px;color:var(--coffee-200);margin-bottom:14px;">
+              ID: <strong class="mono" style="color:var(--gold-200);">${esc(u.employee_code)}</strong> •
+              Outlet: <strong style="color:var(--white);">${esc(myOutlet ? myOutlet.name : "-")}</strong> •
+              Shift: <strong style="color:var(--white);">${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
             </p>
             ${renderShiftSelectorHtml(s.shifts, selectedShiftId, !canCheckIn)}
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
               ${
                 canCheckIn
-                  ? `<button class="btn btn-emerald" style="padding:13px 22px;font-size:14px;" data-action="open-camera" data-mode="check_in">
-                      📷 Ambil Selfie Baru &amp; Check In (${esc(myShift ? myShift.name : "Shift")})
+                  ? `<button class="btn btn-emerald btn-lg" data-action="open-camera" data-mode="check_in">
+                      📷 Ambil Selfie &amp; Check In (${esc(myShift ? myShift.name : "Shift")})
                     </button>`
                   : ""
               }
               ${
                 canCheckOut
-                  ? `<button class="btn btn-amber" style="padding:13px 22px;font-size:14px;" data-action="open-camera" data-mode="check_out">
-                      📷 Ambil Selfie Baru &amp; Check Out (${esc(myShift ? myShift.name : "Shift")})
+                  ? `<button class="btn btn-amber btn-lg" data-action="open-camera" data-mode="check_out">
+                      📷 Ambil Selfie &amp; Check Out (${esc(myShift ? myShift.name : "Shift")})
                     </button>`
                   : ""
               }
-              <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:var(--cream);border-color:var(--coffee-600);" data-action="nav" data-target="riwayat_saya">
-                📋 Cek Riwayat Absensi Saya
+              <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);" data-action="nav" data-target="riwayat_saya">
+                📋 Riwayat Absensi Saya
               </button>
             </div>
           </div>
 
           <div class="col-5">
-            <div style="background:rgba(20,17,15,0.78);border:1px solid var(--coffee-700);border-radius:16px;padding:16px;font-size:12px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
-                <span style="color:var(--coffee-300);font-weight:700;text-transform:uppercase;">Status Hari Ini (${esc(myShift ? myShift.name : "-")})</span>
+            <div style="background:rgba(12,7,4,0.68);backdrop-filter:blur(10px);border:1px solid rgba(218,175,118,0.24);border-radius:18px;padding:18px;font-size:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+                <span style="color:var(--gold-300);font-weight:800;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;">Ringkasan Hari Ini (${esc(myShift ? myShift.name : "-")})</span>
                 ${myToday ? Core.getStatusBadgeHtml(myToday.attendance_status, myToday.late_minutes) : Core.getStatusBadgeHtml("belum_check_in")}
               </div>
-              <div class="grid-2" style="gap:10px;margin-bottom:10px;">
-                <div style="background:var(--coffee-950);padding:10px;border-radius:10px;border:1px solid var(--coffee-800);">
-                  <div style="font-size:10.5px;color:var(--coffee-400);">Check In (Server)</div>
-                  <div class="mono" style="font-size:14px;font-weight:800;color:var(--white);">
+              <div class="grid-2" style="gap:10px;margin-bottom:12px;">
+                <div style="background:rgba(255,255,255,0.06);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
+                  <div style="font-size:10.5px;color:var(--coffee-300);margin-bottom:2px;">Check In (Server)</div>
+                  <div class="mono" style="font-size:15px;font-weight:800;color:var(--white);">
                     ${myToday?.check_in_at ? Core.formatOperationalDateTime(myToday.check_in_at, tz, false) : "--:--:--"}
                   </div>
                 </div>
-                <div style="background:var(--coffee-950);padding:10px;border-radius:10px;border:1px solid var(--coffee-800);">
-                  <div style="font-size:10.5px;color:var(--coffee-400);">Check Out (Server)</div>
-                  <div class="mono" style="font-size:14px;font-weight:800;color:var(--white);">
+                <div style="background:rgba(255,255,255,0.06);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
+                  <div style="font-size:10.5px;color:var(--coffee-300);margin-bottom:2px;">Check Out (Server)</div>
+                  <div class="mono" style="font-size:15px;font-weight:800;color:var(--white);">
                     ${myToday?.check_out_at ? Core.formatOperationalDateTime(myToday.check_out_at, tz, false) : "--:--:--"}
                   </div>
                 </div>
               </div>
-              <div style="font-size:11.5px;color:var(--coffee-300);display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+              <div style="font-size:11.5px;color:var(--coffee-200);display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);">
                 <span>Durasi Kerja: <strong style="color:var(--white);">${Core.formatDurationMinutes(myToday?.work_duration_minutes)}</strong></span>
-                ${myToday?.late_minutes > 0 ? `<span style="color:#fdba74;font-weight:800;">⏱ Terlambat ${myToday.late_minutes} menit</span>` : ""}
+                ${myToday?.late_minutes > 0 ? `<span style="color:#fdba74;font-weight:800;">⏱ Terlambat ${myToday.late_minutes} menit</span>` : `<span style="color:#6ee7b7;font-weight:700;">● Siap Sinkronisasi</span>`}
               </div>
             </div>
           </div>
@@ -741,13 +795,13 @@
       <div class="hero-banner">
         <div class="grid-12" style="align-items:center;">
           <div class="col-7">
-            <span class="badge" style="background:rgba(255,255,255,0.14);color:var(--coffee-200);margin-bottom:8px;">
+            <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:10px;">
               Dashboard Operasional Pengelola • ${esc(parts.dateString)} (${esc(tz)})
             </span>
-            <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;">Halo, ${esc(u.full_name)}</h1>
-            <p style="font-size:12.5px;color:var(--coffee-200);margin-bottom:12px;">
-              Outlet Aktif: <strong>${esc(myOutlet ? myOutlet.name : "-")}</strong> •
-              Shift: <strong>${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
+            <h1 style="font-size:25px;font-weight:800;margin-bottom:6px;letter-spacing:-0.02em;">Halo, ${esc(u.full_name)}</h1>
+            <p style="font-size:13px;color:var(--coffee-200);margin-bottom:14px;">
+              Outlet Aktif: <strong style="color:var(--white);">${esc(myOutlet ? myOutlet.name : "-")}</strong> •
+              Shift: <strong style="color:var(--white);">${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
             </p>
             ${renderShiftSelectorHtml(s.shifts, myToday?.shift_id || u.shift_id || myShift?.id, !canCheckIn)}
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -758,51 +812,86 @@
                   ? `<button class="btn btn-amber" data-action="open-camera" data-mode="check_out">📷 Check Out Pribadi</button>`
                   : ""
               }
-              <button class="btn btn-outline" style="background:rgba(255,255,255,0.12);color:var(--cream);border-color:var(--coffee-600);" data-action="nav" data-target="control_panel">
-                ⚙️ Buka Control Panel &amp; Edit Pengaturan
+              <button class="btn btn-gold" data-action="nav" data-target="control_panel">
+                ⚙️ Control Panel &amp; Edit
               </button>
-              <button class="btn btn-outline" style="background:rgba(255,255,255,0.08);color:var(--cream);border-color:var(--coffee-700);" data-action="nav" data-target="archive">
-                🗂️ Arsip Foto Bulanan (${esc(parts.archiveFolderLabel)})
+              <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);" data-action="nav" data-target="archive">
+                🗂️ Arsip Foto (${esc(parts.archiveFolderLabel)})
               </button>
             </div>
           </div>
 
           <div class="col-5">
-            <div style="background:rgba(20,17,15,0.78);border:1px solid var(--coffee-700);border-radius:16px;padding:16px;font-size:12px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                <span style="color:var(--coffee-300);font-weight:700;">ABSENSI PRIBADI ANDA HARI INI</span>
+            <div style="background:rgba(12,7,4,0.68);backdrop-filter:blur(10px);border:1px solid rgba(218,175,118,0.24);border-radius:18px;padding:18px;font-size:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
+                <span style="color:var(--gold-300);font-weight:800;font-size:11px;letter-spacing:0.06em;">ABSENSI PRIBADI ANDA HARI INI</span>
                 ${myToday ? Core.getStatusBadgeHtml(myToday.attendance_status, myToday.late_minutes) : Core.getStatusBadgeHtml("belum_check_in")}
               </div>
-              <div class="mono" style="font-size:12.5px;color:var(--white);">
-                In: ${myToday?.check_in_at ? Core.formatOperationalDateTime(myToday.check_in_at, tz, false) : "--:--"} •
-                Out: ${myToday?.check_out_at ? Core.formatOperationalDateTime(myToday.check_out_at, tz, false) : "--:--"} •
-                Durasi: ${Core.formatDurationMinutes(myToday?.work_duration_minutes)}
+              <div class="grid-2" style="gap:10px;margin-bottom:10px;">
+                <div style="background:rgba(255,255,255,0.06);padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
+                  <div style="font-size:10px;color:var(--coffee-300);">Check In</div>
+                  <div class="mono" style="font-size:14px;font-weight:800;color:var(--white);">
+                    ${myToday?.check_in_at ? Core.formatOperationalDateTime(myToday.check_in_at, tz, false) : "--:--:--"}
+                  </div>
+                </div>
+                <div style="background:rgba(255,255,255,0.06);padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
+                  <div style="font-size:10px;color:var(--coffee-300);">Check Out</div>
+                  <div class="mono" style="font-size:14px;font-weight:800;color:var(--white);">
+                    ${myToday?.check_out_at ? Core.formatOperationalDateTime(myToday.check_out_at, tz, false) : "--:--:--"}
+                  </div>
+                </div>
+              </div>
+              <div class="mono" style="font-size:11.5px;color:var(--coffee-200);">
+                Durasi Kerja Hari Ini: <strong style="color:var(--white);">${Core.formatDurationMinutes(myToday?.work_duration_minutes)}</strong>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="grid-4">
-        <div class="card">
-          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--stone-500);">Karyawan Aktif Disetujui</div>
-          <div style="font-size:28px;font-weight:800;margin:4px 0;">${activeEmployees.length}</div>
-          <div style="font-size:11px;color:var(--stone-600);">${pendingUsers.length} menunggu persetujuan login pertama</div>
+      <div class="grid-4" style="margin-bottom:18px;">
+        <div class="kpi-card">
+          <div class="kpi-head">
+            <div>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:var(--stone-500);">Karyawan Aktif</div>
+              <div class="mono" style="font-size:30px;font-weight:800;color:var(--coffee-950);margin:4px 0;">${activeEmployees.length}</div>
+            </div>
+            <div class="kpi-icon-orb">👥</div>
+          </div>
+          <div style="font-size:11.5px;color:var(--stone-500);">${pendingUsers.length} menunggu persetujuan login pertama</div>
         </div>
-        <div class="card" style="border-color:#a7f3d0;">
-          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--emerald-800);">Hadir Hari Ini</div>
-          <div style="font-size:28px;font-weight:800;color:var(--emerald-900);margin:4px 0;">${presentToday}</div>
-          <div style="font-size:11px;color:var(--emerald-700);">Terverifikasi Selfie &amp; GPS</div>
+
+        <div class="kpi-card kpi-emerald">
+          <div class="kpi-head">
+            <div>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:var(--emerald-700);">Hadir Hari Ini</div>
+              <div class="mono" style="font-size:30px;font-weight:800;color:var(--emerald-800);margin:4px 0;">${presentToday}</div>
+            </div>
+            <div class="kpi-icon-orb">✅</div>
+          </div>
+          <div style="font-size:11.5px;color:var(--emerald-700);">Terverifikasi Selfie &amp; GPS Outlet</div>
         </div>
-        <div class="card" style="border-color:#fde68a;">
-          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--amber-800);">Sedang Bertugas (Belum Out)</div>
-          <div style="font-size:28px;font-weight:800;color:var(--amber-800);margin:4px 0;">${workingNow}</div>
-          <div style="font-size:11px;color:var(--amber-700);">Shift berjalan hari ini</div>
+
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-head">
+            <div>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:var(--amber-700);">Sedang Bertugas</div>
+              <div class="mono" style="font-size:30px;font-weight:800;color:var(--amber-800);margin:4px 0;">${workingNow}</div>
+            </div>
+            <div class="kpi-icon-orb">☕</div>
+          </div>
+          <div style="font-size:11.5px;color:var(--amber-700);">Aktif berjalan (belum Check Out)</div>
         </div>
-        <div class="card" style="border-color:#fed7aa;">
-          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--orange-800);">Terlambat Hari Ini</div>
-          <div style="font-size:28px;font-weight:800;color:var(--orange-800);margin:4px 0;">${lateToday}</div>
-          <div style="font-size:11px;color:var(--orange-700);">Mengacu waktu server WITA</div>
+
+        <div class="kpi-card kpi-rose">
+          <div class="kpi-head">
+            <div>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:var(--rose-700);">Terlambat Hari Ini</div>
+              <div class="mono" style="font-size:30px;font-weight:800;color:var(--rose-800);margin:4px 0;">${lateToday}</div>
+            </div>
+            <div class="kpi-icon-orb">⏱️</div>
+          </div>
+          <div style="font-size:11.5px;color:var(--rose-700);">Mengacu waktu resmi server WITA</div>
         </div>
       </div>
 
@@ -1128,12 +1217,12 @@
 
     return `
       <div class="hero-banner">
-        <span class="badge" style="background:rgba(255,255,255,0.14);color:var(--coffee-200);margin-bottom:6px;">
+        <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:10px;">
           Control Panel Pengelola (${isSuper ? "Super Admin — Akses Penuh" : "Admin Operasional"})
         </span>
-        <h2 style="font-size:21px;font-weight:800;">Pusat Kendali &amp; Edit Sistem Langsung (Tanpa VS Code)</h2>
-        <p style="font-size:12.5px;color:var(--coffee-200);margin-bottom:16px;">
-          Seluruh persetujuan login pertama akun Google, pengeditan profil karyawan, jadwal shift, koordinat GPS outlet, aturan absensi, koreksi kehadiran, hingga branding dapat diedit langsung di sini.
+        <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Pusat Kendali &amp; Manajemen Operasional</h2>
+        <p style="font-size:12.5px;color:var(--coffee-200);margin-bottom:18px;max-width:780px;">
+          Kelola persetujuan akun Google, promosi Admin 1-klik, jadwal Shift Pagi/Siang, radius GPS outlet, aturan keterlambatan, koreksi absensi, dan tampilan aplikasi secara langsung.
         </p>
         <div class="tab-pills">
           ${tabs

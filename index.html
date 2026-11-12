@@ -13,8 +13,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Suka Latte" />
-    <meta name="theme-color" content="#180e07" />
-    <link rel="stylesheet" href="css/styles.css?v=20261112d" />
+    <meta name="theme-color" content="#120b07" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css?v=20261112e" />
   </head>
   <body data-theme="classic_latte">
     <div id="app">
@@ -22,27 +28,48 @@
         style="
           min-height: 100vh;
           display: flex;
+          flex-direction: column;
+          gap: 14px;
           align-items: center;
           justify-content: center;
-          background: #180e07;
+          background: radial-gradient(circle at top right, #2e190d 0%, #120b07 58%, #090503 100%);
           color: #faf6f0;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          font-weight: 700;
+          font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          text-align: center;
+          padding: 24px;
         "
       >
-        Memuat SUKA LATTE ATTENDANCE SYSTEM...
+        <div
+          style="
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #d4a373 0%, #8c5a32 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            box-shadow: 0 14px 32px rgba(212, 163, 115, 0.25);
+          "
+        >
+          ☕
+        </div>
+        <div style="font-weight: 800; font-size: 16px; letter-spacing: 0.04em; color: #f6ead9;">
+          SUKA LATTE ATTENDANCE SYSTEM
+        </div>
+        <div style="font-size: 12px; color: #c7b299;">Menghubungkan sesi &amp; data operasional...</div>
       </div>
     </div>
 
     <!-- 1. Supabase JS SDK (Self-Hosted Lokal agar Aman & Tanpa CDN Pihak Ketiga) -->
-    <script src="js/vendor/supabase.js?v=20261112d"></script>
+    <script src="js/vendor/supabase.js?v=20261112e"></script>
     <!-- 2. Konfigurasi Produksi -->
-    <script src="js/config.js?v=20261112d"></script>
+    <script src="js/config.js?v=20261112e"></script>
     <!-- 3. Modul Inti Keamanan, Google OAuth, RLS & Private Storage -->
-    <script src="js/core.js?v=20261112d"></script>
+    <script src="js/core.js?v=20261112e"></script>
     <!-- 4. Komponen Antarmuka Terpisah (Anggota vs Pengelola) & Control Panel Full-Edit -->
-    <script src="js/views.js?v=20261112d"></script>
+    <script src="js/views.js?v=20261112e"></script>
     <!-- 5. Pengendali Utama, Kamera Selfie Langsung, GPS Asli & Event Handler -->
-    <script src="js/app.js?v=20261112d"></script>
+    <script src="js/app.js?v=20261112e"></script>
   </body>
 </html>
