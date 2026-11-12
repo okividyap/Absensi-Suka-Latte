@@ -1358,8 +1358,10 @@
                       ${
                         Core.isSuperAdmin() && emp.first_login_approved && emp.role !== "super_admin"
                           ? emp.role === "member"
-                            ? `<button class="btn btn-amber btn-sm" data-action="open-role-modal" data-userid="${esc(emp.id)}" data-newrole="admin">⬆️ Promosi Admin</button>`
-                            : `<button class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(emp.id)}" data-newrole="member">⬇️ Turunkan</button>`
+                            ? `<button type="button" class="btn btn-amber btn-sm" data-action="quick-change-role" data-userid="${esc(emp.id)}" data-newrole="admin">⚡ Jadikan Admin</button>
+                               <button type="button" class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(emp.id)}" data-newrole="admin" title="Promosi dengan catatan khusus">📝</button>`
+                            : `<button type="button" class="btn btn-outline btn-sm" data-action="quick-change-role" data-userid="${esc(emp.id)}" data-newrole="member">⬇️ Jadikan Anggota</button>
+                               <button type="button" class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(emp.id)}" data-newrole="member" title="Turunkan dengan catatan khusus">📝</button>`
                           : ""
                       }
                     </div>
@@ -1384,7 +1386,7 @@
           <div>
             <h3 style="font-size:16px;font-weight:800;">Manajemen Role Pengguna (Super Admin, Admin, Anggota)</h3>
             <p style="font-size:12px;color:var(--stone-600);">
-              Sesuai ketentuan PRD: Hanya terdapat <strong>satu Super Admin</strong>, dan hanya Super Admin yang berwenang mempromosikan Anggota menjadi Admin atau menurunkan Admin menjadi Anggota.
+              Hanya <strong>Super Admin</strong> yang dapat menjadikan Anggota sebagai Admin atau menurunkannya. Klik <strong>⚡ Jadikan Admin</strong> untuk promosi instan 1-klik.
             </p>
           </div>
           <span class="badge badge-super">${isSuper ? "Mode Kendali Super Admin Aktif" : "Hanya Lihat (Khusus Super Admin)"}</span>
@@ -1411,8 +1413,14 @@
                     ? `<div style="font-size:11px;font-weight:700;color:var(--purple-800);">🔒 Akun Super Admin Tunggal (Dilindungi Permanen)</div>`
                     : isSuper
                     ? u.role === "member"
-                      ? `<button class="btn btn-amber btn-sm" style="width:100%;" data-action="open-role-modal" data-userid="${esc(u.id)}" data-newrole="admin">⬆️ Promosikan Menjadi Admin</button>`
-                      : `<button class="btn btn-outline btn-sm" style="width:100%;" data-action="open-role-modal" data-userid="${esc(u.id)}" data-newrole="member">⬇️ Turunkan Menjadi Anggota</button>`
+                      ? `<div style="display:flex;gap:6px;">
+                           <button type="button" class="btn btn-amber btn-sm" style="flex:1;" data-action="quick-change-role" data-userid="${esc(u.id)}" data-newrole="admin">⚡ Jadikan Admin (1-Klik)</button>
+                           <button type="button" class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(u.id)}" data-newrole="admin" title="Promosi dengan alasan khusus">📝</button>
+                         </div>`
+                      : `<div style="display:flex;gap:6px;">
+                           <button type="button" class="btn btn-outline btn-sm" style="flex:1;" data-action="quick-change-role" data-userid="${esc(u.id)}" data-newrole="member">⬇️ Jadikan Anggota (1-Klik)</button>
+                           <button type="button" class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(u.id)}" data-newrole="member" title="Turunkan dengan alasan khusus">📝</button>
+                         </div>`
                     : `<div style="font-size:11px;color:var(--stone-500);">Perubahan role hanya oleh Super Admin</div>`
                 }
               </div>

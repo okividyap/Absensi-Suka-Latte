@@ -814,6 +814,53 @@ window.SUKA_LATTE_CONFIG = {
     }
   }
 
+  async function refreshProfilesAndAuditInBackground() {
+    if (!state.supabase || !isManager()) return;
+    try {
+      const [profRes, audRes] = await Promise.all([
+        state.supabase.from("profiles").select("*").order("created_at", { ascending: true }),
+        state.supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(200),
+      ]);
+      if (Array.isArray(profRes.data)) state.profiles = profRes.data;
+      if (Array.isArray(audRes.data)) state.auditLogs = audRes.data;
+      if (uiNotifyCallback) uiNotifyCallback();
+    } catch {
+      // Abaikan kegagalan sinkronisasi latar belakang setelah mutasi utama sukses
+    }
+  }
+
+  async function changeEmployeeRoleFast(targetUserId, newRole, reason) {
+    assertSuperAdminAccess("ChangeEmployeeRoleFast");
+    if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
+    const cleanReason =
+      String(reason || "").trim() ||
+      (newRole === "admin"
+        ? "Dipromosikan menjadi Admin oleh Super Admin"
+        : "Diturunkan menjadi Anggota oleh Super Admin");
+
+    const { error } = await withTimeout(
+      state.supabase.rpc("change_employee_role_by_super_admin", {
+        p_target_user_id: targetUserId,
+        p_new_role: newRole,
+        p_reason: cleanReason,
+      }),
+      15000,
+      "Perubahan role timeout setelah 15 detik. Periksa koneksi internet lalu coba lagi."
+    );
+    if (error) throw error;
+
+    const target = state.profiles.find((p) => p.id === targetUserId);
+    if (target) {
+      target.role = newRole;
+      target.status = "active";
+      target.first_login_approved = true;
+    }
+    setTimeout(() => {
+      refreshProfilesAndAuditInBackground();
+    }, 50);
+    return target || null;
+  }
+
   window.SukaCore = {
     state,
     DEFAULT_SETTINGS,
@@ -823,6 +870,7 @@ window.SUKA_LATTE_CONFIG = {
     formatOperationalDateTime,
     formatDurationMinutes,
     getStatusBadgeHtml,
+    withTimeout,
     saveCloudCredentials,
     clearCloudCredentials,
     downloadConfigJsFile,
@@ -841,6 +889,7 @@ window.SUKA_LATTE_CONFIG = {
     signInWithGoogle,
     signOut,
     selectMyActiveShift,
+    changeEmployeeRoleFast,
     uploadPrivateSelfieAndSubmit,
   };
 })();

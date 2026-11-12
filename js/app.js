@@ -964,8 +964,12 @@
                   Perubahan Role: <strong>${esc(emp.role.toUpperCase())} → ${esc(uiState.modal.newRole.toUpperCase())}</strong>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Alasan Perubahan Jabatan Sistem (Wajib untuk Audit Log) *</label>
-                  <textarea class="form-textarea" name="reason" rows="3" placeholder="Contoh: Diangkat menjadi kepala shift / pengelola operasional cabang." required></textarea>
+                  <label class="form-label">Alasan Perubahan Jabatan Sistem (Sudah diisi otomatis, boleh diubah)</label>
+                  <textarea class="form-textarea" name="reason" rows="2" required>${esc(
+                    toAdmin
+                      ? "Dipromosikan menjadi Admin operasional oleh Super Admin."
+                      : "Diturunkan menjadi Anggota oleh Super Admin."
+                  )}</textarea>
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
@@ -2358,46 +2362,47 @@
     }
   }
 
-  // 13. Promosi / Demosi Role oleh Super Admin
+  // 13. Promosi / Demosi Role Instan oleh Super Admin
+  async function executeRoleChangeFast(targetId, newRole, reason, btn, fallbackLabel) {
+    Core.assertSuperAdminAccess("ExecuteRoleChangeFast");
+    const cleanReason =
+      String(reason || "").trim() ||
+      (newRole === "admin"
+        ? "Dipromosikan menjadi Admin operasional oleh Super Admin."
+        : "Diturunkan menjadi Anggota oleh Super Admin.");
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = newRole === "admin" ? "⏳ Mengangkat Admin..." : "⏳ Memproses...";
+    }
+
+    try {
+      const updated = await Core.changeEmployeeRoleFast(targetId, newRole, cleanReason);
+      uiState.modal = null;
+      render();
+      const targetName = updated?.full_name || "Karyawan";
+      const roleWord = newRole === "admin" ? "ADMIN" : "ANGGOTA";
+      showBanner(true, `Berhasil! ${targetName} sekarang berstatus ${roleWord}.`);
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || fallbackLabel || "Simpan";
+      }
+      showBanner(false, "Gagal mengubah role: " + (err.message || err));
+    }
+  }
+
   async function handleChangeRole(btn) {
     Core.assertSuperAdminAccess("SubmitChangeRole");
     const form = document.getElementById("form-change-role");
     if (!form) return;
 
     const fd = new FormData(form);
-    const s = Core.state;
     const targetId = String(fd.get("target_user_id"));
     const newRole = String(fd.get("new_role"));
     const reason = String(fd.get("reason") || "").trim();
-
-    if (!reason) {
-      showBanner(false, "Alasan perubahan jabatan sistem wajib diisi.");
-      return;
-    }
-
-    const origText = btn ? btn.innerHTML : "";
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = "⏳ Memproses Role...";
-    }
-
-    try {
-      const { error } = await s.supabase.rpc("change_employee_role_by_super_admin", {
-        p_target_user_id: targetId,
-        p_new_role: newRole,
-        p_reason: reason,
-      });
-      if (error) throw error;
-      uiState.modal = null;
-      await Core.refreshAllData();
-      showBanner(true, "Perubahan role pengguna berhasil disimpan ke database & Audit Log.");
-    } catch (err) {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = origText || "Simpan Perubahan Role";
-      }
-      showBanner(false, "Gagal mengubah role: " + (err.message || err));
-    }
+    await executeRoleChangeFast(targetId, newRole, reason, btn, "Simpan Perubahan Role");
   }
 
   // 14. Edit Administratif Catatan Kehadiran oleh Pengelola
@@ -3042,6 +3047,13 @@
           userId: btn.getAttribute("data-userid"),
         };
         render();
+        return;
+      }
+
+      if (action === "quick-change-role") {
+        const userId = btn.getAttribute("data-userid");
+        const newRole = btn.getAttribute("data-newrole");
+        await executeRoleChangeFast(userId, newRole, "", btn);
         return;
       }
 
