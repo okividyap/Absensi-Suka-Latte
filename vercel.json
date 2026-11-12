@@ -1,6 +1,21 @@
 {
   "cleanUrls": false,
+  "rewrites": [
+    {
+      "source": "/((?!assets/|js/|css/|supabase/|404\\.html|index\\.html|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
+    {
+      "source": "/(index\\.html|js/.*|css/.*)?",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [

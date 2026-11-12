@@ -23,8 +23,8 @@
     require_gps_validation: true,
     strict_geofence_enforcement: true,
     clock_skew_warning_threshold_seconds: 120,
-    allow_member_request_corrections: true,
-    allow_member_request_leaves: true,
+    allow_member_request_corrections: false,
+    allow_member_request_leaves: false,
     brand_display_name: "SUKA LATTE ATTENDANCE SYSTEM",
     brand_subtitle: "Café & Catering",
     brand_tagline: "Your home cooking taste",
@@ -146,7 +146,8 @@
     return `${h} jam ${m} mnt`;
   }
 
-  function getStatusBadgeHtml(status) {
+  function getStatusBadgeHtml(status, lateMinutes) {
+    const mins = Number(lateMinutes || 0);
     const map = {
       hadir: { label: "Hadir Tepat Waktu", cls: "badge-success" },
       selesai: { label: "Selesai (Lengkap)", cls: "badge-success" },
@@ -154,7 +155,10 @@
         label: "Sedang Bertugas (Belum Check Out)",
         cls: "badge-warning",
       },
-      terlambat: { label: "Terlambat", cls: "badge-late" },
+      terlambat: {
+        label: mins > 0 ? `Terlambat ${Math.round(mins)} menit` : "Terlambat",
+        cls: "badge-late",
+      },
       pulang_cepat: { label: "Pulang Cepat", cls: "badge-warning" },
       tidak_hadir: { label: "Tidak Hadir", cls: "badge-danger" },
       izin: { label: "Izin", cls: "badge-warning" },
@@ -656,7 +660,8 @@ window.SUKA_LATTE_CONFIG = {
         "Autentikasi Google OAuth memerlukan alamat http://localhost atau https:// (bukan file://). Klik 2x file 'Jalankan-Server-Lokal.command' di folder ini atau deploy ke Vercel."
       );
     }
-    const redirectUrl = window.location.origin + window.location.pathname;
+    const normalizedPath = window.location.pathname.replace(/\/index\.html$/i, "/") || "/";
+    const redirectUrl = window.location.origin + normalizedPath;
     const { error } = await state.supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -680,9 +685,51 @@ window.SUKA_LATTE_CONFIG = {
     if (uiNotifyCallback) uiNotifyCallback();
   }
 
-  async function uploadPrivateSelfieAndSubmit(mode, dataUrl, lat, lng, accuracy) {
+  function withTimeout(promise, ms, timeoutMessage) {
+    let timerId = null;
+    const timeoutPromise = new Promise((_, reject) => {
+      timerId = setTimeout(() => {
+        reject(new Error(timeoutMessage || "Koneksi server timeout. Periksa jaringan internet Anda dan coba lagi."));
+      }, ms);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      if (timerId) clearTimeout(timerId);
+    });
+  }
+
+  async function selectMyActiveShift(shiftId) {
     if (!state.supabase || !isApprovedUser()) {
-      throw new Error("Sesi Anda tidak aktif atau belum mendapat persetujuan Admin.");
+      throw new Error("Sesi Anda tidak aktif atau belum disetujui Admin.");
+    }
+    const { data, error } = await withTimeout(
+      state.supabase.rpc("set_my_active_shift", { p_shift_id: shiftId }),
+      15000,
+      "Pembaruan shift timeout setelah 15 detik."
+    );
+    if (error) throw new Error(error.message);
+    if (state.currentUser) {
+      state.currentUser.shift_id = shiftId;
+    }
+    await refreshAllData();
+    return data;
+  }
+
+  async function safeRemoveOrphanPhoto(storagePath) {
+    if (!storagePath || !state.supabase) return;
+    try {
+      await withTimeout(
+        state.supabase.storage.from(state.storageBucket).remove([storagePath]),
+        5000,
+        "Cleanup storage timeout"
+      );
+    } catch {
+      // Abaikan error pembersihan objek yatim agar pesan validasi utama server tetap tampil utuh
+    }
+  }
+
+  async function uploadPrivateSelfieAndSubmit(mode, dataUrl, lat, lng, accuracy, shiftId) {
+    if (!state.supabase || !isApprovedUser()) {
+      throw new Error("Sesi Anda tidak aktif atau belum disetujui Admin.");
     }
 
     const tz = state.settings.operational_timezone || "Asia/Makassar";
@@ -691,56 +738,70 @@ window.SUKA_LATTE_CONFIG = {
     const rand = Math.random().toString(36).substring(2, 10);
     const eventSlug = mode === "check_in" ? "check-in" : "check-out";
 
-    // Path sesuai struktur arsip bulanan PRD Bab 27.3 & RLS Storage Policy index [5] = uid
-    const storagePath = `SUKA-LATTE-ATTENDANCE/attendance-photos/${parts.archiveFolderLabel}/${uid}/${Date.now()}-${eventSlug}-${rand}.jpg`;
-    const blob = dataUrlToBlob(dataUrl);
+    let storagePath = "";
+    if (dataUrl) {
+      // Path sesuai struktur arsip bulanan & RLS Storage Policy index [5] = uid
+      storagePath = `SUKA-LATTE-ATTENDANCE/attendance-photos/${parts.archiveFolderLabel}/${uid}/${Date.now()}-${eventSlug}-${rand}.jpg`;
+      const blob = dataUrlToBlob(dataUrl);
 
-    const { error: upErr } = await state.supabase.storage
-      .from(state.storageBucket)
-      .upload(storagePath, blob, {
-        contentType: "image/jpeg",
-        upsert: false,
-      });
-
-    if (upErr) {
-      throw new Error(
-        "Gagal mengunggah foto bukti ke Private Storage: " + upErr.message
+      const { error: upErr } = await withTimeout(
+        state.supabase.storage.from(state.storageBucket).upload(storagePath, blob, {
+          contentType: "image/jpeg",
+          upsert: false,
+        }),
+        25000,
+        "Unggah foto selfie ke server timeout setelah 25 detik. Periksa sinyal internet Anda lalu coba lagi."
       );
+
+      if (upErr) {
+        throw new Error(
+          "Gagal mengunggah foto bukti ke Private Storage: " + upErr.message
+        );
+      }
     }
 
     const deviceIso = new Date().toISOString();
 
     if (mode === "check_in") {
       const idemKey = `idem-in-${uid}-${Date.now()}`;
-      const { data, error } = await state.supabase.rpc("submit_server_check_in", {
-        p_idempotency_key: idemKey,
-        p_photo_path: storagePath,
-        p_latitude: lat,
-        p_longitude: lng,
-        p_accuracy: accuracy,
-        p_device_timestamp: deviceIso,
-      });
-      if (error) {
-        // Hapus file yatim jika ditolak validasi geofence/urutan server (PRD Bab 6.3: jangan buat sukses palsu)
-        await state.supabase.storage.from(state.storageBucket).remove([storagePath]);
-        throw new Error(error.message);
+      const chosenShiftId = shiftId || state.currentUser?.shift_id || null;
+      const rpcRes = await withTimeout(
+        state.supabase.rpc("submit_server_check_in_with_shift", {
+          p_idempotency_key: idemKey,
+          p_photo_path: storagePath,
+          p_latitude: lat,
+          p_longitude: lng,
+          p_accuracy: accuracy,
+          p_device_timestamp: deviceIso,
+          p_shift_id: chosenShiftId,
+        }),
+        25000,
+        "Validasi Check In ke server timeout setelah 25 detik. Silakan coba tekan Konfirmasi lagi."
+      );
+      if (rpcRes.error) {
+        await safeRemoveOrphanPhoto(storagePath);
+        throw new Error(rpcRes.error.message);
       }
       await refreshAllData();
-      return data;
+      return rpcRes.data;
     } else {
-      const { data, error } = await state.supabase.rpc("submit_server_check_out", {
-        p_photo_path: storagePath,
-        p_latitude: lat,
-        p_longitude: lng,
-        p_accuracy: accuracy,
-        p_device_timestamp: deviceIso,
-      });
-      if (error) {
-        await state.supabase.storage.from(state.storageBucket).remove([storagePath]);
-        throw new Error(error.message);
+      const rpcRes = await withTimeout(
+        state.supabase.rpc("submit_server_check_out", {
+          p_photo_path: storagePath,
+          p_latitude: lat,
+          p_longitude: lng,
+          p_accuracy: accuracy,
+          p_device_timestamp: deviceIso,
+        }),
+        25000,
+        "Validasi Check Out ke server timeout setelah 25 detik. Silakan coba tekan Konfirmasi lagi."
+      );
+      if (rpcRes.error) {
+        await safeRemoveOrphanPhoto(storagePath);
+        throw new Error(rpcRes.error.message);
       }
       await refreshAllData();
-      return data;
+      return rpcRes.data;
     }
   }
 
@@ -770,6 +831,7 @@ window.SUKA_LATTE_CONFIG = {
     getSignedPhotoUrl,
     signInWithGoogle,
     signOut,
+    selectMyActiveShift,
     uploadPrivateSelfieAndSubmit,
   };
 })();

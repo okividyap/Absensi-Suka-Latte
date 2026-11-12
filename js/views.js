@@ -420,12 +420,15 @@
               ${esc(emp ? emp.full_name : "Karyawan")}
               <span class="mono" style="font-size:11px;color:var(--coffee-700);">(${esc(emp ? emp.employee_code : "-")})</span>
             </div>
-            <div style="font-size:11px;color:var(--stone-600);">
-              Tanggal Kerja: <strong>${esc(rec.work_date)}</strong> • ${esc(out ? out.name : "-")} • ${esc(sh ? sh.name : "-")}
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;">
+              <span style="font-size:11px;color:var(--stone-600);">Tanggal Kerja: <strong>${esc(rec.work_date)}</strong> • ${esc(out ? out.name : "-")}</span>
+              <span class="badge badge-coffee" style="background:var(--coffee-100);color:var(--coffee-900);border:1px solid var(--coffee-300);">
+                ⏱ ${esc(sh ? `${sh.name} (${String(sh.start_time).slice(0, 5)}–${String(sh.end_time).slice(0, 5)})` : "-")}
+              </span>
             </div>
           </div>
           <div style="text-align:right;">
-            ${Core.getStatusBadgeHtml(rec.attendance_status)}
+            ${Core.getStatusBadgeHtml(rec.attendance_status, rec.late_minutes)}
             <div class="mono" style="font-size:10px;font-weight:700;color:var(--coffee-700);margin-top:3px;">
               📁 ${esc(rec.archive_folder_label)}
             </div>
@@ -490,16 +493,42 @@
           </button>
           <div style="display:flex;gap:6px;">
             ${
-              !allowManagerEdit && Core.state.settings.allow_member_request_corrections
-                ? `<button class="btn btn-outline btn-sm" data-action="open-member-corr" data-id="${esc(rec.id)}">Ajukan Koreksi</button>`
-                : ""
-            }
-            ${
               allowManagerEdit
                 ? `<button class="btn btn-primary btn-sm" data-action="open-admin-edit-att" data-id="${esc(rec.id)}">✏️ Edit Kehadiran</button>`
                 : ""
             }
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderShiftSelectorHtml(shifts, selectedShiftId, locked) {
+    const activeShifts = (shifts || []).filter((sh) => sh.status === "active");
+    if (activeShifts.length === 0) return "";
+    return `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--coffee-300);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">
+          Pilih Shift Kerja Anda ${locked ? "(Terkunci sesuai Check In hari ini)" : "(Otomatis hitung terlambat > toleransi shift)"}:
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${activeShifts
+            .map((sh) => {
+              const active = sh.id === selectedShiftId;
+              const grace = Number(sh.grace_period_minutes ?? 15);
+              return `
+                <button
+                  type="button"
+                  class="shift-choice-btn ${active ? "active" : ""}"
+                  data-action="select-my-shift"
+                  data-shift-id="${esc(sh.id)}"
+                  ${locked ? "disabled" : ""}
+                >
+                  <span>${active ? "✓ " : ""}${esc(sh.name)}</span>
+                  <span class="mono" style="font-size:11px;opacity:0.9;">${esc(String(sh.start_time).slice(0, 5))}–${esc(String(sh.end_time).slice(0, 5))} (Telat &gt;${grace}m)</span>
+                </button>`;
+            })
+            .join("")}
         </div>
       </div>
     `;
@@ -514,7 +543,12 @@
     const u = s.currentUser;
     const tz = s.settings.operational_timezone || "Asia/Makassar";
     const myOutlet = s.outlets.find((o) => o.id === u.outlet_id) || s.outlets[0];
-    const myShift = s.shifts.find((sh) => sh.id === u.shift_id) || s.shifts[0];
+    const activeShifts = s.shifts.filter((sh) => sh.status === "active");
+    const myShift =
+      s.shifts.find((sh) => sh.id === (myToday?.shift_id || u.shift_id)) ||
+      activeShifts[0] ||
+      s.shifts[0];
+    const selectedShiftId = myShift ? myShift.id : u.shift_id;
 
     return `
       <div class="hero-banner">
@@ -524,23 +558,24 @@
               ⏱ Jadwal Shift Anda Hari Ini (${esc(parts.dateString)})
             </span>
             <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;">Selamat Bertugas, ${esc(u.full_name)}</h1>
-            <p style="font-size:13px;color:var(--coffee-200);margin-bottom:18px;">
+            <p style="font-size:13px;color:var(--coffee-200);margin-bottom:12px;">
               ID: <strong class="mono">${esc(u.employee_code)}</strong> •
               Outlet: <strong>${esc(myOutlet ? myOutlet.name : "-")}</strong> •
-              Shift: <strong>${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)} WITA)` : "-")}</strong>
+              Shift Aktif: <strong>${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)} WITA)` : "-")}</strong>
             </p>
+            ${renderShiftSelectorHtml(s.shifts, selectedShiftId, !canCheckIn)}
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
               ${
                 canCheckIn
                   ? `<button class="btn btn-emerald" style="padding:13px 22px;font-size:14px;" data-action="open-camera" data-mode="check_in">
-                      📷 Ambil Selfie Baru &amp; Check In Sekarang
+                      📷 Ambil Selfie Baru &amp; Check In (${esc(myShift ? myShift.name : "Shift")})
                     </button>`
                   : ""
               }
               ${
                 canCheckOut
                   ? `<button class="btn btn-amber" style="padding:13px 22px;font-size:14px;" data-action="open-camera" data-mode="check_out">
-                      📷 Ambil Selfie Baru &amp; Check Out Sekarang
+                      📷 Ambil Selfie Baru &amp; Check Out (${esc(myShift ? myShift.name : "Shift")})
                     </button>`
                   : ""
               }
@@ -552,9 +587,9 @@
 
           <div class="col-5">
             <div style="background:rgba(20,17,15,0.78);border:1px solid var(--coffee-700);border-radius:16px;padding:16px;font-size:12px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                <span style="color:var(--coffee-300);font-weight:700;text-transform:uppercase;">Status Hari Ini</span>
-                ${myToday ? Core.getStatusBadgeHtml(myToday.attendance_status) : Core.getStatusBadgeHtml("belum_check_in")}
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
+                <span style="color:var(--coffee-300);font-weight:700;text-transform:uppercase;">Status Hari Ini (${esc(myShift ? myShift.name : "-")})</span>
+                ${myToday ? Core.getStatusBadgeHtml(myToday.attendance_status, myToday.late_minutes) : Core.getStatusBadgeHtml("belum_check_in")}
               </div>
               <div class="grid-2" style="gap:10px;margin-bottom:10px;">
                 <div style="background:var(--coffee-950);padding:10px;border-radius:10px;border:1px solid var(--coffee-800);">
@@ -570,13 +605,29 @@
                   </div>
                 </div>
               </div>
-              <div style="font-size:11.5px;color:var(--coffee-300);">
-                Durasi Kerja Hari Ini: <strong style="color:var(--white);">${Core.formatDurationMinutes(myToday?.work_duration_minutes)}</strong>
+              <div style="font-size:11.5px;color:var(--coffee-300);display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                <span>Durasi Kerja: <strong style="color:var(--white);">${Core.formatDurationMinutes(myToday?.work_duration_minutes)}</strong></span>
+                ${myToday?.late_minutes > 0 ? `<span style="color:#fdba74;font-weight:800;">⏱ Terlambat ${myToday.late_minutes} menit</span>` : ""}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      ${
+        myToday
+          ? `<div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                <div>
+                  <h2 style="font-size:16px;font-weight:800;">Output Absensi Anda Hari Ini</h2>
+                  <p style="font-size:11.5px;color:var(--stone-600);">Tercatat langsung di server WITA beserta bukti selfie kamera &amp; jarak GPS outlet.</p>
+                </div>
+                ${Core.getStatusBadgeHtml(myToday.attendance_status, myToday.late_minutes)}
+              </div>
+              ${renderAttendanceRecordCard(myToday, tz, false)}
+            </div>`
+          : ""
+      }
 
       <div class="grid-12">
         <div class="col-7">
@@ -584,21 +635,17 @@
         </div>
         <div class="col-5 card" style="display:flex;flex-direction:column;justify-content:space-between;gap:14px;">
           <div>
-            <h3 style="font-size:15px;font-weight:800;margin-bottom:6px;">Panduan Absensi Anggota Suka Latte</h3>
+            <h3 style="font-size:15px;font-weight:800;margin-bottom:6px;">Panduan Absensi Staf Suka Latte</h3>
             <ul style="font-size:12px;color:var(--stone-600);line-height:1.7;padding-left:18px;">
-              <li>Pastikan Anda berada di dalam area radius outlet <strong>${esc(myOutlet ? myOutlet.name : "Suka Latte")}</strong>.</li>
-              <li>Izinkan akses <strong>Kamera</strong> dan <strong>Lokasi GPS</strong> pada browser HP Anda.</li>
-              <li>Setiap Check In dan Check Out wajib mengambil <strong>foto selfie baru</strong> secara langsung.</li>
-              <li>Waktu kehadiran dan durasi kerja dihitung otomatis menggunakan waktu resmi server WITA.</li>
+              <li>Pilih <strong>Shift Pagi</strong> atau <strong>Shift Siang</strong> sebelum melakukan Check In sesuai jadwal jaga Anda.</li>
+              <li>Pastikan Anda berada di dalam area radius outlet <strong>${esc(myOutlet ? myOutlet.name : "Suka Latte")}</strong> dan izinkan akses <strong>Kamera + GPS</strong>.</li>
+              <li>Check In melebihi batas toleransi <strong>15 menit</strong> dari jam mulai shift otomatis tercatat sebagai <strong>Terlambat (menit)</strong>.</li>
+              <li>Setiap Check In dan Check Out wajib mengambil <strong>foto selfie baru</strong> secara langsung di server WITA.</li>
             </ul>
           </div>
-          ${
-            s.settings.allow_member_request_leaves
-              ? `<button class="btn btn-outline" style="width:100%;" data-action="open-member-leave">
-                  📅 Ajukan Izin / Sakit / Cuti Pribadi
-                </button>`
-              : ""
-          }
+          <div class="card-subtle" style="font-size:11.5px;color:var(--stone-600);">
+            🔒 Akun Staf dikhususkan untuk melakukan absensi Check In, Check Out, pilihan shift, dan melihat riwayat kehadiran pribadi.
+          </div>
         </div>
       </div>
     `;
@@ -698,10 +745,11 @@
               Dashboard Operasional Pengelola • ${esc(parts.dateString)} (${esc(tz)})
             </span>
             <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;">Halo, ${esc(u.full_name)}</h1>
-            <p style="font-size:12.5px;color:var(--coffee-200);margin-bottom:16px;">
+            <p style="font-size:12.5px;color:var(--coffee-200);margin-bottom:12px;">
               Outlet Aktif: <strong>${esc(myOutlet ? myOutlet.name : "-")}</strong> •
               Shift: <strong>${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
             </p>
+            ${renderShiftSelectorHtml(s.shifts, myToday?.shift_id || u.shift_id || myShift?.id, !canCheckIn)}
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
               ${
                 canCheckIn
@@ -723,7 +771,7 @@
             <div style="background:rgba(20,17,15,0.78);border:1px solid var(--coffee-700);border-radius:16px;padding:16px;font-size:12px;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <span style="color:var(--coffee-300);font-weight:700;">ABSENSI PRIBADI ANDA HARI INI</span>
-                ${myToday ? Core.getStatusBadgeHtml(myToday.attendance_status) : Core.getStatusBadgeHtml("belum_check_in")}
+                ${myToday ? Core.getStatusBadgeHtml(myToday.attendance_status, myToday.late_minutes) : Core.getStatusBadgeHtml("belum_check_in")}
               </div>
               <div class="mono" style="font-size:12.5px;color:var(--white);">
                 In: ${myToday?.check_in_at ? Core.formatOperationalDateTime(myToday.check_in_at, tz, false) : "--:--"} •
@@ -1032,7 +1080,7 @@
                             <strong>${Core.formatDurationMinutes(r.work_duration_minutes)}</strong>
                             ${r.late_minutes > 0 ? `<br/><span style="color:var(--orange-700);font-weight:700;font-size:11px;">Terlambat ${r.late_minutes} mnt</span>` : ""}
                           </td>
-                          <td>${Core.getStatusBadgeHtml(r.attendance_status)}</td>
+                          <td>${Core.getStatusBadgeHtml(r.attendance_status, r.late_minutes)}</td>
                           <td class="no-print">
                             <button class="btn btn-outline btn-sm" data-action="open-admin-edit-att" data-id="${esc(r.id)}">✏️ Edit</button>
                           </td>
@@ -1299,13 +1347,22 @@
                         <div style="font-size:11px;color:var(--coffee-800);">Outlet: <strong>${esc(out ? out.name : "-")}</strong> • Shift: <strong>${esc(sh ? sh.name : "-")}</strong></div>
                       </div>
                     </div>
-                    ${
-                      canEditThis
-                        ? `<button class="btn btn-primary btn-sm" data-action="open-edit-employee" data-userid="${esc(emp.id)}">
-                            ✏️ Edit Data
-                          </button>`
-                        : ""
-                    }
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                      ${
+                        canEditThis
+                          ? `<button class="btn btn-primary btn-sm" data-action="open-edit-employee" data-userid="${esc(emp.id)}">
+                              ✏️ Edit Data
+                            </button>`
+                          : ""
+                      }
+                      ${
+                        Core.isSuperAdmin() && emp.first_login_approved && emp.role !== "super_admin"
+                          ? emp.role === "member"
+                            ? `<button class="btn btn-amber btn-sm" data-action="open-role-modal" data-userid="${esc(emp.id)}" data-newrole="admin">⬆️ Promosi Admin</button>`
+                            : `<button class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(emp.id)}" data-newrole="member">⬇️ Turunkan</button>`
+                          : ""
+                      }
+                    </div>
                   </div>`;
               })
               .join("")}
@@ -1401,7 +1458,7 @@
             <div class="grid-2" style="gap:10px;">
               <div class="form-group">
                 <label class="form-label">Toleransi Terlambat (Menit)</label>
-                <input type="number" class="form-input" name="grace_period_minutes" min="0" max="180" value="${editing ? editing.grace_period_minutes : 10}" required />
+                <input type="number" class="form-input" name="grace_period_minutes" min="0" max="180" value="${editing ? editing.grace_period_minutes : 15}" required />
               </div>
               <div class="form-group">
                 <label class="form-label">Ambang Pulang Cepat (Menit)</label>

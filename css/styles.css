@@ -861,16 +861,102 @@ table.data-table tr:hover td {
   }
 }
 
+/* ============================================================================
+   FLOATING TOAST, MODAL INLINE ALERT & SHIFT PICKER PILLS
+   ============================================================================ */
+.global-floating-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 95;
+  width: min(92vw, 680px);
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--shadow-lg);
+}
+
+.global-floating-banner.is-ok {
+  background: var(--emerald-50);
+  border-color: var(--emerald-600);
+  color: var(--emerald-900);
+}
+
+.global-floating-banner.is-err {
+  background: var(--rose-50);
+  border-color: var(--rose-600);
+  color: var(--rose-800);
+}
+
+.modal-inline-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--rose-50);
+  border: 1.5px solid var(--rose-600);
+  color: var(--rose-800);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.shift-choice-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(250, 246, 240, 0.25);
+  background: rgba(20, 17, 15, 0.52);
+  color: var(--cream);
+  font-size: 12.5px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.shift-choice-btn:hover:not(:disabled) {
+  border-color: var(--coffee-300);
+  background: rgba(44, 26, 14, 0.85);
+}
+
+.shift-choice-btn.active {
+  background: var(--cream);
+  color: var(--coffee-950);
+  border-color: var(--amber-600);
+  box-shadow: var(--shadow-sm);
+}
+
+.shift-choice-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 @media (max-width: 640px) {
   .page-container {
     padding: 14px;
-    padding-bottom: 88px;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   }
   .grid-2,
   .grid-3,
   .grid-4,
   .evidence-pair {
     grid-template-columns: 1fr;
+  }
+  .modal-body {
+    padding: 14px;
+    max-height: 84vh;
+  }
+  .face-oval {
+    width: 135px;
+    height: 175px;
   }
 }
 

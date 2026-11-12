@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Mengarahkan ke SUKA LATTE ATTENDANCE SYSTEM</title>
+    <meta name="theme-color" content="#180e07" />
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: #180e07;
+        color: #faf6f0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        text-align: center;
+      }
+      .card {
+        max-width: 420px;
+        width: 100%;
+        background: #2c1a0e;
+        border: 1px solid #6b4628;
+        border-radius: 18px;
+        padding: 28px 22px;
+      }
+      a.btn {
+        display: inline-block;
+        margin-top: 16px;
+        padding: 12px 20px;
+        border-radius: 10px;
+        background: #047857;
+        color: #fff;
+        font-weight: 800;
+        font-size: 14px;
+        text-decoration: none;
+      }
+    </style>
+    <script>
+      (function () {
+        var target = window.location.pathname.indexOf("/Absensi-Suka-Latte/") === 0
+          ? "/Absensi-Suka-Latte/"
+          : "/";
+        if (window.location.pathname !== target) {
+          window.location.replace(target + window.location.search + window.location.hash);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="card">
+      <div style="font-size: 28px; margin-bottom: 10px;">☕</div>
+      <div style="font-size: 17px; font-weight: 800; margin-bottom: 8px;">
+        SUKA LATTE ATTENDANCE SYSTEM
+      </div>
+      <div style="font-size: 13px; color: #dfc8aa; line-height: 1.6;">
+        Sedang mengarahkan Anda ke halaman utama absensi...
+      </div>
+      <a class="btn" href="/">Buka Halaman Absensi Utama</a>
+    </div>
+  </body>
+</html>

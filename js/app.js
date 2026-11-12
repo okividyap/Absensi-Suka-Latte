@@ -49,27 +49,53 @@
   const liveCamera = {
     stream: null,
     mode: "check_in",
+    shiftId: null,
     capturedDataUrl: null,
     cameraError: null,
+    videoReady: false,
     gpsLoading: false,
     gpsError: null,
     gps: null, // { lat, lng, accuracy }
+    submitError: null,
     submitting: false,
   };
 
   let bannerTimer = null;
 
-  function showBanner(ok, message, autoHideMs = 6500) {
+  function renderBannerInnerHtml() {
+    if (!uiState.banner) return "";
+    return `
+      <div id="global-toast-banner" class="card-subtle global-floating-banner ${uiState.banner.ok ? "is-ok" : "is-err"}">
+        <span>${uiState.banner.ok ? "✓ " : "⚠️ "}${esc(uiState.banner.message)}</span>
+        <button type="button" style="font-weight:800;font-size:13px;padding:2px 6px;" data-action="dismiss-banner">✕</button>
+      </div>
+    `;
+  }
+
+  function syncBannerDomInPlace() {
+    const slot = document.getElementById("global-banner-slot");
+    if (slot) {
+      slot.innerHTML = renderBannerInnerHtml();
+      return true;
+    }
+    return false;
+  }
+
+  function showBanner(ok, message, autoHideMs = 7000) {
     uiState.banner = { ok: Boolean(ok), message: String(message || "") };
     if (bannerTimer) clearTimeout(bannerTimer);
     if (autoHideMs > 0) {
       bannerTimer = setTimeout(() => {
         uiState.banner = null;
-        const el = document.getElementById("global-toast-banner");
-        if (el) el.remove();
+        if (!syncBannerDomInPlace()) {
+          const el = document.getElementById("global-toast-banner");
+          if (el) el.remove();
+        }
       }, autoHideMs);
     }
-    render();
+    if (!syncBannerDomInPlace()) {
+      render();
+    }
   }
 
   // ==========================================================================
@@ -128,28 +154,155 @@
       liveCamera.stream.getTracks().forEach((track) => track.stop());
       liveCamera.stream = null;
     }
+    liveCamera.videoReady = false;
+  }
+
+  function getActiveShiftsList() {
+    return (Core.state.shifts || []).filter((sh) => sh.status === "active");
+  }
+
+  function getSelectedAttendanceShift() {
+    const s = Core.state;
+    const active = getActiveShiftsList();
+    return (
+      s.shifts.find((sh) => sh.id === liveCamera.shiftId) ||
+      s.shifts.find((sh) => sh.id === s.currentUser?.shift_id) ||
+      active[0] ||
+      s.shifts[0] ||
+      null
+    );
+  }
+
+  function renderCameraGpsInnerHtml() {
+    const s = Core.state;
+    const u = s.currentUser;
+    const outlet = s.outlets.find((o) => o.id === u?.outlet_id) || s.outlets[0];
+    const dist =
+      outlet && liveCamera.gps
+        ? Core.calculateDistanceMeters(
+            liveCamera.gps.lat,
+            liveCamera.gps.lng,
+            outlet.latitude,
+            outlet.longitude
+          )
+        : null;
+    const inRadius =
+      outlet && dist !== null ? dist <= outlet.geofence_radius_meters : false;
+    const accuracyOk =
+      outlet && liveCamera.gps
+        ? liveCamera.gps.accuracy <= outlet.minimum_gps_accuracy_meters
+        : false;
+
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;">
+        <span style="font-size:11px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;">Status GPS Perangkat</span>
+        <button type="button" class="btn btn-outline btn-sm" data-action="refresh-gps" ${liveCamera.gpsLoading || liveCamera.submitting ? "disabled" : ""}>
+          🔄 Ambil Ulang GPS
+        </button>
+      </div>
+      ${
+        liveCamera.gpsLoading
+          ? `<div style="font-size:12px;color:var(--amber-800);font-weight:700;">⏳ Mengambil titik koordinat satelit GPS perangkat...</div>`
+          : liveCamera.gpsError
+          ? `<div style="font-size:12px;color:var(--rose-800);font-weight:700;">⚠️ ${esc(liveCamera.gpsError)}</div>`
+          : liveCamera.gps
+          ? `<div class="mono" style="font-size:11.5px;margin-bottom:6px;">
+               Lat: ${liveCamera.gps.lat.toFixed(6)}<br/>
+               Lng: ${liveCamera.gps.lng.toFixed(6)}<br/>
+               Akurasi: ±${Math.round(liveCamera.gps.accuracy)} meter
+             </div>
+             <div style="display:flex;flex-wrap:wrap;gap:6px;">
+               <span class="badge ${inRadius ? "badge-success" : "badge-danger"}">
+                 Jarak: ${dist !== null ? dist + "m" : "-"} (${inRadius ? "Di Dalam Radius" : "Di Luar Radius"})
+               </span>
+               <span class="badge ${accuracyOk ? "badge-success" : "badge-warning"}">
+                 ${accuracyOk ? "Akurasi Memenuhi Syarat" : "Akurasi Kurang Tajam"}
+               </span>
+             </div>`
+          : `<div style="font-size:12px;color:var(--stone-500);">Menunggu koordinat GPS...</div>`
+      }
+    `;
+  }
+
+  function renderCameraErrorBoxInnerHtml() {
+    if (!liveCamera.submitError) return "";
+    return `
+      <div class="modal-inline-alert" role="alert">
+        <strong>⚠️ Pengiriman Absensi Tertahan:</strong>
+        <span>${esc(liveCamera.submitError)}</span>
+      </div>
+    `;
+  }
+
+  function renderCameraSubmitBtnInnerHtml() {
+    const s = Core.state;
+    const isCheckIn = liveCamera.mode === "check_in";
+    const canSubmit =
+      !liveCamera.submitting &&
+      (!s.settings.require_selfie_photo || Boolean(liveCamera.capturedDataUrl)) &&
+      (!s.settings.require_gps_validation || Boolean(liveCamera.gps));
+
+    return `
+      <button
+        type="button"
+        class="btn ${isCheckIn ? "btn-emerald" : "btn-amber"}"
+        style="width:100%;padding:13px;font-size:13.5px;"
+        data-action="submit-attendance"
+        ${canSubmit ? "" : "disabled"}
+      >
+        ${
+          liveCamera.submitting
+            ? "⏳ Mengunggah Bukti &amp; Memvalidasi di Server..."
+            : isCheckIn
+            ? "✓ Kirim Bukti &amp; Konfirmasi Check In"
+            : "✓ Kirim Bukti &amp; Konfirmasi Check Out"
+        }
+      </button>
+    `;
+  }
+
+  function updateCameraModalPanelsInPlace() {
+    if (!uiState.modal || uiState.modal.type !== "camera_attendance") return false;
+    const gpsEl = document.getElementById("camera-gps-section");
+    const errEl = document.getElementById("camera-modal-error-box");
+    const subEl = document.getElementById("camera-submit-section");
+    if (!gpsEl || !errEl || !subEl) return false;
+    gpsEl.innerHTML = renderCameraGpsInnerHtml();
+    errEl.innerHTML = renderCameraErrorBoxInnerHtml();
+    subEl.innerHTML = renderCameraSubmitBtnInnerHtml();
+    return true;
   }
 
   async function startLiveFrontCamera() {
     stopCameraStream();
     liveCamera.cameraError = null;
+    liveCamera.videoReady = false;
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       liveCamera.cameraError =
-        "Browser ini tidak mendukung akses kamera langsung (getUserMedia). Pastikan membuka aplikasi melalui HTTPS atau http://localhost:8080.";
+        "Browser ini tidak mendukung akses kamera langsung (getUserMedia). Pastikan membuka aplikasi melalui HTTPS (Vercel) atau http://localhost.";
       renderModalContainerOnly();
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: "user",
-          width: { ideal: 960 },
-          height: { ideal: 720 },
-        },
-      });
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "user" },
+            width: { ideal: 960 },
+            height: { ideal: 720 },
+          },
+        });
+      } catch {
+        // Fallback kamera standar untuk Safari iOS / Android WebView tertentu
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: true,
+        });
+      }
       liveCamera.stream = stream;
       attachStreamToVideoElement();
     } catch (err) {
@@ -161,23 +314,50 @@
     }
   }
 
+  function syncVideoReadyIndicator() {
+    const videoEl = document.getElementById("live-selfie-video");
+    const loadingPill = document.getElementById("camera-loading-pill");
+    const ready = Boolean(videoEl && videoEl.videoWidth > 0 && videoEl.readyState >= 2);
+    liveCamera.videoReady = ready;
+    if (loadingPill) {
+      loadingPill.style.display = ready ? "none" : "flex";
+    }
+  }
+
   function attachStreamToVideoElement() {
     const videoEl = document.getElementById("live-selfie-video");
-    if (videoEl && liveCamera.stream) {
+    if (!videoEl || !liveCamera.stream) return;
+
+    videoEl.setAttribute("playsinline", "true");
+    videoEl.setAttribute("autoplay", "true");
+    videoEl.muted = true;
+
+    if (videoEl.srcObject !== liveCamera.stream) {
       videoEl.srcObject = liveCamera.stream;
-      videoEl.play().catch(() => {});
     }
+
+    const markReady = () => {
+      syncVideoReadyIndicator();
+    };
+    videoEl.onloadedmetadata = markReady;
+    videoEl.oncanplay = markReady;
+    videoEl.onloadeddata = markReady;
+
+    videoEl.play().then(markReady).catch(() => {});
+    setTimeout(markReady, 450);
   }
 
   function requestRealDeviceGps() {
     liveCamera.gpsLoading = true;
     liveCamera.gpsError = null;
-    renderModalContainerOnly();
+    if (!updateCameraModalPanelsInPlace()) {
+      renderModalContainerOnly();
+    }
 
     if (!navigator.geolocation) {
       liveCamera.gpsLoading = false;
       liveCamera.gpsError = "Perangkat / browser Anda tidak mendukung Geolocation GPS.";
-      renderModalContainerOnly();
+      if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
       return;
     }
 
@@ -190,7 +370,7 @@
           lng: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
         };
-        renderModalContainerOnly();
+        if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
       },
       (err) => {
         liveCamera.gpsLoading = false;
@@ -204,23 +384,28 @@
           liveCamera.gpsError =
             "Waktu pengambilan sinyal GPS habis (Timeout). Klik tombol 'Ambil Ulang GPS'.";
         }
-        renderModalContainerOnly();
+        if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
       },
       {
         enableHighAccuracy: true,
         timeout: 15000,
-        maximumAge: 0,
+        maximumAge: 10000,
       }
     );
   }
 
   function captureFreshSelfieFrame() {
     const videoEl = document.getElementById("live-selfie-video");
-    if (!videoEl || !liveCamera.stream || videoEl.videoWidth === 0) {
-      showBanner(false, "Kamera belum siap. Tunggu tampilan video muncul lalu ambil foto.");
+    if (!videoEl || !liveCamera.stream || videoEl.videoWidth === 0 || videoEl.readyState < 2) {
+      liveCamera.submitError =
+        "Kamera belum menampilkan gambar wajah penuh. Tunggu 1–2 detik hingga pratinjau wajah muncul, lalu tekan 'Ambil Foto Selfie Sekarang'.";
+      if (!updateCameraModalPanelsInPlace()) {
+        renderModalContainerOnly();
+      }
       return;
     }
 
+    liveCamera.submitError = null;
     const targetW = 800;
     const targetH = Math.round((videoEl.videoHeight / videoEl.videoWidth) * targetW) || 600;
     const canvas = document.createElement("canvas");
@@ -239,6 +424,7 @@
     const s = Core.state;
     const tz = s.settings.operational_timezone || "Asia/Makassar";
     const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+    const chosenShift = getSelectedAttendanceShift();
     const barHeight = 52;
     ctx.fillStyle = "rgba(20, 17, 15, 0.76)";
     ctx.fillRect(0, targetH - barHeight, targetW, barHeight);
@@ -246,8 +432,9 @@
     ctx.fillStyle = "#FAF6F0";
     ctx.font = "bold 14px sans-serif";
     const modeLabel = liveCamera.mode === "check_in" ? "CHECK IN" : "CHECK OUT";
+    const shiftLabel = chosenShift ? chosenShift.name : "Shift";
     ctx.fillText(
-      `SUKA LATTE • ${modeLabel} • ${s.currentUser.full_name} (${s.currentUser.employee_code})`,
+      `SUKA LATTE • ${modeLabel} (${shiftLabel}) • ${s.currentUser.full_name} (${s.currentUser.employee_code})`,
       14,
       targetH - 29
     );
@@ -273,18 +460,34 @@
       showBanner(false, "Akun Anda belum aktif atau belum disetujui Admin.");
       return;
     }
+    const s = Core.state;
+    const activeShifts = getActiveShiftsList();
+    const openAtt = s.attendance.find(
+      (a) => a.employee_id === s.currentUser.id && a.check_in_at && !a.check_out_at
+    );
+    const defaultShiftId =
+      mode === "check_out" && openAtt?.shift_id
+        ? openAtt.shift_id
+        : activeShifts.find((sh) => sh.id === s.currentUser?.shift_id)?.id ||
+          activeShifts[0]?.id ||
+          s.currentUser?.shift_id ||
+          null;
+
     liveCamera.mode = mode === "check_out" ? "check_out" : "check_in";
+    liveCamera.shiftId = defaultShiftId;
     liveCamera.capturedDataUrl = null;
     liveCamera.cameraError = null;
+    liveCamera.videoReady = false;
     liveCamera.gps = null;
     liveCamera.gpsError = null;
+    liveCamera.submitError = null;
     liveCamera.submitting = false;
 
     uiState.modal = { type: "camera_attendance" };
     render();
 
-    await startLiveFrontCamera();
     requestRealDeviceGps();
+    await startLiveFrontCamera();
   }
 
   // ==========================================================================
@@ -300,26 +503,8 @@
       const isCheckIn = liveCamera.mode === "check_in";
       const u = s.currentUser;
       const outlet = s.outlets.find((o) => o.id === u.outlet_id) || s.outlets[0];
-      const dist =
-        outlet && liveCamera.gps
-          ? Core.calculateDistanceMeters(
-              liveCamera.gps.lat,
-              liveCamera.gps.lng,
-              outlet.latitude,
-              outlet.longitude
-            )
-          : null;
-      const inRadius =
-        outlet && dist !== null ? dist <= outlet.geofence_radius_meters : false;
-      const accuracyOk =
-        outlet && liveCamera.gps
-          ? liveCamera.gps.accuracy <= outlet.minimum_gps_accuracy_meters
-          : false;
-
-      const canSubmit =
-        !liveCamera.submitting &&
-        (!s.settings.require_selfie_photo || Boolean(liveCamera.capturedDataUrl)) &&
-        (!s.settings.require_gps_validation || Boolean(liveCamera.gps));
+      const activeShifts = getActiveShiftsList();
+      const selectedShift = getSelectedAttendanceShift();
 
       return `
         <div class="modal-backdrop">
@@ -349,6 +534,9 @@
                             <p style="color:var(--coffee-300);margin-top:6px;">${esc(liveCamera.cameraError)}</p>
                           </div>`
                         : `<video id="live-selfie-video" autoplay playsinline muted></video>
+                           <div id="camera-loading-pill" style="position:absolute;top:12px;left:12px;display:${liveCamera.videoReady ? "none" : "flex"};align-items:center;gap:6px;background:rgba(20,17,15,0.82);color:var(--coffee-200);padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;">
+                             ⏳ Menyiapkan pratinjau kamera depan...
+                           </div>
                            <div class="face-guide-overlay">
                              <div class="face-oval"></div>
                              <div class="face-caption">Posisikan wajah terlihat jelas &amp; pencahayaan cukup</div>
@@ -362,7 +550,7 @@
                         ? `<button type="button" class="btn btn-outline" style="flex:1;" data-action="retake-selfie" ${liveCamera.submitting ? "disabled" : ""}>
                             🔄 Ambil Ulang Foto Selfie
                           </button>`
-                        : `<button type="button" class="btn btn-primary" style="flex:1;padding:12px;" data-action="capture-selfie" ${liveCamera.cameraError ? "disabled" : ""}>
+                        : `<button type="button" id="btn-capture-selfie" class="btn btn-primary" style="flex:1;padding:12px;" data-action="capture-selfie" ${liveCamera.cameraError ? "disabled" : ""}>
                             📸 Ambil Foto Selfie Sekarang
                           </button>`
                     }
@@ -380,55 +568,41 @@
                     </div>
 
                     <div class="card-subtle">
-                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <span style="font-size:11px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;">Status GPS Perangkat</span>
-                        <button type="button" class="btn btn-outline btn-sm" data-action="refresh-gps" ${liveCamera.gpsLoading ? "disabled" : ""}>
-                          🔄 Ambil Ulang GPS
-                        </button>
-                      </div>
+                      <div style="font-size:11px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;margin-bottom:4px;">Jadwal Shift Absensi</div>
                       ${
-                        liveCamera.gpsLoading
-                          ? `<div style="font-size:12px;color:var(--amber-800);font-weight:700;">⏳ Mengambil titik koordinat satelit GPS perangkat...</div>`
-                          : liveCamera.gpsError
-                          ? `<div style="font-size:12px;color:var(--rose-800);font-weight:700;">⚠️ ${esc(liveCamera.gpsError)}</div>`
-                          : liveCamera.gps
-                          ? `<div class="mono" style="font-size:11.5px;margin-bottom:6px;">
-                               Lat: ${liveCamera.gps.lat.toFixed(6)}<br/>
-                               Lng: ${liveCamera.gps.lng.toFixed(6)}<br/>
-                               Akurasi: ±${Math.round(liveCamera.gps.accuracy)} meter
-                             </div>
-                             <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                               <span class="badge ${inRadius ? "badge-success" : "badge-danger"}">
-                                 Jarak: ${dist !== null ? dist + "m" : "-"} (${inRadius ? "Di Dalam Radius" : "Di Luar Radius"})
-                               </span>
-                               <span class="badge ${accuracyOk ? "badge-success" : "badge-warning"}">
-                                 ${accuracyOk ? "Akurasi Memenuhi Syarat" : "Akurasi Kurang Tajam"}
-                               </span>
-                             </div>`
-                          : `<div style="font-size:12px;color:var(--stone-500);">Menunggu koordinat GPS...</div>`
+                        isCheckIn
+                          ? `<select id="camera-shift-select" class="form-select" ${liveCamera.submitting ? "disabled" : ""}>
+                              ${(activeShifts.length ? activeShifts : s.shifts)
+                                .map(
+                                  (sh) => `<option value="${esc(sh.id)}" ${selectedShift && sh.id === selectedShift.id ? "selected" : ""}>
+                                    ${esc(sh.name)} (${esc(String(sh.start_time).slice(0, 5))}–${esc(String(sh.end_time).slice(0, 5))} WITA • Telat &gt;${Number(sh.grace_period_minutes ?? 15)}m)
+                                  </option>`
+                                )
+                                .join("")}
+                            </select>
+                            <div style="font-size:11px;color:var(--stone-600);margin-top:4px;">
+                              Check In melebihi <strong>${Number(selectedShift?.grace_period_minutes ?? 15)} menit</strong> otomatis mengeluarkan status <strong>Terlambat</strong>.
+                            </div>`
+                          : `<div style="font-size:13px;font-weight:800;">
+                              ${esc(selectedShift ? `${selectedShift.name} (${String(selectedShift.start_time).slice(0, 5)}–${String(selectedShift.end_time).slice(0, 5)} WITA)` : "-")}
+                            </div>`
                       }
                     </div>
 
-                    <div style="font-size:11px;color:var(--stone-600);background:var(--coffee-100);padding:10px 12px;border-radius:10px;">
-                      🔒 Foto tidak dapat diunggah dari galeri. Waktu resmi kehadiran &amp; folder arsip bulanan ditetapkan otomatis oleh server WITA.
+                    <div id="camera-gps-section" class="card-subtle">
+                      ${renderCameraGpsInnerHtml()}
                     </div>
+
+                    <div style="font-size:11px;color:var(--stone-600);background:var(--coffee-100);padding:10px 12px;border-radius:10px;">
+                      🔒 Foto diambil langsung dari kamera perangkat. Waktu resmi &amp; folder arsip bulanan ditetapkan oleh server WITA.
+                    </div>
+
+                    <div id="camera-modal-error-box">${renderCameraErrorBoxInnerHtml()}</div>
                   </div>
 
-                  <button
-                    type="button"
-                    class="btn ${isCheckIn ? "btn-emerald" : "btn-amber"}"
-                    style="width:100%;padding:13px;font-size:13.5px;"
-                    data-action="submit-attendance"
-                    ${canSubmit ? "" : "disabled"}
-                  >
-                    ${
-                      liveCamera.submitting
-                        ? "⏳ Mengunggah Bukti & Memvalidasi di Server..."
-                        : isCheckIn
-                        ? "✓ Kirim Bukti & Konfirmasi Check In"
-                        : "✓ Kirim Bukti & Konfirmasi Check Out"
-                    }
-                  </button>
+                  <div id="camera-submit-section">
+                    ${renderCameraSubmitBtnInnerHtml()}
+                  </div>
                 </div>
               </div>
             </div>
@@ -468,7 +642,7 @@
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <span class="badge badge-member mono">📁 ${esc(rec.archive_folder_label)}</span>
-                  ${Core.getStatusBadgeHtml(rec.attendance_status)}
+                  ${Core.getStatusBadgeHtml(rec.attendance_status, rec.late_minutes)}
                 </div>
               </div>
 
@@ -718,16 +892,29 @@
                     <input type="datetime-local" class="form-input mono" name="check_out_local" value="${esc(isoToLocalInput(rec.check_out_at, tz))}" />
                   </div>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Status Kehadiran *</label>
-                  <select class="form-select" name="status">
-                    ${statuses
-                      .map(
-                        (st) =>
-                          `<option value="${st.val}" ${rec.attendance_status === st.val ? "selected" : ""}>${esc(st.label)}</option>`
-                      )
-                      .join("")}
-                  </select>
+                <div class="grid-2" style="gap:10px;">
+                  <div class="form-group">
+                    <label class="form-label">Jadwal Shift *</label>
+                    <select class="form-select" name="shift_id">
+                      ${s.shifts
+                        .map(
+                          (sh) =>
+                            `<option value="${esc(sh.id)}" ${rec.shift_id === sh.id ? "selected" : ""}>${esc(sh.name)} (${esc(String(sh.start_time).slice(0, 5))}–${esc(String(sh.end_time).slice(0, 5))})</option>`
+                        )
+                        .join("")}
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Status Kehadiran *</label>
+                    <select class="form-select" name="status">
+                      ${statuses
+                        .map(
+                          (st) =>
+                            `<option value="${st.val}" ${rec.attendance_status === st.val ? "selected" : ""}>${esc(st.label)}</option>`
+                        )
+                        .join("")}
+                    </select>
+                  </div>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Alasan Pengeditan (Wajib untuk Audit Log) *</label>
@@ -784,8 +971,11 @@
       `;
     }
 
-    // H. MODAL PENGAJUAN KOREKSI PRIBADI OLEH ANGGOTA
+    // H. MODAL PENGAJUAN KOREKSI PRIBADI (HANYA JIKA DIAKTIFKAN OLEH PENGELOLA)
     if (uiState.modal.type === "member_corr") {
+      if (!Core.isManager() && !s.settings.allow_member_request_corrections) {
+        Core.assertManagerAccess("ModalMemberCorrection");
+      }
       const rec = s.attendance.find(
         (a) => a.id === uiState.modal.recordId && a.employee_id === s.currentUser.id
       );
@@ -828,8 +1018,11 @@
       `;
     }
 
-    // I. MODAL PENGAJUAN IZIN / SAKIT / CUTI PRIBADI OLEH ANGGOTA
+    // I. MODAL PENGAJUAN IZIN / SAKIT / CUTI PRIBADI (HANYA JIKA DIAKTIFKAN OLEH PENGELOLA)
     if (uiState.modal.type === "member_leave") {
+      if (!Core.isManager() && !s.settings.allow_member_request_leaves) {
+        Core.assertManagerAccess("ModalMemberLeave");
+      }
       const todayStr = Core.getTimePartsInTimezone(Core.getServerNow(), tz).dateString;
       return `
         <div class="modal-backdrop">
@@ -871,6 +1064,32 @@
                   <button type="button" class="btn btn-primary" data-action="submit-member-leave">Kirim Pengajuan</button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // J. MODAL KONFIRMASI HAPUS / ARSIPKAN (PENGGANTI BROWSER CONFIRM)
+    if (uiState.modal.type === "confirm_delete") {
+      Core.assertManagerAccess("ModalConfirmDelete");
+      const kindLabel = uiState.modal.kind === "outlet" ? "outlet" : "jadwal shift";
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm">
+            <div class="modal-header">
+              <h3 style="font-size:16px;font-weight:800;">🗑️ Konfirmasi Hapus ${esc(kindLabel === "outlet" ? "Outlet" : "Shift")}</h3>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+              <p style="font-size:13px;line-height:1.6;">
+                Apakah Anda yakin ingin menghapus ${esc(kindLabel)} <strong>${esc(uiState.modal.name || "")}</strong>?
+                Jika sudah memiliki riwayat absensi terikat, sistem akan mengalihkannya ke status <strong>Diarsipkan</strong> agar riwayat tetap aman.
+              </p>
+              <div style="display:flex;justify-content:flex-end;gap:8px;">
+                <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                <button type="button" class="btn btn-danger" data-action="confirm-delete-item">Ya, Proses Sekarang</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1136,14 +1355,6 @@
           </header>
 
           <main class="page-container">
-            ${
-              uiState.banner
-                ? `<div id="global-toast-banner" class="card-subtle" style="background:${uiState.banner.ok ? "var(--emerald-50)" : "var(--rose-50)"};border-color:${uiState.banner.ok ? "var(--emerald-600)" : "var(--rose-600)"};color:${uiState.banner.ok ? "var(--emerald-900)" : "var(--rose-800)"};font-size:12.5px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px;">
-                    <span>${uiState.banner.ok ? "✓ " : "⚠️ "}${esc(uiState.banner.message)}</span>
-                    <button style="font-weight:800;font-size:12px;" data-action="dismiss-banner">✕</button>
-                  </div>`
-                : ""
-            }
             ${mainContentHtml}
           </main>
         </div>
@@ -1163,6 +1374,7 @@
         </nav>
       </div>
 
+      <div id="global-banner-slot">${renderBannerInnerHtml()}</div>
       <div id="modal-root">${renderActiveModalHtml()}</div>
     `;
 
@@ -1334,8 +1546,10 @@
     const rawEnd = fd.get("end_time");
     const startTime = normalizeTimeInput(rawStart, "07:00");
     const endTime = normalizeTimeInput(rawEnd, "15:00");
-    const graceMins = Math.max(0, parseInt(fd.get("grace_period_minutes") || "0", 10) || 0);
-    const earlyMins = Math.max(0, parseInt(fd.get("early_checkout_threshold_minutes") || "0", 10) || 0);
+    const rawGrace = fd.get("grace_period_minutes");
+    const rawEarly = fd.get("early_checkout_threshold_minutes");
+    const graceMins = rawGrace === null || rawGrace === "" ? 15 : Math.max(0, parseInt(rawGrace, 10) || 0);
+    const earlyMins = rawEarly === null || rawEarly === "" ? 15 : Math.max(0, parseInt(rawEarly, 10) || 0);
     const effectiveFrom = normalizeDateInput(fd.get("effective_from"), new Date().toISOString().slice(0, 10));
     const status = String(fd.get("status") || "active");
     const crossesMidnight = form.querySelector('[name="crosses_midnight"]')?.checked || fd.get("crosses_midnight") === "on";
@@ -1399,23 +1613,50 @@
     const shift = Core.state.shifts.find((x) => x.id === shiftId);
     if (!shift) return;
 
-    if (!confirm(`Apakah Anda yakin ingin menghapus jadwal shift '${shift.name}'?`)) return;
+    uiState.modal = { type: "confirm_delete", kind: "shift", id: shiftId, name: shift.name };
+    render();
+  }
 
+  async function executeConfirmedDelete(btn) {
+    Core.assertManagerAccess("ExecuteConfirmedDelete");
+    if (!uiState.modal || uiState.modal.type !== "confirm_delete") return;
+    const { kind, id, name } = uiState.modal;
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Memproses...";
+    }
     try {
-      const { error } = await Core.state.supabase.from("work_shifts").delete().eq("id", shiftId);
-      if (error) {
-        // Jika terdapat data riwayat absensi terikat, arsipkan agar aman
-        await Core.state.supabase.from("work_shifts").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", shiftId);
-        await Core.logSecurityEvent("SHIFT_ARCHIVED", "work_shifts", shiftId, `Shift '${shift.name}' diarsipkan karena memiliki data riwayat absensi.`);
-        showBanner(true, `Shift '${shift.name}' dialihkan ke status Diarsipkan agar data riwayat absensi tetap aman.`);
-      } else {
-        await Core.logSecurityEvent("SHIFT_DELETED", "work_shifts", shiftId, `Menghapus shift '${shift.name}'.`);
-        showBanner(true, `Shift '${shift.name}' berhasil dihapus.`);
+      if (kind === "shift") {
+        const { error } = await Core.state.supabase.from("work_shifts").delete().eq("id", id);
+        if (error) {
+          await Core.state.supabase.from("work_shifts").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", id);
+          await Core.logSecurityEvent("SHIFT_ARCHIVED", "work_shifts", id, `Shift '${name}' diarsipkan karena memiliki data riwayat absensi.`);
+          showBanner(true, `Shift '${name}' dialihkan ke status Diarsipkan agar data riwayat absensi tetap aman.`);
+        } else {
+          await Core.logSecurityEvent("SHIFT_DELETED", "work_shifts", id, `Menghapus shift '${name}'.`);
+          showBanner(true, `Shift '${name}' berhasil dihapus.`);
+        }
+        if (uiState.editingShiftId === id) uiState.editingShiftId = null;
+      } else if (kind === "outlet") {
+        const { error } = await Core.state.supabase.from("outlets").delete().eq("id", id);
+        if (error) {
+          await Core.state.supabase.from("outlets").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", id);
+          showBanner(true, `Outlet '${name}' dialihkan ke status Diarsipkan agar data riwayat absensi tetap aman.`);
+        } else {
+          await Core.logSecurityEvent("OUTLET_DELETED", "outlets", id, `Menghapus outlet '${name}'.`);
+          showBanner(true, `Outlet '${name}' berhasil dihapus.`);
+        }
+        if (uiState.editingOutletId === id) uiState.editingOutletId = null;
       }
-      if (uiState.editingShiftId === shiftId) uiState.editingShiftId = null;
+      uiState.modal = null;
       await Core.refreshAllData();
     } catch (err) {
-      showBanner(false, "Gagal memproses shift: " + (err.message || err));
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Ya, Proses Sekarang";
+      }
+      showBanner(false, "Gagal memproses penghapusan: " + (err.message || err));
     }
   }
 
@@ -1575,22 +1816,8 @@
       return;
     }
 
-    if (!confirm(`Apakah Anda yakin ingin menghapus outlet '${out.name}'?`)) return;
-
-    try {
-      const { error } = await Core.state.supabase.from("outlets").delete().eq("id", outletId);
-      if (error) {
-        await Core.state.supabase.from("outlets").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", outletId);
-        showBanner(true, `Outlet '${out.name}' dialihkan ke status Diarsipkan agar data riwayat absensi tetap aman.`);
-      } else {
-        await Core.logSecurityEvent("OUTLET_DELETED", "outlets", outletId, `Menghapus outlet '${out.name}'.`);
-        showBanner(true, `Outlet '${out.name}' berhasil dihapus.`);
-      }
-      if (uiState.editingOutletId === outletId) uiState.editingOutletId = null;
-      await Core.refreshAllData();
-    } catch (err) {
-      showBanner(false, "Gagal memproses outlet: " + (err.message || err));
-    }
+    uiState.modal = { type: "confirm_delete", kind: "outlet", id: outletId, name: out.name };
+    render();
   }
 
   // 5. Simpan Seluruh Aturan Absensi & Zona Waktu WITA
@@ -2070,12 +2297,14 @@
     }
 
     try {
-      const { error } = await s.supabase.rpc("admin_direct_edit_attendance", {
+      const shiftIdVal = String(fd.get("shift_id") || "").trim() || null;
+      const { error } = await s.supabase.rpc("admin_direct_edit_attendance_v2", {
         p_attendance_id: String(fd.get("attendance_id")),
         p_check_in_at: checkInIso,
         p_check_out_at: checkOutIso,
         p_status: String(fd.get("status")),
         p_reason: reason,
+        p_shift_id: shiftIdVal,
       });
       if (error) throw error;
       uiState.modal = null;
@@ -2124,8 +2353,11 @@
     }
   }
 
-  // 16. Pengajuan Koreksi Absensi Pribadi oleh Anggota
+  // 16. Pengajuan Koreksi Absensi Pribadi oleh Anggota (Terkunci kecuali diaktifkan pengelola)
   async function handleMemberCorrection(btn) {
+    if (!Core.isManager() && !Core.state.settings.allow_member_request_corrections) {
+      Core.assertManagerAccess("SubmitMemberCorrection");
+    }
     const form = document.getElementById("form-member-corr");
     if (!form) return;
 
@@ -2192,8 +2424,11 @@
     }
   }
 
-  // 17. Pengajuan Izin / Sakit / Cuti Pribadi oleh Anggota
+  // 17. Pengajuan Izin / Sakit / Cuti Pribadi oleh Anggota (Terkunci kecuali diaktifkan pengelola)
   async function handleMemberLeave(btn) {
+    if (!Core.isManager() && !Core.state.settings.allow_member_request_leaves) {
+      Core.assertManagerAccess("SubmitMemberLeave");
+    }
     const form = document.getElementById("form-member-leave");
     if (!form) return;
 
@@ -2371,7 +2606,33 @@
 
       if (action === "dismiss-banner") {
         uiState.banner = null;
-        render();
+        if (!syncBannerDomInPlace()) {
+          render();
+        }
+        return;
+      }
+
+      if (action === "confirm-delete-item") {
+        await executeConfirmedDelete(btn);
+        return;
+      }
+
+      if (action === "select-my-shift") {
+        const shiftId = btn.getAttribute("data-shift-id");
+        if (!shiftId) return;
+        const shiftObj = Core.state.shifts.find((sh) => sh.id === shiftId);
+        btn.disabled = true;
+        try {
+          await Core.selectMyActiveShift(shiftId);
+          showBanner(
+            true,
+            `Shift aktif Anda diatur ke ${shiftObj ? shiftObj.name : "Shift Pilihan"} (Terlambat otomatis > ${Number(shiftObj?.grace_period_minutes ?? 15)} menit).`,
+            5000
+          );
+        } catch (err) {
+          btn.disabled = false;
+          showBanner(false, "Gagal mengubah shift: " + (err.message || err));
+        }
         return;
       }
 
@@ -2463,6 +2724,8 @@
 
       if (action === "retake-selfie") {
         liveCamera.capturedDataUrl = null;
+        liveCamera.submitError = null;
+        liveCamera.videoReady = false;
         renderModalContainerOnly();
         await startLiveFrontCamera();
         return;
@@ -2476,36 +2739,57 @@
       if (action === "submit-attendance") {
         if (liveCamera.submitting) return;
         if (Core.state.settings.require_selfie_photo && !liveCamera.capturedDataUrl) {
-          showBanner(false, "Ambil foto selfie baru terlebih dahulu sebelum mengirim absensi.");
+          liveCamera.submitError = "Ambil foto selfie baru terlebih dahulu sebelum mengirim absensi.";
+          if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
+          showBanner(false, liveCamera.submitError);
           return;
         }
         if (Core.state.settings.require_gps_validation && !liveCamera.gps) {
-          showBanner(false, "Koordinat GPS belum tersedia. Klik 'Ambil Ulang GPS'.");
+          liveCamera.submitError = "Koordinat GPS belum tersedia. Klik 'Ambil Ulang GPS' dan pastikan izin Lokasi aktif.";
+          if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
+          showBanner(false, liveCamera.submitError);
           return;
         }
 
+        const chosenShiftId = liveCamera.shiftId || getSelectedAttendanceShift()?.id || null;
+        liveCamera.submitError = null;
         liveCamera.submitting = true;
-        renderModalContainerOnly();
+        if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
         try {
-          await Core.uploadPrivateSelfieAndSubmit(
+          const res = await Core.uploadPrivateSelfieAndSubmit(
             liveCamera.mode,
             liveCamera.capturedDataUrl,
             liveCamera.gps ? liveCamera.gps.lat : null,
             liveCamera.gps ? liveCamera.gps.lng : null,
-            liveCamera.gps ? liveCamera.gps.accuracy : null
+            liveCamera.gps ? liveCamera.gps.accuracy : null,
+            chosenShiftId
           );
           stopCameraStream();
           uiState.modal = null;
-          showBanner(
-            true,
-            liveCamera.mode === "check_in"
-              ? "Check In berhasil dicatat berdasarkan waktu resmi server WITA!"
-              : "Check Out berhasil dicatat! Terima kasih atas dedikasi Anda hari ini."
-          );
+          const matchedShift = Core.state.shifts.find((sh) => sh.id === (res?.shift_id || chosenShiftId));
+          const shiftLabel = res?.shift_name || matchedShift?.name || "Shift";
+          if (liveCamera.mode === "check_in") {
+            const lateMins = Number(res?.late_minutes || 0);
+            const statusText = lateMins > 0 ? `Terlambat ${lateMins} menit` : "Hadir Tepat Waktu";
+            showBanner(
+              true,
+              `Check In berhasil! Output: ${shiftLabel} • Status: ${statusText} (Waktu Server WITA).`,
+              9500
+            );
+          } else {
+            const statusLabel = res?.status_label || "Selesai (Lengkap)";
+            const durText = Core.formatDurationMinutes(res?.duration_minutes || 0);
+            showBanner(
+              true,
+              `Check Out berhasil! ${shiftLabel} • Status: ${statusLabel} • Durasi Kerja: ${durText}.`,
+              9500
+            );
+          }
         } catch (err) {
           liveCamera.submitting = false;
-          renderModalContainerOnly();
-          showBanner(false, err.message || "Gagal memproses absensi di server.");
+          liveCamera.submitError = err.message || "Gagal memproses absensi di server.";
+          if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
+          showBanner(false, liveCamera.submitError, 9000);
         }
         return;
       }
@@ -2524,6 +2808,9 @@
       }
 
       if (action === "open-member-corr") {
+        if (!Core.isManager() && !Core.state.settings.allow_member_request_corrections) {
+          Core.assertManagerAccess("OpenMemberCorrection");
+        }
         const recordId = btn.getAttribute("data-id");
         uiState.modal = { type: "member_corr", recordId };
         render();
@@ -2531,6 +2818,9 @@
       }
 
       if (action === "open-member-leave") {
+        if (!Core.isManager() && !Core.state.settings.allow_member_request_leaves) {
+          Core.assertManagerAccess("OpenMemberLeave");
+        }
         uiState.modal = { type: "member_leave" };
         render();
         return;
@@ -2914,7 +3204,11 @@
     const el = ev.target;
     if (!el || !el.id) return;
 
-    if (el.id === "member-period-select") {
+    if (el.id === "camera-shift-select") {
+      liveCamera.shiftId = el.value;
+      liveCamera.submitError = null;
+      updateCameraModalPanelsInPlace();
+    } else if (el.id === "member-period-select") {
       uiState.archivePeriodFilter = el.value;
       render();
     } else if (el.id === "archive-outlet-select") {
