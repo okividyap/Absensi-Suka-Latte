@@ -564,6 +564,146 @@
   }
 
   // ==========================================================================
+  // HELPER HARI LIBUR & PENGAJUAN IZIN / CUTI / LIBUR (DARI MANA SAJA)
+  // ==========================================================================
+  function getLeaveTypeLabel(type) {
+    const map = {
+      holiday: "Hari Libur",
+      jadwal_khusus: "Jadwal Khusus",
+      izin: "Izin / Libur",
+      cuti: "Cuti / Libur",
+      sakit: "Sakit",
+    };
+    return map[type] || String(type || "Izin").toUpperCase();
+  }
+
+  function getApprovalStatusBadgeHtml(status) {
+    if (status === "approved") return `<span class="badge badge-success">DISETUJUI</span>`;
+    if (status === "rejected") return `<span class="badge badge-danger">DITOLAK</span>`;
+    return `<span class="badge badge-warning">MENUNGGU PERSETUJUAN</span>`;
+  }
+
+  function getHolidayAndLeaveSummary(dateString, employeeId) {
+    const all = Core.state.holidaysAndLeaves || [];
+    const outletHolidays = all
+      .filter((h) => (!h.employee_id || h.type === "holiday" || h.type === "jadwal_khusus") && h.status !== "rejected")
+      .slice()
+      .sort((a, b) => String(a.date_start).localeCompare(String(b.date_start)));
+    const todayHolidays = outletHolidays.filter((h) => h.date_start <= dateString && h.date_end >= dateString);
+    const upcomingOrActiveHolidays = outletHolidays.filter((h) => h.date_end >= dateString);
+    const myLeaves = employeeId ? all.filter((h) => h.employee_id === employeeId) : [];
+    const myTodayApprovedLeave = myLeaves.find(
+      (h) => h.status === "approved" && h.date_start <= dateString && h.date_end >= dateString
+    );
+    const pendingLeaves = all.filter((h) => h.employee_id && h.status === "pending");
+    return {
+      outletHolidays,
+      todayHolidays,
+      upcomingOrActiveHolidays,
+      myLeaves,
+      myTodayApprovedLeave,
+      pendingLeaves,
+    };
+  }
+
+  function renderMyLeaveListHtml(employeeId) {
+    const { myLeaves } = getHolidayAndLeaveSummary("", employeeId);
+    if (myLeaves.length === 0) {
+      return `<div class="card-subtle" style="text-align:center;color:var(--stone-500);font-size:12px;">Belum ada pengajuan izin, sakit, atau cuti/libur.</div>`;
+    }
+    return `
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${myLeaves
+          .slice(0, 8)
+          .map(
+            (lv) => `
+          <div class="card-subtle" style="padding:11px 13px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+            <div style="min-width:0;flex:1;">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
+                <span class="badge badge-coffee">${esc(getLeaveTypeLabel(lv.type))}</span>
+                <strong style="font-size:13px;color:var(--stone-900);">${esc(lv.title)}</strong>
+              </div>
+              <div class="mono" style="font-size:11px;color:var(--coffee-700);font-weight:700;">
+                ${esc(lv.date_start)}${lv.date_end && lv.date_end !== lv.date_start ? ` s/d ${esc(lv.date_end)}` : ""}
+              </div>
+              <div style="font-size:11.5px;color:var(--stone-600);margin-top:2px;">${esc(lv.reason)}</div>
+            </div>
+            <div>${getApprovalStatusBadgeHtml(lv.status)}</div>
+          </div>`
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  function renderMemberHolidayAndLeaveCard(dateString, employeeId) {
+    const { todayHolidays, upcomingOrActiveHolidays, outletHolidays } = getHolidayAndLeaveSummary(
+      dateString,
+      employeeId
+    );
+    const holidaysToShow = upcomingOrActiveHolidays.length > 0 ? upcomingOrActiveHolidays : outletHolidays;
+
+    return `
+      <div class="grid-2" style="margin-bottom:18px;">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <div>
+              <h3 style="font-size:15.5px;font-weight:800;">🏖️ Hari Libur Outlet &amp; Nasional</h3>
+              <p style="font-size:11.5px;color:var(--stone-500);">Ditetapkan oleh Super Admin / Admin di sistem.</p>
+            </div>
+            ${
+              todayHolidays.length > 0
+                ? `<span class="badge badge-danger">Hari Ini Libur</span>`
+                : `<span class="badge badge-stone">${holidaysToShow.length} Jadwal</span>`
+            }
+          </div>
+          ${
+            holidaysToShow.length === 0
+              ? `<div class="card-subtle" style="text-align:center;color:var(--stone-500);font-size:12px;">Belum ada jadwal hari libur outlet yang ditambahkan Admin.</div>`
+              : `<div style="display:flex;flex-direction:column;gap:8px;">
+                  ${holidaysToShow
+                    .slice(0, 6)
+                    .map((h) => {
+                      const isToday = h.date_start <= dateString && h.date_end >= dateString;
+                      return `
+                        <div class="card-subtle" style="padding:11px 13px;border-color:${isToday ? "#fda4af" : "var(--border-soft)"};background:${isToday ? "var(--rose-50)" : ""};">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <strong style="font-size:13px;color:${isToday ? "var(--rose-800)" : "var(--stone-900)"};">${esc(h.title)}</strong>
+                            ${isToday ? `<span class="badge badge-danger">HARI INI</span>` : `<span class="badge badge-coffee">${esc(getLeaveTypeLabel(h.type))}</span>`}
+                          </div>
+                          <div class="mono" style="font-size:11px;color:var(--coffee-700);margin-top:2px;">
+                            ${esc(h.date_start)}${h.date_end && h.date_end !== h.date_start ? ` s/d ${esc(h.date_end)}` : ""}
+                          </div>
+                          <div style="font-size:11.5px;color:var(--stone-600);margin-top:2px;">${esc(h.reason)}</div>
+                        </div>`;
+                    })
+                    .join("")}
+                </div>`
+          }
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+              <div>
+                <h3 style="font-size:15.5px;font-weight:800;">📅 Izin, Cuti &amp; Pengajuan Libur Saya</h3>
+                <p style="font-size:11.5px;color:var(--stone-500);">Bisa diajukan dari luar outlet (tanpa GPS &amp; tanpa selfie).</p>
+              </div>
+              <button class="btn btn-primary btn-sm" data-action="open-member-leave">
+                + Ajukan Izin / Cuti
+              </button>
+            </div>
+            <div style="margin-bottom:10px;padding:9px 12px;border-radius:10px;background:var(--emerald-50);border:1px solid #a7f3d0;color:var(--emerald-800);font-size:11.5px;line-height:1.45;">
+              📍 <strong>Tidak harus di outlet:</strong> Pengajuan izin/cuti/libur bisa dikirim dari rumah. Absensi foto wajah di outlet hanya untuk menandakan Anda masuk hadir bekerja.
+            </div>
+            ${renderMyLeaveListHtml(employeeId)}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ==========================================================================
   // 5. TAMPILAN TERISOLASI KHUSUS ANGGOTA (HANYA ABSENSI & CEK RIWAYAT SENDIRI)
   //    Anggota TIDAK BISA mengakses Control Panel, Laporan Global, atau Data Orang Lain!
   // ==========================================================================
@@ -578,8 +718,41 @@
       activeShifts[0] ||
       s.shifts[0];
     const selectedShiftId = myShift ? myShift.id : u.shift_id;
+    const { todayHolidays, myTodayApprovedLeave } = getHolidayAndLeaveSummary(parts.dateString, u.id);
 
     return `
+      ${
+        todayHolidays.length > 0
+          ? `<div class="card" style="margin-bottom:16px;border:1.5px solid #fda4af;background:var(--rose-50);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-size:14px;font-weight:800;color:var(--rose-800);">
+                  🏖️ Hari Ini Adalah Hari Libur: ${esc(todayHolidays.map((h) => h.title).join(", "))}
+                </div>
+                <div style="font-size:12px;color:var(--stone-700);">
+                  ${esc(todayHolidays[0].reason)} • Absensi wajah di outlet hanya dilakukan jika Anda dijadwalkan masuk bertugas.
+                </div>
+              </div>
+              <span class="badge badge-danger">LIBUR RESMI</span>
+            </div>`
+          : ""
+      }
+
+      ${
+        myTodayApprovedLeave
+          ? `<div class="card" style="margin-bottom:16px;border:1.5px solid #6ee7b7;background:var(--emerald-50);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-size:14px;font-weight:800;color:var(--emerald-800);">
+                  ✅ Pengajuan ${esc(getLeaveTypeLabel(myTodayApprovedLeave.type))} Anda Hari Ini Sudah Disetujui: ${esc(myTodayApprovedLeave.title)}
+                </div>
+                <div style="font-size:12px;color:var(--emerald-700);">
+                  Periode ${esc(myTodayApprovedLeave.date_start)} s/d ${esc(myTodayApprovedLeave.date_end)} • Anda tidak perlu Check In wajah di outlet hari ini.
+                </div>
+              </div>
+              <span class="badge badge-success">DISETUJUI</span>
+            </div>`
+          : ""
+      }
+
       <!-- 3 LANGKAH MUDAH UNTUK KARYAWAN -->
       <div class="staff-steps-grid">
         <div class="staff-step-card ${selectedShiftId ? "active" : ""}">
@@ -592,15 +765,15 @@
         <div class="staff-step-card ${myToday?.check_in_at ? "active" : ""}">
           <div class="staff-step-num">${myToday?.check_in_at ? "✓" : "2"}</div>
           <div>
-            <div class="staff-step-title">2. Ambil Selfie &amp; Lokasi</div>
-            <div class="staff-step-desc">Klik tombol hijau/amber, izinkan kamera &amp; GPS dalam radius outlet.</div>
+            <div class="staff-step-title">2. Ambil Selfie &amp; Lokasi (Hadir)</div>
+            <div class="staff-step-desc">Absensi wajah di outlet menandakan Anda masuk hadir bekerja.</div>
           </div>
         </div>
         <div class="staff-step-card ${myToday?.check_out_at ? "active" : ""}">
           <div class="staff-step-num">${myToday?.check_out_at ? "✓" : "3"}</div>
           <div>
-            <div class="staff-step-title">3. Status Tercatat Otomatis</div>
-            <div class="staff-step-desc">Jam masuk, jam pulang &amp; bukti foto langsung tampil rapi di bawah.</div>
+            <div class="staff-step-title">3. Atau Ajukan Izin / Cuti</div>
+            <div class="staff-step-desc">Tidak masuk / libur? Ajukan izin atau cuti dari mana saja tanpa ke outlet.</div>
           </div>
         </div>
       </div>
@@ -633,6 +806,9 @@
                     </button>`
                   : ""
               }
+              <button class="btn btn-gold" data-action="open-member-leave">
+                📅 Ajukan Izin / Cuti / Libur
+              </button>
               <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);" data-action="nav" data-target="riwayat_saya">
                 📋 Riwayat Absensi Saya
               </button>
@@ -683,22 +859,24 @@
           : ""
       }
 
+      ${renderMemberHolidayAndLeaveCard(parts.dateString, u.id)}
+
       <div class="grid-12">
         <div class="col-7">
           ${renderGeofenceMapCard(myOutlet, null)}
         </div>
         <div class="col-5 card" style="display:flex;flex-direction:column;justify-content:space-between;gap:14px;">
           <div>
-            <h3 style="font-size:15px;font-weight:800;margin-bottom:6px;">Panduan Absensi Staf Suka Latte</h3>
+            <h3 style="font-size:15px;font-weight:800;margin-bottom:6px;">Panduan Absensi &amp; Izin Staf Suka Latte</h3>
             <ul style="font-size:12px;color:var(--stone-600);line-height:1.7;padding-left:18px;">
-              <li>Pilih <strong>Shift Pagi</strong> atau <strong>Shift Siang</strong> sebelum melakukan Check In sesuai jadwal jaga Anda.</li>
-              <li>Pastikan Anda berada di dalam area radius outlet <strong>${esc(myOutlet ? myOutlet.name : "Suka Latte")}</strong> dan izinkan akses <strong>Kamera + GPS</strong>.</li>
-              <li>Check In melebihi batas toleransi <strong>15 menit</strong> dari jam mulai shift otomatis tercatat sebagai <strong>Terlambat (menit)</strong>.</li>
-              <li>Setiap Check In dan Check Out wajib mengambil <strong>foto selfie baru</strong> secara langsung di server WITA.</li>
+              <li>Pilih <strong>Shift Pagi</strong> atau <strong>Shift Siang</strong> sebelum Check In sesuai jadwal jaga Anda.</li>
+              <li><strong>Absensi Selfie Wajah + GPS Outlet</strong> hanya diwajibkan untuk menandakan Anda masuk hadir di area <strong>${esc(myOutlet ? myOutlet.name : "Suka Latte")}</strong>.</li>
+              <li>Jika berhalangan hadir atau ingin mengajukan <strong>Izin / Sakit / Cuti / Libur</strong>, gunakan tombol <strong>Ajukan Izin / Cuti</strong> dari mana saja tanpa harus berada di outlet.</li>
+              <li>Check In melebihi toleransi <strong>15 menit</strong> dari jam mulai shift otomatis tercatat sebagai <strong>Terlambat</strong>.</li>
             </ul>
           </div>
           <div class="card-subtle" style="font-size:11.5px;color:var(--stone-600);">
-            🔒 Akun Staf dikhususkan untuk melakukan absensi Check In, Check Out, pilihan shift, dan melihat riwayat kehadiran pribadi.
+            🔒 Akun Anggota hanya dapat mengakses Dashboard Absensi, Riwayat Pribadi, dan Pengajuan Izin/Cuti. Control Panel khusus Super Admin &amp; Admin.
           </div>
         </div>
       </div>
@@ -727,7 +905,10 @@
           <h2 style="font-size:19px;font-weight:800;">Riwayat Kehadiran &amp; Bukti Selfie Saya</h2>
           <p style="font-size:12px;color:var(--stone-600);">Menampilkan catatan kehadiran milik akun Anda sendiri (${esc(s.currentUser.full_name)}) • Total Durasi: <strong>${Core.formatDurationMinutes(totalMins)}</strong></p>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" data-action="open-member-leave">
+            📅 + Ajukan Izin / Cuti
+          </button>
           <select id="member-period-select" class="form-select" style="width:auto;">
             <option value="all" ${uiState.archivePeriodFilter === "all" ? "selected" : ""}>Semua Bulan</option>
             ${periodSet
@@ -742,14 +923,27 @@
 
       ${
         filtered.length === 0
-          ? `<div class="card" style="text-align:center;padding:42px;">
+          ? `<div class="card" style="text-align:center;padding:42px;margin-bottom:18px;">
               <div style="font-size:15px;font-weight:800;">Belum Ada Catatan Absensi Pribadi</div>
               <p style="font-size:12px;color:var(--stone-500);margin-top:4px;">Catatan Check In dan Check Out Anda akan otomatis muncul di sini.</p>
             </div>`
-          : `<div class="grid-2">
+          : `<div class="grid-2" style="margin-bottom:18px;">
               ${filtered.map((rec) => renderAttendanceRecordCard(rec, tz, false)).join("")}
             </div>`
       }
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <div>
+            <h3 style="font-size:16px;font-weight:800;">Riwayat Pengajuan Izin, Sakit &amp; Cuti Saya</h3>
+            <p style="font-size:11.5px;color:var(--stone-500);">Pengajuan tidak masuk atau libur pribadi yang dikirim ke Admin / Super Admin.</p>
+          </div>
+          <button class="btn btn-outline btn-sm" data-action="open-member-leave">
+            + Ajukan Izin / Cuti Baru
+          </button>
+        </div>
+        ${renderMyLeaveListHtml(s.currentUser.id)}
+      </div>
     `;
   }
 
@@ -772,11 +966,19 @@
     const presentToday = todayRecs.filter((a) => a.check_in_at).length;
     const workingNow = todayRecs.filter((a) => a.check_in_at && !a.check_out_at).length;
     const lateToday = todayRecs.filter((a) => a.late_minutes > 0 || a.attendance_status === "terlambat").length;
+    const {
+      todayHolidays,
+      upcomingOrActiveHolidays,
+      outletHolidays,
+      pendingLeaves,
+    } = getHolidayAndLeaveSummary(parts.dateString, u.id);
+    const holidaysToShow = upcomingOrActiveHolidays.length > 0 ? upcomingOrActiveHolidays : outletHolidays;
+    const recentEmployeeLeaves = (s.holidaysAndLeaves || []).filter((h) => Boolean(h.employee_id));
 
     return `
       ${
         pendingUsers.length > 0
-          ? `<div class="card" style="border:2px solid var(--amber-600);background:var(--amber-50);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          ? `<div class="card" style="margin-bottom:14px;border:2px solid var(--amber-600);background:var(--amber-50);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
               <div>
                 <div style="font-size:14px;font-weight:800;color:var(--amber-800);">
                   🔔 ${pendingUsers.length} Akun Google Baru Menunggu Persetujuan Login Pertama!
@@ -787,6 +989,24 @@
               </div>
               <button class="btn btn-amber" data-action="jump-cp" data-tab="employees">
                 Tinjau &amp; Setujui Sekarang →
+              </button>
+            </div>`
+          : ""
+      }
+
+      ${
+        pendingLeaves.length > 0
+          ? `<div class="card" style="margin-bottom:14px;border:1.5px solid var(--coffee-400);background:var(--coffee-50);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+              <div>
+                <div style="font-size:14px;font-weight:800;color:var(--coffee-900);">
+                  📅 ${pendingLeaves.length} Pengajuan Izin / Cuti / Libur Karyawan Menunggu Persetujuan
+                </div>
+                <div style="font-size:12px;color:var(--stone-600);">
+                  Anda dapat langsung menyetujui atau menolak dari kartu Pengajuan Izin &amp; Cuti di bawah atau via Control Panel → Kalender.
+                </div>
+              </div>
+              <button class="btn btn-primary btn-sm" data-action="jump-cp" data-tab="calendar">
+                Buka Kalender &amp; Izin →
               </button>
             </div>`
           : ""
@@ -892,6 +1112,93 @@
             <div class="kpi-icon-orb">⏱️</div>
           </div>
           <div style="font-size:11.5px;color:var(--rose-700);">Mengacu waktu resmi server WITA</div>
+        </div>
+      </div>
+
+      <!-- KARTU HARI LIBUR OUTLET & ANTREAN IZIN / CUTI KARYAWAN DI DASHBOARD -->
+      <div class="grid-2" style="margin-bottom:18px;">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <div>
+              <h3 style="font-size:15.5px;font-weight:800;">🏖️ Hari Libur Outlet &amp; Nasional</h3>
+              <p style="font-size:11.5px;color:var(--stone-500);">Tampil otomatis di Dashboard seluruh Anggota.</p>
+            </div>
+            <button class="btn btn-outline btn-sm" data-action="jump-cp" data-tab="calendar">
+              + Atur Hari Libur
+            </button>
+          </div>
+          ${
+            todayHolidays.length > 0
+              ? `<div style="margin-bottom:10px;padding:9px 12px;border-radius:10px;background:var(--rose-50);border:1px solid #fecdd3;color:var(--rose-800);font-size:12px;font-weight:700;">
+                  🔴 Hari ini tercatat Libur: ${esc(todayHolidays.map((h) => h.title).join(", "))}
+                </div>`
+              : ""
+          }
+          ${
+            holidaysToShow.length === 0
+              ? `<div class="card-subtle" style="text-align:center;color:var(--stone-500);font-size:12px;">Belum ada jadwal hari libur. Klik <strong>+ Atur Hari Libur</strong> untuk menambahkan.</div>`
+              : `<div style="display:flex;flex-direction:column;gap:8px;">
+                  ${holidaysToShow
+                    .slice(0, 5)
+                    .map((h) => {
+                      const isToday = h.date_start <= parts.dateString && h.date_end >= parts.dateString;
+                      return `
+                        <div class="card-subtle" style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                          <div>
+                            <strong style="font-size:13px;">${esc(h.title)}</strong>
+                            <div class="mono" style="font-size:11px;color:var(--coffee-700);">${esc(h.date_start)}${h.date_end !== h.date_start ? ` s/d ${esc(h.date_end)}` : ""}</div>
+                            <div style="font-size:11.5px;color:var(--stone-600);">${esc(h.reason)}</div>
+                          </div>
+                          ${isToday ? `<span class="badge badge-danger">HARI INI</span>` : `<span class="badge badge-coffee">${esc(getLeaveTypeLabel(h.type))}</span>`}
+                        </div>`;
+                    })
+                    .join("")}
+                </div>`
+          }
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <div>
+              <h3 style="font-size:15.5px;font-weight:800;">📝 Pengajuan Izin, Sakit &amp; Cuti Karyawan</h3>
+              <p style="font-size:11.5px;color:var(--stone-500);">Anggota dapat mengajukan libur/izin/cuti tanpa harus di outlet.</p>
+            </div>
+            <span class="badge ${pendingLeaves.length > 0 ? "badge-warning" : "badge-stone"}">${pendingLeaves.length} Menunggu</span>
+          </div>
+          ${
+            recentEmployeeLeaves.length === 0
+              ? `<div class="card-subtle" style="text-align:center;color:var(--stone-500);font-size:12px;">Belum ada pengajuan izin atau cuti dari karyawan.</div>`
+              : `<div style="display:flex;flex-direction:column;gap:8px;">
+                  ${recentEmployeeLeaves
+                    .slice(0, 5)
+                    .map((lv) => {
+                      const emp = s.profiles.find((p) => p.id === lv.employee_id);
+                      return `
+                        <div class="card-subtle" style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                          <div style="min-width:0;flex:1;">
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                              <strong style="font-size:13px;">${esc(emp ? emp.full_name : "Karyawan")}</strong>
+                              <span class="badge badge-coffee">${esc(getLeaveTypeLabel(lv.type))}</span>
+                              ${getApprovalStatusBadgeHtml(lv.status)}
+                            </div>
+                            <div class="mono" style="font-size:11px;color:var(--coffee-700);margin-top:2px;">
+                              ${esc(lv.date_start)}${lv.date_end !== lv.date_start ? ` s/d ${esc(lv.date_end)}` : ""} • ${esc(lv.title)}
+                            </div>
+                            <div style="font-size:11.5px;color:var(--stone-600);">${esc(lv.reason)}</div>
+                          </div>
+                          ${
+                            lv.status === "pending"
+                              ? `<div style="display:flex;gap:6px;">
+                                  <button class="btn btn-emerald btn-sm" data-action="approve-leave" data-id="${esc(lv.id)}" data-decision="approved">✓ Setujui</button>
+                                  <button class="btn btn-danger btn-sm" data-action="approve-leave" data-id="${esc(lv.id)}" data-decision="rejected">✕ Tolak</button>
+                                </div>`
+                              : ""
+                          }
+                        </div>`;
+                    })
+                    .join("")}
+                </div>`
+          }
         </div>
       </div>
 

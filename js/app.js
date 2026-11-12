@@ -1150,7 +1150,7 @@
       `;
     }
 
-    // I. MODAL PENGAJUAN IZIN / SAKIT / CUTI PRIBADI (HANYA JIKA DIAKTIFKAN OLEH PENGELOLA)
+    // I. MODAL PENGAJUAN IZIN / SAKIT / CUTI / LIBUR PRIBADI (BISA DARI LUAR OUTLET)
     if (uiState.modal.type === "member_leave") {
       if (!Core.isManager() && !s.settings.allow_member_request_leaves) {
         Core.assertManagerAccess("ModalMemberLeave");
@@ -1160,22 +1160,26 @@
         <div class="modal-backdrop">
           <div class="modal-window sm">
             <div class="modal-header">
-              <h3 style="font-size:16px;font-weight:800;">📅 Ajukan Izin / Sakit / Cuti Pribadi</h3>
+              <h3 style="font-size:16px;font-weight:800;">📅 Ajukan Izin, Cuti atau Libur</h3>
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
+              <div style="margin-bottom:14px;padding:11px 13px;border-radius:12px;background:var(--emerald-50);border:1px solid #a7f3d0;color:var(--emerald-800);font-size:12px;line-height:1.5;">
+                📍 <strong>Bisa diajukan dari luar outlet (tanpa foto wajah &amp; tanpa GPS):</strong><br/>
+                Absensi foto wajah di outlet hanya diperlukan saat Anda masuk hadir bekerja. Untuk libur pribadi, izin, sakit, atau cuti cukup isi formulir di bawah ini.
+              </div>
               <form id="form-member-leave" novalidate>
                 <div class="form-group">
                   <label class="form-label">Jenis Pengajuan *</label>
                   <select class="form-select" name="type">
-                    <option value="izin">Izin Pribadi</option>
+                    <option value="izin">Izin / Libur Tidak Masuk (Diluar Outlet)</option>
+                    <option value="cuti">Cuti / Pengajuan Libur Terjadwal</option>
                     <option value="sakit">Sakit</option>
-                    <option value="cuti">Cuti</option>
                   </select>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Judul Singkat *</label>
-                  <input class="form-input" name="title" placeholder="Contoh: Izin Pemeriksaan Kesehatan" required />
+                  <input class="form-input" name="title" placeholder="Contoh: Pengajuan Libur / Izin Keluarga / Cuti" required />
                 </div>
                 <div class="grid-2" style="gap:10px;">
                   <div class="form-group">
@@ -1189,7 +1193,7 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">Keterangan Lengkap *</label>
-                  <textarea class="form-textarea" name="reason" rows="3" placeholder="Tuliskan keterangan untuk ditinjau Admin..." required></textarea>
+                  <textarea class="form-textarea" name="reason" rows="3" placeholder="Tuliskan alasan pengajuan libur / izin / cuti untuk ditinjau Admin..." required></textarea>
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
@@ -1337,8 +1341,8 @@
           },
         ]
       : [
-          { id: "absensi_saya", icon: "📷", label: "Absensi Hari Ini" },
-          { id: "riwayat_saya", icon: "📋", label: "Riwayat Absensi Saya" },
+          { id: "absensi_saya", icon: "🏠", label: "Dashboard & Absensi" },
+          { id: "riwayat_saya", icon: "📋", label: "Riwayat Absensi & Izin" },
         ];
 
     // Pertahankan fokus pencarian arsip jika sedang mengetik
@@ -2573,6 +2577,11 @@
 
     if (!title || !reason) {
       showBanner(false, "Judul dan keterangan pengajuan wajib diisi.");
+      return;
+    }
+
+    if (dateEnd < dateStart) {
+      showBanner(false, "Tanggal selesai tidak boleh lebih awal dari tanggal mulai.");
       return;
     }
 

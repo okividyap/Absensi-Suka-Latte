@@ -727,6 +727,15 @@ p {
   background: var(--amber-100);
   color: var(--amber-800);
 }
+.badge-late {
+  background: var(--orange-50);
+  color: var(--orange-700);
+  border: 1px solid #fed7aa;
+}
+.badge-danger {
+  background: var(--rose-100);
+  color: var(--rose-800);
+}
 
 .btn {
   display: inline-flex;

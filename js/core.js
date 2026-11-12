@@ -24,7 +24,7 @@
     strict_geofence_enforcement: true,
     clock_skew_warning_threshold_seconds: 120,
     allow_member_request_corrections: false,
-    allow_member_request_leaves: false,
+    allow_member_request_leaves: true,
     brand_display_name: "SUKA LATTE ATTENDANCE SYSTEM",
     brand_subtitle: "Café & Catering",
     brand_tagline: "Your home cooking taste",
