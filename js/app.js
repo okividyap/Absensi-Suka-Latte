@@ -56,6 +56,8 @@
     gpsLoading: false,
     gpsError: null,
     gps: null, // { lat, lng, accuracy }
+    gpsWatchId: null,
+    gpsFallbackTimer: null,
     submitError: null,
     submitting: false,
   };
@@ -157,6 +159,17 @@
     liveCamera.videoReady = false;
   }
 
+  function stopGpsWatcher() {
+    if (liveCamera.gpsFallbackTimer) {
+      clearTimeout(liveCamera.gpsFallbackTimer);
+      liveCamera.gpsFallbackTimer = null;
+    }
+    if (liveCamera.gpsWatchId !== null && navigator.geolocation?.clearWatch) {
+      navigator.geolocation.clearWatch(liveCamera.gpsWatchId);
+      liveCamera.gpsWatchId = null;
+    }
+  }
+
   function getActiveShiftsList() {
     return (Core.state.shifts || []).filter((sh) => sh.status === "active");
   }
@@ -237,18 +250,75 @@
   function renderCameraSubmitBtnInnerHtml() {
     const s = Core.state;
     const isCheckIn = liveCamera.mode === "check_in";
-    const canSubmit =
-      !liveCamera.submitting &&
-      (!s.settings.require_selfie_photo || Boolean(liveCamera.capturedDataUrl)) &&
-      (!s.settings.require_gps_validation || Boolean(liveCamera.gps));
+    const needSelfie = Boolean(s.settings.require_selfie_photo);
+    const needGps = Boolean(s.settings.require_gps_validation);
+    const hasSelfie = !needSelfie || Boolean(liveCamera.capturedDataUrl);
+    const hasGps = !needGps || Boolean(liveCamera.gps);
+    const allReady = hasSelfie && hasGps;
+
+    const u = s.currentUser;
+    const outlet = s.outlets.find((o) => o.id === u?.outlet_id) || s.outlets[0];
+    const dist =
+      outlet && liveCamera.gps
+        ? Core.calculateDistanceMeters(
+            liveCamera.gps.lat,
+            liveCamera.gps.lng,
+            outlet.latitude,
+            outlet.longitude
+          )
+        : null;
+    const accuracy = liveCamera.gps ? Math.round(liveCamera.gps.accuracy) : null;
+    const geoWarning =
+      s.settings.strict_geofence_enforcement && outlet && liveCamera.gps
+        ? accuracy > outlet.minimum_gps_accuracy_meters
+          ? `Akurasi GPS (±${accuracy}m) melebihi batas outlet (±${outlet.minimum_gps_accuracy_meters}m). Dekatkan perangkat ke area terbuka / jendela.`
+          : dist !== null && dist > outlet.geofence_radius_meters
+          ? `Lokasi Anda saat ini berjarak ${dist}m dari ${outlet.name} (batas ${outlet.geofence_radius_meters}m).${
+              Core.isManager()
+                ? " Jika Anda sedang berada di café, kalibrasikan titik lewat Control Panel → Outlet & GPS → Gunakan GPS Saat Ini."
+                : ""
+            }`
+          : ""
+        : "";
 
     return `
+      <div id="camera-readiness-checklist" class="camera-checklist">
+        ${
+          needSelfie
+            ? `<div class="camera-check-item ${hasSelfie ? "is-done" : "is-wait"}">
+                 <span>${hasSelfie ? "✓" : "1."}</span>
+                 <span>${hasSelfie ? "Foto selfie baru sudah diambil" : "Langkah 1: Tekan '📸 Ambil Foto Selfie Sekarang'"}</span>
+               </div>`
+            : ""
+        }
+        ${
+          needGps
+            ? `<div class="camera-check-item ${hasGps ? "is-done" : "is-wait"}">
+                 <span>${hasGps ? "✓" : "2."}</span>
+                 <span>${
+                   hasGps
+                     ? `Koordinat GPS terkunci (${dist !== null ? `${dist}m` : "OK"} • ±${accuracy}m)`
+                     : liveCamera.gpsLoading
+                     ? "Sedang mengambil koordinat GPS..."
+                     : "GPS belum tersedia — klik '🔄 Ambil Ulang GPS'"
+                 }</span>
+               </div>`
+            : ""
+        }
+      </div>
+      ${
+        geoWarning
+          ? `<div style="font-size:11.5px;color:var(--amber-800);background:var(--amber-50);border:1px solid #fde68a;border-radius:10px;padding:8px 10px;margin-bottom:8px;line-height:1.45;">
+               ⚠️ ${esc(geoWarning)}
+             </div>`
+          : ""
+      }
       <button
         type="button"
-        class="btn ${isCheckIn ? "btn-emerald" : "btn-amber"}"
+        class="btn ${isCheckIn ? "btn-emerald" : "btn-amber"} ${allReady ? "" : "btn-pending-check"}"
         style="width:100%;padding:13px;font-size:13.5px;"
         data-action="submit-attendance"
-        ${canSubmit ? "" : "disabled"}
+        ${liveCamera.submitting ? "disabled" : ""}
       >
         ${
           liveCamera.submitting
@@ -347,7 +417,38 @@
     setTimeout(markReady, 450);
   }
 
+  function applyGpsPositionFix(pos) {
+    if (!uiState.modal || uiState.modal.type !== "camera_attendance") return;
+    const nextFix = {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      accuracy: pos.coords.accuracy,
+    };
+    const prevAcc = liveCamera.gps ? Number(liveCamera.gps.accuracy || Infinity) : Infinity;
+    if (!liveCamera.gps || nextFix.accuracy <= prevAcc) {
+      liveCamera.gps = nextFix;
+    }
+    liveCamera.gpsLoading = false;
+    liveCamera.gpsError = null;
+    if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
+    if (nextFix.accuracy <= 60 && liveCamera.gpsWatchId !== null && navigator.geolocation?.clearWatch) {
+      navigator.geolocation.clearWatch(liveCamera.gpsWatchId);
+      liveCamera.gpsWatchId = null;
+    }
+  }
+
+  function formatGpsErrorMessage(err) {
+    if (err && err.code === 1) {
+      return "Izin Lokasi (GPS) ditolak browser. Aktifkan Lokasi untuk situs ini di Pengaturan Safari/Browser (ikon gembok/AA di URL bar) & GPS perangkat, lalu klik 'Ambil Ulang GPS'.";
+    }
+    if (err && err.code === 2) {
+      return "Sinyal lokasi perangkat belum terdeteksi. Pastikan Location Services / GPS aktif dan dekatkan ke jendela atau area terbuka, lalu klik 'Ambil Ulang GPS'.";
+    }
+    return "Waktu pengambilan lokasi habis (Timeout). Pastikan GPS / Wi-Fi aktif lalu klik tombol 'Ambil Ulang GPS'.";
+  }
+
   function requestRealDeviceGps() {
+    stopGpsWatcher();
     liveCamera.gpsLoading = true;
     liveCamera.gpsError = null;
     if (!updateCameraModalPanelsInPlace()) {
@@ -361,37 +462,60 @@
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        liveCamera.gpsLoading = false;
-        liveCamera.gpsError = null;
-        liveCamera.gps = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-        };
-        if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
-      },
-      (err) => {
-        liveCamera.gpsLoading = false;
-        if (err.code === 1) {
-          liveCamera.gpsError =
-            "Izin Lokasi (GPS) ditolak. Aktifkan izin Lokasi pada browser & GPS HP Anda.";
-        } else if (err.code === 2) {
-          liveCamera.gpsError =
-            "Sinyal lokasi GPS tidak tersedia. Pastikan GPS aktif dan berada di area dengan sinyal baik.";
-        } else {
-          liveCamera.gpsError =
-            "Waktu pengambilan sinyal GPS habis (Timeout). Klik tombol 'Ambil Ulang GPS'.";
+    const runCoarseFallback = () => {
+      if (!uiState.modal || uiState.modal.type !== "camera_attendance" || liveCamera.gps) return;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => applyGpsPositionFix(pos),
+        (fallbackErr) => {
+          if (!uiState.modal || uiState.modal.type !== "camera_attendance" || liveCamera.gps) return;
+          liveCamera.gpsLoading = false;
+          liveCamera.gpsError = formatGpsErrorMessage(fallbackErr);
+          if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 120000,
         }
-        if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
+      );
+    };
+
+    // Jika GPS presisi tinggi > 3.5 detik belum merespons (umum di Safari Mac/indoor), otomatis coba lokasi Wi-Fi/jaringan
+    liveCamera.gpsFallbackTimer = setTimeout(() => {
+      runCoarseFallback();
+    }, 3500);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => applyGpsPositionFix(pos),
+      (err) => {
+        if (!uiState.modal || uiState.modal.type !== "camera_attendance") return;
+        if (err && err.code === 1) {
+          stopGpsWatcher();
+          liveCamera.gpsLoading = false;
+          liveCamera.gpsError = formatGpsErrorMessage(err);
+          if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
+          return;
+        }
+        runCoarseFallback();
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 10000,
+        timeout: 9000,
+        maximumAge: 15000,
       }
     );
+
+    if (typeof navigator.geolocation.watchPosition === "function") {
+      liveCamera.gpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => applyGpsPositionFix(pos),
+        () => {},
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 10000,
+        }
+      );
+    }
   }
 
   function captureFreshSelfieFrame() {
@@ -473,6 +597,9 @@
           s.currentUser?.shift_id ||
           null;
 
+    stopCameraStream();
+    stopGpsWatcher();
+
     liveCamera.mode = mode === "check_out" ? "check_out" : "check_in";
     liveCamera.shiftId = defaultShiftId;
     liveCamera.capturedDataUrl = null;
@@ -486,8 +613,9 @@
     uiState.modal = { type: "camera_attendance" };
     render();
 
-    requestRealDeviceGps();
+    // Jalankan izin Kamera lebih dulu lalu GPS agar Safari/iOS tidak menelan salah satu dialog izin
     await startLiveFrontCamera();
+    requestRealDeviceGps();
   }
 
   // ==========================================================================
@@ -2657,6 +2785,7 @@
 
       if (action === "logout") {
         stopCameraStream();
+        stopGpsWatcher();
         uiState.modal = null;
         await Core.signOut();
         return;
@@ -2712,6 +2841,7 @@
 
       if (action === "close-modal") {
         stopCameraStream();
+        stopGpsWatcher();
         uiState.modal = null;
         render();
         return;
@@ -2738,16 +2868,32 @@
 
       if (action === "submit-attendance") {
         if (liveCamera.submitting) return;
+        const focusCameraErrorBox = () => {
+          const errEl = document.getElementById("camera-modal-error-box");
+          if (errEl && typeof errEl.scrollIntoView === "function") {
+            errEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }
+        };
         if (Core.state.settings.require_selfie_photo && !liveCamera.capturedDataUrl) {
-          liveCamera.submitError = "Ambil foto selfie baru terlebih dahulu sebelum mengirim absensi.";
+          liveCamera.submitError =
+            "Langkah 1 belum selesai: tekan tombol '📸 Ambil Foto Selfie Sekarang' terlebih dahulu hingga foto wajah tampil, lalu tekan Kirim Bukti.";
           if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
           showBanner(false, liveCamera.submitError);
+          focusCameraErrorBox();
+          document.getElementById("btn-capture-selfie")?.focus();
           return;
         }
         if (Core.state.settings.require_gps_validation && !liveCamera.gps) {
-          liveCamera.submitError = "Koordinat GPS belum tersedia. Klik 'Ambil Ulang GPS' dan pastikan izin Lokasi aktif.";
+          liveCamera.submitError = liveCamera.gpsLoading
+            ? "Koordinat GPS masih sedang diambil (tunggu sebentar hingga muncul Lat/Lng), lalu tekan Kirim Bukti kembali."
+            : liveCamera.gpsError ||
+              "Koordinat GPS belum tersedia. Pastikan izin Lokasi (GPS) aktif di Safari/browser Anda, sistem mencoba mengambil GPS ulang...";
+          if (!liveCamera.gpsLoading) {
+            requestRealDeviceGps();
+          }
           if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
           showBanner(false, liveCamera.submitError);
+          focusCameraErrorBox();
           return;
         }
 
@@ -2765,7 +2911,9 @@
             chosenShiftId
           );
           stopCameraStream();
+          stopGpsWatcher();
           uiState.modal = null;
+          render();
           const matchedShift = Core.state.shifts.find((sh) => sh.id === (res?.shift_id || chosenShiftId));
           const shiftLabel = res?.shift_name || matchedShift?.name || "Shift";
           if (liveCamera.mode === "check_in") {
@@ -2790,6 +2938,7 @@
           liveCamera.submitError = err.message || "Gagal memproses absensi di server.";
           if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
           showBanner(false, liveCamera.submitError, 9000);
+          focusCameraErrorBox();
         }
         return;
       }

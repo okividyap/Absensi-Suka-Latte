@@ -905,6 +905,37 @@ table.data-table tr:hover td {
   line-height: 1.5;
 }
 
+.camera-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--coffee-50);
+  border: 1px solid var(--coffee-200);
+  font-size: 11.5px;
+  margin-bottom: 8px;
+}
+
+.camera-check-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.camera-check-item.is-done {
+  color: var(--emerald-800);
+}
+
+.camera-check-item.is-wait {
+  color: var(--amber-800);
+}
+
+.btn-pending-check {
+  opacity: 0.72;
+}
+
 .shift-choice-btn {
   display: inline-flex;
   flex-direction: column;

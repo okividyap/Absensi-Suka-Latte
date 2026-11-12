@@ -457,8 +457,17 @@ window.SUKA_LATTE_CONFIG = {
 
       // 3. Dengarkan perubahan status login OAuth Google
       state.supabase.auth.onAuthStateChange(async (event, newSession) => {
-        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        if (event === "TOKEN_REFRESHED") {
           state.session = newSession;
+          return;
+        }
+        if (event === "SIGNED_IN") {
+          const sameUserReady =
+            Boolean(state.session?.user?.id) &&
+            state.session.user.id === newSession?.user?.id &&
+            Boolean(state.currentUser);
+          state.session = newSession;
+          if (sameUserReady) return;
           await refreshAllData();
         } else if (event === "SIGNED_OUT") {
           state.session = null;
