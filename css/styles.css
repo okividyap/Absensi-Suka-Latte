@@ -216,6 +216,33 @@ p {
   gap: 14px;
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.topbar-mobile-user {
+  display: none;
+}
+
+.topbar-brand-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.show-mobile-only {
+  display: none;
+}
+
 .page-container {
   padding: 26px 28px 56px;
   max-width: 1420px;
@@ -845,6 +872,13 @@ p {
 /* ==========================================================================
    SHIFT SELECTOR CARDS (HERO & ATTENDANCE HOME)
    ========================================================================== */
+.shift-selector-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
 .shift-choice-btn {
   display: inline-flex;
   flex-direction: column;
@@ -879,6 +913,65 @@ p {
 .shift-choice-btn:disabled {
   opacity: 0.72;
   cursor: default;
+}
+
+/* Hero Actions & Summary Time Tiles */
+.hero-actions-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hero-cta-btn {
+  width: 100%;
+  padding: 14px 18px !important;
+  font-size: 14.5px !important;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+}
+
+.hero-secondary-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hero-sub-btn {
+  flex: 1;
+  min-width: 130px;
+  text-align: center;
+  justify-content: center;
+  padding: 9px 12px !important;
+  font-size: 12px !important;
+}
+
+.hero-time-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.hero-time-box {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.hero-time-label {
+  font-size: 10px;
+  color: var(--coffee-300);
+  margin-bottom: 2px;
+}
+
+.hero-time-val {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--white);
 }
 
 /* ==========================================================================
@@ -1153,10 +1246,41 @@ p {
 }
 
 .camera-checklist {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin-bottom: 12px;
+}
+
+.camera-check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--stone-200);
+  background: var(--stone-50);
+  color: var(--stone-600);
+  line-height: 1.4;
+}
+
+.camera-check-item.is-done {
+  background: var(--emerald-50);
+  border-color: #a7f3d0;
+  color: var(--emerald-800);
+  font-weight: 700;
+}
+
+.camera-check-item.is-wait {
+  background: var(--amber-50);
+  border-color: #fde68a;
+  color: var(--amber-800);
+}
+
+.btn-pending-check {
+  opacity: 0.85;
 }
 
 .check-step-pill {
@@ -1457,20 +1581,291 @@ p {
 }
 
 @media (max-width: 768px) {
+  /* Topbar Layout & Mobile User Pill */
+  .topbar {
+    padding: 10px 14px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    gap: 8px;
+  }
+  .topbar-mobile-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .topbar-mobile-user .user-avatar,
+  .topbar-mobile-avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .topbar-mobile-avatar {
+    background: linear-gradient(135deg, var(--coffee-800), var(--coffee-950));
+    color: var(--gold-200);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    border: 1.5px solid rgba(218, 175, 118, 0.4);
+  }
+  .topbar-mobile-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .topbar-mobile-name {
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--coffee-950);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+    line-height: 1.2;
+  }
+  .topbar-brand-group {
+    display: none;
+  }
+  .hide-mobile {
+    display: none !important;
+  }
+  .show-mobile-only {
+    display: inline !important;
+  }
+  .btn-icon-mobile {
+    padding: 7px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* Safe Area & Grid Stack */
+  .main-area {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  .page-container {
+    padding: 14px 14px 32px;
+  }
   .grid-2,
   .grid-3,
-  .grid-4,
-  .evidence-pair,
-  .camera-checklist {
+  .evidence-pair {
     grid-template-columns: 1fr;
   }
+  .grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .kpi-card {
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+  .kpi-head .mono {
+    font-size: 24px !important;
+  }
+  .kpi-icon-orb {
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+  }
+
+  /* Compact 3-Step Employee Guide Bar */
+  .staff-steps-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .staff-step-card {
+    padding: 8px 6px;
+    gap: 6px;
+    border-radius: 10px;
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+  .staff-step-num {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+    margin-bottom: 2px;
+  }
+  .staff-step-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .staff-step-desc {
+    display: none;
+  }
+
+  /* Shift Selector Mobile Grid */
+  .shift-selector-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .shift-choice-btn {
+    min-width: 0 !important;
+    width: 100%;
+    padding: 9px 10px;
+  }
+
+  /* Hero Banner & Action Buttons */
   .hero-banner {
-    padding: 20px 18px;
-    border-radius: 20px;
+    padding: 18px 16px;
+    border-radius: 18px;
+    margin-bottom: 16px;
+  }
+  .hero-banner h1 {
+    font-size: 21px !important;
+  }
+  .hero-actions-wrap {
+    gap: 8px;
+  }
+  .hero-secondary-btns {
+    display: flex;
+    gap: 8px;
+  }
+  .hero-sub-btn {
+    flex: 1;
+    min-width: 0;
+    font-size: 11.5px !important;
+    padding: 9px 6px !important;
+    white-space: nowrap;
+  }
+
+  /* Login Panel at Top of Mobile View */
+  .login-shell {
+    display: flex !important;
+    flex-direction: column-reverse;
   }
   .login-showcase,
   .login-auth-panel {
-    padding: 24px 20px;
+    padding: 20px 16px;
+  }
+
+  /* Native Bottom-Sheet Modal */
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .modal-window {
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    max-height: 94dvh !important;
+    border-bottom: none !important;
+    animation: slideUpModal 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slideUpModal {
+    from {
+      transform: translateY(100%);
+      opacity: 0.9;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  .modal-header {
+    padding: 13px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .modal-body {
+    padding: 14px 14px calc(18px + env(safe-area-inset-bottom));
+  }
+  .camera-stage {
+    max-height: 240px;
+    aspect-ratio: 4 / 3;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .camera-stage video,
+  .camera-stage img {
+    max-height: 240px;
+    object-fit: cover;
+  }
+
+  /* Horizontally Scrollable Control Panel Tabs */
+  .tab-pills {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+    margin-bottom: 12px;
+  }
+  .tab-pills::-webkit-scrollbar {
+    display: none;
+  }
+  .tab-pill {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 11.5px;
+    padding: 7px 11px;
+  }
+
+  /* Form Input iOS Zoom Prevention */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="email"],
+  input[type="password"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Floating Toast Banner */
+  .global-floating-banner {
+    top: calc(10px + env(safe-area-inset-top));
+    width: calc(100vw - 20px);
+    padding: 10px 14px;
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-container {
+    padding: 10px 10px 24px;
+  }
+  .hero-banner {
+    padding: 15px 12px;
+    border-radius: 14px;
+  }
+  .hero-banner h1 {
+    font-size: 19px !important;
+  }
+  .card {
+    padding: 14px 12px;
+    border-radius: 14px;
+  }
+  .topbar {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .topbar-mobile-name {
+    max-width: 90px;
+    font-size: 12px;
+  }
+  .hero-sub-btn {
+    font-size: 11px !important;
+    padding: 8px 4px !important;
+  }
+  .table-wrap {
+    margin: 0 -12px;
+    width: calc(100% + 24px);
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
   }
 }
 

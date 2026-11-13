@@ -540,7 +540,7 @@
         <div style="font-size:11px;font-weight:700;color:var(--coffee-300);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">
           Pilih Shift Kerja Anda ${locked ? "(Terkunci sesuai Check In hari ini)" : "(Otomatis hitung terlambat > toleransi shift)"}:
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="shift-selector-grid" style="display:flex;gap:8px;flex-wrap:wrap;">
           ${activeShifts
             .map((sh) => {
               const active = sh.id === selectedShiftId;
@@ -791,27 +791,29 @@
               Shift: <strong style="color:var(--white);">${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
             </p>
             ${renderShiftSelectorHtml(s.shifts, selectedShiftId, !canCheckIn)}
-            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <div class="hero-actions-wrap">
               ${
                 canCheckIn
-                  ? `<button class="btn btn-emerald btn-lg" data-action="open-camera" data-mode="check_in">
+                  ? `<button class="btn btn-emerald btn-lg hero-cta-btn" data-action="open-camera" data-mode="check_in">
                       📷 Ambil Selfie &amp; Check In (${esc(myShift ? myShift.name : "Shift")})
                     </button>`
                   : ""
               }
               ${
                 canCheckOut
-                  ? `<button class="btn btn-amber btn-lg" data-action="open-camera" data-mode="check_out">
+                  ? `<button class="btn btn-amber btn-lg hero-cta-btn" data-action="open-camera" data-mode="check_out">
                       📷 Ambil Selfie &amp; Check Out (${esc(myShift ? myShift.name : "Shift")})
                     </button>`
                   : ""
               }
-              <button class="btn btn-gold" data-action="open-member-leave">
-                📅 Ajukan Izin / Cuti / Libur
-              </button>
-              <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);" data-action="nav" data-target="riwayat_saya">
-                📋 Riwayat Absensi Saya
-              </button>
+              <div class="hero-secondary-btns">
+                <button class="btn btn-gold hero-sub-btn" data-action="open-member-leave">
+                  📅 Ajukan Izin / Cuti
+                </button>
+                <button class="btn btn-outline hero-sub-btn" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);" data-action="nav" data-target="riwayat_saya">
+                  📋 Riwayat Saya
+                </button>
+              </div>
             </div>
           </div>
 
@@ -821,16 +823,16 @@
                 <span style="color:var(--gold-300);font-weight:800;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;">Ringkasan Hari Ini (${esc(myShift ? myShift.name : "-")})</span>
                 ${myToday ? Core.getStatusBadgeHtml(myToday.attendance_status, myToday.late_minutes) : Core.getStatusBadgeHtml("belum_check_in")}
               </div>
-              <div class="grid-2" style="gap:10px;margin-bottom:12px;">
-                <div style="background:rgba(255,255,255,0.06);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
-                  <div style="font-size:10.5px;color:var(--coffee-300);margin-bottom:2px;">Check In (Server)</div>
-                  <div class="mono" style="font-size:15px;font-weight:800;color:var(--white);">
+              <div class="hero-time-tiles" style="margin-bottom:12px;">
+                <div class="hero-time-box">
+                  <div class="hero-time-label">Check In (Server)</div>
+                  <div class="mono hero-time-val">
                     ${myToday?.check_in_at ? Core.formatOperationalDateTime(myToday.check_in_at, tz, false) : "--:--:--"}
                   </div>
                 </div>
-                <div style="background:rgba(255,255,255,0.06);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
-                  <div style="font-size:10.5px;color:var(--coffee-300);margin-bottom:2px;">Check Out (Server)</div>
-                  <div class="mono" style="font-size:15px;font-weight:800;color:var(--white);">
+                <div class="hero-time-box">
+                  <div class="hero-time-label">Check Out (Server)</div>
+                  <div class="mono hero-time-val">
                     ${myToday?.check_out_at ? Core.formatOperationalDateTime(myToday.check_out_at, tz, false) : "--:--:--"}
                   </div>
                 </div>
@@ -1047,16 +1049,16 @@
                 <span style="color:var(--gold-300);font-weight:800;font-size:11px;letter-spacing:0.06em;">ABSENSI PRIBADI ANDA HARI INI</span>
                 ${myToday ? Core.getStatusBadgeHtml(myToday.attendance_status, myToday.late_minutes) : Core.getStatusBadgeHtml("belum_check_in")}
               </div>
-              <div class="grid-2" style="gap:10px;margin-bottom:10px;">
-                <div style="background:rgba(255,255,255,0.06);padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
-                  <div style="font-size:10px;color:var(--coffee-300);">Check In</div>
-                  <div class="mono" style="font-size:14px;font-weight:800;color:var(--white);">
+              <div class="hero-time-tiles" style="margin-bottom:10px;">
+                <div class="hero-time-box">
+                  <div class="hero-time-label">Check In</div>
+                  <div class="mono hero-time-val">
                     ${myToday?.check_in_at ? Core.formatOperationalDateTime(myToday.check_in_at, tz, false) : "--:--:--"}
                   </div>
                 </div>
-                <div style="background:rgba(255,255,255,0.06);padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
-                  <div style="font-size:10px;color:var(--coffee-300);">Check Out</div>
-                  <div class="mono" style="font-size:14px;font-weight:800;color:var(--white);">
+                <div class="hero-time-box">
+                  <div class="hero-time-label">Check Out</div>
+                  <div class="mono hero-time-val">
                     ${myToday?.check_out_at ? Core.formatOperationalDateTime(myToday.check_out_at, tz, false) : "--:--:--"}
                   </div>
                 </div>
@@ -1943,7 +1945,7 @@
               <input type="checkbox" name="crosses_midnight" ${editing && editing.crosses_midnight ? "checked" : ""} />
               Shift melewati tengah malam (Crosses Midnight)
             </label>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div class="shift-selector-grid" style="display:flex;gap:8px;flex-wrap:wrap;">
               <button type="button" id="btn-save-shift" class="btn btn-primary" style="flex:1;" data-action="submit-save-shift">
                 ${editing ? "💾 Simpan Perubahan Shift" : "+ Tambah Jadwal Shift"}
               </button>

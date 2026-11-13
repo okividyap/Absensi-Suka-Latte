@@ -1504,24 +1504,35 @@
         <!-- AREA UTAMA -->
         <div class="main-area">
           <header class="topbar">
-            <div>
-              <div style="font-size:14px;font-weight:800;color:var(--coffee-950);">
-                ${esc(s.settings.brand_display_name)}
+            <div class="topbar-left">
+              <div class="topbar-mobile-user">
+                ${Views.renderAvatarHtml(u)}
+                <div class="topbar-mobile-meta">
+                  <div class="topbar-mobile-name">${esc(u.full_name || "Karyawan")}</div>
+                  <div class="topbar-mobile-sub">
+                    <span class="badge ${roleBadgeCls}" style="font-size:9.5px;padding:2px 6px;">${roleLabel}</span>
+                  </div>
+                </div>
               </div>
-              <div style="font-size:11.5px;color:var(--stone-600);">
-                ${esc(s.settings.welcome_message)}
+              <div class="topbar-brand-group">
+                <div style="font-size:14px;font-weight:800;color:var(--coffee-950);">
+                  ${esc(s.settings.brand_display_name)}
+                </div>
+                <div class="topbar-welcome hide-mobile" style="font-size:11.5px;color:var(--stone-600);">
+                  ${esc(s.settings.welcome_message)}
+                </div>
               </div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div class="topbar-actions">
               ${
                 canCheckIn
-                  ? `<button class="btn btn-emerald btn-sm" data-action="open-camera" data-mode="check_in">📷 Check In</button>`
+                  ? `<button class="btn btn-emerald btn-sm" data-action="open-camera" data-mode="check_in">📷 <span class="hide-mobile">Check In</span></button>`
                   : canCheckOut
-                  ? `<button class="btn btn-amber btn-sm" data-action="open-camera" data-mode="check_out">📷 Check Out</button>`
+                  ? `<button class="btn btn-amber btn-sm" data-action="open-camera" data-mode="check_out">📷 <span class="hide-mobile">Check Out</span></button>`
                   : ""
               }
-              <button class="btn btn-outline btn-sm" data-action="refresh-data">🔄 Segarkan</button>
-              <button class="btn btn-outline btn-sm" data-action="logout">Keluar</button>
+              <button class="btn btn-outline btn-sm btn-icon-mobile" data-action="refresh-data" title="Segarkan Data">🔄<span class="hide-mobile"> Segarkan</span></button>
+              <button class="btn btn-outline btn-sm btn-icon-mobile" data-action="logout" title="Keluar">🚪<span class="hide-mobile"> Keluar</span></button>
             </div>
           </header>
 
