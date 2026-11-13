@@ -207,32 +207,30 @@
         : false;
 
     return `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;">
-        <span style="font-size:11px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;">Status GPS Perangkat</span>
-        <button type="button" class="btn btn-outline btn-sm" data-action="refresh-gps" ${liveCamera.gpsLoading || liveCamera.submitting ? "disabled" : ""}>
-          🔄 Ambil Ulang GPS
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px;">
+        <span style="font-size:10.5px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;">Status GPS Lokasi</span>
+        <button type="button" class="btn btn-outline btn-xs" data-action="refresh-gps" ${liveCamera.gpsLoading || liveCamera.submitting ? "disabled" : ""}>
+          🔄 Refresh GPS
         </button>
       </div>
       ${
         liveCamera.gpsLoading
-          ? `<div style="font-size:12px;color:var(--amber-800);font-weight:700;">⏳ Mengambil titik koordinat satelit GPS perangkat...</div>`
+          ? `<div style="font-size:11.5px;color:var(--amber-800);font-weight:700;">⏳ Sedang mengunci titik satelit GPS...</div>`
           : liveCamera.gpsError
-          ? `<div style="font-size:12px;color:var(--rose-800);font-weight:700;">⚠️ ${esc(liveCamera.gpsError)}</div>`
+          ? `<div style="font-size:11.5px;color:var(--rose-800);font-weight:700;">⚠️ ${esc(liveCamera.gpsError)}</div>`
           : liveCamera.gps
-          ? `<div class="mono" style="font-size:11.5px;margin-bottom:6px;">
-               Lat: ${liveCamera.gps.lat.toFixed(6)}<br/>
-               Lng: ${liveCamera.gps.lng.toFixed(6)}<br/>
-               Akurasi: ±${Math.round(liveCamera.gps.accuracy)} meter
-             </div>
-             <div style="display:flex;flex-wrap:wrap;gap:6px;">
-               <span class="badge ${inRadius ? "badge-success" : "badge-danger"}">
-                 Jarak: ${dist !== null ? dist + "m" : "-"} (${inRadius ? "Di Dalam Radius" : "Di Luar Radius"})
-               </span>
-               <span class="badge ${accuracyOk ? "badge-success" : "badge-warning"}">
-                 ${accuracyOk ? "Akurasi Memenuhi Syarat" : "Akurasi Kurang Tajam"}
+          ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+               <div style="font-size:11.5px;color:var(--stone-800);">
+                 Jarak: <strong style="color:${inRadius ? "var(--emerald-800)" : "var(--rose-800)"};">${dist !== null ? `${dist}m` : "-"}</strong>
+                 <span class="badge ${inRadius ? "badge-success" : "badge-danger"}" style="font-size:9.5px;padding:2px 6px;margin-left:4px;">
+                   ${inRadius ? "Dalam Radius" : "Luar Radius"}
+                 </span>
+               </div>
+               <span class="badge ${accuracyOk ? "badge-success" : "badge-warning"}" style="font-size:9.5px;padding:2px 6px;">
+                 ±${Math.round(liveCamera.gps.accuracy)}m ${accuracyOk ? "Akurat" : "Kurang"}
                </span>
              </div>`
-          : `<div style="font-size:12px;color:var(--stone-500);">Menunggu koordinat GPS...</div>`
+          : `<div style="font-size:11.5px;color:var(--stone-500);">Menunggu koordinat GPS...</div>`
       }
     `;
   }
@@ -271,13 +269,9 @@
     const geoWarning =
       s.settings.strict_geofence_enforcement && outlet && liveCamera.gps
         ? accuracy > outlet.minimum_gps_accuracy_meters
-          ? `Akurasi GPS (±${accuracy}m) melebihi batas outlet (±${outlet.minimum_gps_accuracy_meters}m). Dekatkan perangkat ke area terbuka / jendela.`
+          ? `Akurasi GPS (±${accuracy}m) melebihi batas outlet (±${outlet.minimum_gps_accuracy_meters}m). Dekatkan ke jendela/area terbuka.`
           : dist !== null && dist > outlet.geofence_radius_meters
-          ? `Lokasi Anda saat ini berjarak ${dist}m dari ${outlet.name} (batas ${outlet.geofence_radius_meters}m).${
-              Core.isManager()
-                ? " Jika Anda sedang berada di café, kalibrasikan titik lewat Control Panel → Outlet & GPS → Gunakan GPS Saat Ini."
-                : ""
-            }`
+          ? `Lokasi Anda saat ini berjarak ${dist}m dari outlet (batas ${outlet.geofence_radius_meters}m).`
           : ""
         : "";
 
@@ -286,21 +280,21 @@
         ${
           needSelfie
             ? `<div class="camera-check-item ${hasSelfie ? "is-done" : "is-wait"}">
-                 <span>${hasSelfie ? "✓" : "1."}</span>
-                 <span>${hasSelfie ? "Foto selfie baru sudah diambil" : "Langkah 1: Tekan '📸 Ambil Foto Selfie Sekarang'"}</span>
+                 <span>${hasSelfie ? "✓" : "1"}</span>
+                 <span>${hasSelfie ? "Foto Selfie Siap" : "1. Ambil Foto Selfie"}</span>
                </div>`
             : ""
         }
         ${
           needGps
             ? `<div class="camera-check-item ${hasGps ? "is-done" : "is-wait"}">
-                 <span>${hasGps ? "✓" : "2."}</span>
+                 <span>${hasGps ? "✓" : "2"}</span>
                  <span>${
                    hasGps
-                     ? `Koordinat GPS terkunci (${dist !== null ? `${dist}m` : "OK"} • ±${accuracy}m)`
+                     ? `Lokasi GPS Siap (${dist !== null ? `${dist}m` : "OK"})`
                      : liveCamera.gpsLoading
-                     ? "Sedang mengambil koordinat GPS..."
-                     : "GPS belum tersedia — klik '🔄 Ambil Ulang GPS'"
+                     ? "Sedang Cari GPS..."
+                     : "GPS Belum Siap"
                  }</span>
                </div>`
             : ""
@@ -308,7 +302,7 @@
       </div>
       ${
         geoWarning
-          ? `<div style="font-size:11.5px;color:var(--amber-800);background:var(--amber-50);border:1px solid #fde68a;border-radius:10px;padding:8px 10px;margin-bottom:8px;line-height:1.45;">
+          ? `<div style="font-size:11px;color:var(--amber-800);background:var(--amber-50);border:1px solid #fde68a;border-radius:10px;padding:7px 10px;margin-bottom:8px;line-height:1.4;">
                ⚠️ ${esc(geoWarning)}
              </div>`
           : ""
@@ -316,13 +310,13 @@
       <button
         type="button"
         class="btn ${isCheckIn ? "btn-emerald" : "btn-amber"} ${allReady ? "" : "btn-pending-check"}"
-        style="width:100%;padding:13px;font-size:13.5px;"
+        style="width:100%;"
         data-action="submit-attendance"
         ${liveCamera.submitting ? "disabled" : ""}
       >
         ${
           liveCamera.submitting
-            ? "⏳ Mengunggah Bukti &amp; Memvalidasi di Server..."
+            ? "⏳ Memverifikasi Bukti ke Server..."
             : isCheckIn
             ? "✓ Kirim Bukti &amp; Konfirmasi Check In"
             : "✓ Kirim Bukti &amp; Konfirmasi Check Out"
@@ -558,7 +552,7 @@
     const modeLabel = liveCamera.mode === "check_in" ? "CHECK IN" : "CHECK OUT";
     const shiftLabel = chosenShift ? chosenShift.name : "Shift";
     ctx.fillText(
-      `SUKA LATTE • ${modeLabel} (${shiftLabel}) • ${s.currentUser.full_name} (${s.currentUser.employee_code})`,
+      "SUKA LATTE | " + modeLabel + " (" + shiftLabel + ") | " + s.currentUser.full_name + " (" + s.currentUser.employee_code + ")",
       14,
       targetH - 29
     );
@@ -566,10 +560,10 @@
     ctx.fillStyle = "#DFC8AA";
     ctx.font = "12px monospace";
     const gpsText = liveCamera.gps
-      ? `GPS: ${liveCamera.gps.lat.toFixed(5)}, ${liveCamera.gps.lng.toFixed(5)} (±${Math.round(liveCamera.gps.accuracy)}m)`
+      ? "GPS: " + liveCamera.gps.lat.toFixed(5) + ", " + liveCamera.gps.lng.toFixed(5) + " (+/-" + Math.round(liveCamera.gps.accuracy) + "m)"
       : "GPS: Menunggu koordinat";
     ctx.fillText(
-      `Server: ${parts.dateString} ${parts.timeString} (${tz}) | ${gpsText}`,
+      "Server: " + parts.dateString + " " + parts.timeString + " (" + tz + ") | " + gpsText,
       14,
       targetH - 11
     );
@@ -672,64 +666,67 @@
                     }
                   </div>
 
-                  <div style="display:flex;gap:10px;margin-top:12px;">
+                  <div style="display:flex;gap:10px;margin-top:10px;">
                     ${
                       liveCamera.capturedDataUrl
-                        ? `<button type="button" class="btn btn-outline" style="flex:1;" data-action="retake-selfie" ${liveCamera.submitting ? "disabled" : ""}>
-                            🔄 Ambil Ulang Foto Selfie
+                        ? `<button type="button" class="btn btn-outline" style="flex:1;padding:10px 14px;font-size:13px;border-radius:11px;" data-action="retake-selfie" ${liveCamera.submitting ? "disabled" : ""}>
+                            🔄 Ambil Ulang Foto
                           </button>`
-                        : `<button type="button" id="btn-capture-selfie" class="btn btn-primary" style="flex:1;padding:12px;" data-action="capture-selfie" ${liveCamera.cameraError ? "disabled" : ""}>
+                        : `<button type="button" id="btn-capture-selfie" class="btn btn-primary" style="flex:1;padding:11px 16px;font-size:13.5px;font-weight:700;border-radius:11px;" data-action="capture-selfie" ${liveCamera.cameraError ? "disabled" : ""}>
                             📸 Ambil Foto Selfie Sekarang
                           </button>`
                     }
                   </div>
                 </div>
 
-                <div class="col-5" style="display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
-                  <div style="display:flex;flex-direction:column;gap:10px;">
-                    <div class="card-subtle">
-                      <div style="font-size:11px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;">Outlet Penugasan</div>
-                      <div style="font-size:14px;font-weight:800;">${esc(outlet ? outlet.name : "Belum Ditetapkan")}</div>
-                      <div style="font-size:11.5px;color:var(--stone-600);">
-                        Batas Radius: <strong>${outlet ? outlet.geofence_radius_meters : "-"}m</strong> • Batas Akurasi: <strong>±${outlet ? outlet.minimum_gps_accuracy_meters : "-"}m</strong>
+                <div class="col-5" style="display:flex;flex-direction:column;justify-content:space-between;gap:10px;">
+                  <div style="display:flex;flex-direction:column;gap:8px;">
+                    <div class="camera-meta-grid">
+                      <div class="card-subtle camera-meta-card">
+                        <div style="font-size:10px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;">Outlet</div>
+                        <div style="font-size:12.5px;font-weight:800;color:var(--coffee-950);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                          ${esc(outlet ? outlet.name : "Suka Latte")}
+                        </div>
+                        <div style="font-size:10.5px;color:var(--stone-500);">
+                          Radius ${outlet ? outlet.geofence_radius_meters : "-"}m • ±${outlet ? outlet.minimum_gps_accuracy_meters : "-"}m
+                        </div>
+                      </div>
+
+                      <div class="card-subtle camera-shift-card">
+                        <div style="font-size:10px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;margin-bottom:2px;">
+                          Shift Absensi
+                        </div>
+                        ${
+                          isCheckIn
+                            ? `<select id="camera-shift-select" class="form-select form-select-sm" ${liveCamera.submitting ? "disabled" : ""}>
+                                ${(activeShifts.length ? activeShifts : s.shifts)
+                                  .map(
+                                    (sh) => `<option value="${esc(sh.id)}" ${selectedShift && sh.id === selectedShift.id ? "selected" : ""}>
+                                      ${esc(sh.name)} (${esc(String(sh.start_time).slice(0, 5))}–${esc(String(sh.end_time).slice(0, 5))})
+                                    </option>`
+                                  )
+                                  .join("")}
+                              </select>`
+                            : `<div style="font-size:12.5px;font-weight:800;color:var(--coffee-950);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                ${esc(selectedShift ? `${selectedShift.name} (${String(selectedShift.start_time).slice(0, 5)}–${String(selectedShift.end_time).slice(0, 5)})` : "-")}
+                              </div>`
+                        }
                       </div>
                     </div>
 
-                    <div class="card-subtle">
-                      <div style="font-size:11px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;margin-bottom:4px;">Jadwal Shift Absensi</div>
-                      ${
-                        isCheckIn
-                          ? `<select id="camera-shift-select" class="form-select" ${liveCamera.submitting ? "disabled" : ""}>
-                              ${(activeShifts.length ? activeShifts : s.shifts)
-                                .map(
-                                  (sh) => `<option value="${esc(sh.id)}" ${selectedShift && sh.id === selectedShift.id ? "selected" : ""}>
-                                    ${esc(sh.name)} (${esc(String(sh.start_time).slice(0, 5))}–${esc(String(sh.end_time).slice(0, 5))} WITA • Telat &gt;${Number(sh.grace_period_minutes ?? 15)}m)
-                                  </option>`
-                                )
-                                .join("")}
-                            </select>
-                            <div style="font-size:11px;color:var(--stone-600);margin-top:4px;">
-                              Check In melebihi <strong>${Number(selectedShift?.grace_period_minutes ?? 15)} menit</strong> otomatis mengeluarkan status <strong>Terlambat</strong>.
-                            </div>`
-                          : `<div style="font-size:13px;font-weight:800;">
-                              ${esc(selectedShift ? `${selectedShift.name} (${String(selectedShift.start_time).slice(0, 5)}–${String(selectedShift.end_time).slice(0, 5)} WITA)` : "-")}
-                            </div>`
-                      }
-                    </div>
-
-                    <div id="camera-gps-section" class="card-subtle">
+                    <div id="camera-gps-section" class="card-subtle camera-gps-card">
                       ${renderCameraGpsInnerHtml()}
-                    </div>
-
-                    <div style="font-size:11px;color:var(--stone-600);background:var(--coffee-100);padding:10px 12px;border-radius:10px;">
-                      🔒 Foto diambil langsung dari kamera perangkat. Waktu resmi &amp; folder arsip bulanan ditetapkan oleh server WITA.
                     </div>
 
                     <div id="camera-modal-error-box">${renderCameraErrorBoxInnerHtml()}</div>
                   </div>
 
-                  <div id="camera-submit-section">
+                  <div id="camera-submit-section" class="camera-submit-card">
                     ${renderCameraSubmitBtnInnerHtml()}
+                  </div>
+
+                  <div style="font-size:10.5px;color:var(--stone-500);text-align:center;padding-top:2px;">
+                    🔒 Presensi &amp; koordinat divalidasi aman di server WITA.
                   </div>
                 </div>
               </div>

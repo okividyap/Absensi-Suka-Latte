@@ -536,11 +536,11 @@
     const activeShifts = (shifts || []).filter((sh) => sh.status === "active");
     if (activeShifts.length === 0) return "";
     return `
-      <div style="margin-bottom:14px;">
+      <div style="margin-bottom:12px;">
         <div style="font-size:11px;font-weight:700;color:var(--coffee-300);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">
-          Pilih Shift Kerja Anda ${locked ? "(Terkunci sesuai Check In hari ini)" : "(Otomatis hitung terlambat > toleransi shift)"}:
+          Pilih Shift Bertugas ${locked ? "(Terkunci Sesuai Jam Masuk)" : ""}:
         </div>
-        <div class="shift-selector-grid" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="shift-selector-grid">
           ${activeShifts
             .map((sh) => {
               const active = sh.id === selectedShiftId;
@@ -553,8 +553,8 @@
                   data-shift-id="${esc(sh.id)}"
                   ${locked ? "disabled" : ""}
                 >
-                  <span>${active ? "✓ " : ""}${esc(sh.name)}</span>
-                  <span class="mono" style="font-size:11px;opacity:0.9;">${esc(String(sh.start_time).slice(0, 5))}–${esc(String(sh.end_time).slice(0, 5))} (Telat &gt;${grace}m)</span>
+                  <span style="font-weight:800;font-size:12.5px;">${active ? "✓ " : ""}${esc(sh.name)}</span>
+                  <span class="mono" style="font-size:10.5px;opacity:0.88;">${esc(String(sh.start_time).slice(0, 5))}–${esc(String(sh.end_time).slice(0, 5))} (Telat &gt;${grace}m)</span>
                 </button>`;
             })
             .join("")}
@@ -757,23 +757,23 @@
       <div class="staff-steps-grid">
         <div class="staff-step-card ${selectedShiftId ? "active" : ""}">
           <div class="staff-step-num">${canCheckIn ? "1" : "✓"}</div>
-          <div>
-            <div class="staff-step-title">1. Pilih Shift Kerja</div>
-            <div class="staff-step-desc">Pilih <strong>Shift Pagi</strong> atau <strong>Shift Siang</strong> sesuai jadwal jaga Anda.</div>
+          <div class="staff-step-content">
+            <div class="staff-step-title">1. Shift Kerja</div>
+            <div class="staff-step-desc">${esc(myShift ? myShift.name : "Pilih Shift")}</div>
           </div>
         </div>
         <div class="staff-step-card ${myToday?.check_in_at ? "active" : ""}">
           <div class="staff-step-num">${myToday?.check_in_at ? "✓" : "2"}</div>
-          <div>
-            <div class="staff-step-title">2. Ambil Selfie &amp; Lokasi (Hadir)</div>
-            <div class="staff-step-desc">Absensi wajah di outlet menandakan Anda masuk hadir bekerja.</div>
+          <div class="staff-step-content">
+            <div class="staff-step-title">2. Absen Hadir</div>
+            <div class="staff-step-desc">${myToday?.check_in_at ? "Sudah Check In" : "Selfie &amp; Lokasi"}</div>
           </div>
         </div>
         <div class="staff-step-card ${myToday?.check_out_at ? "active" : ""}">
           <div class="staff-step-num">${myToday?.check_out_at ? "✓" : "3"}</div>
-          <div>
-            <div class="staff-step-title">3. Atau Ajukan Izin / Cuti</div>
-            <div class="staff-step-desc">Tidak masuk / libur? Ajukan izin atau cuti dari mana saja tanpa ke outlet.</div>
+          <div class="staff-step-content">
+            <div class="staff-step-title">3. Selesai / Izin</div>
+            <div class="staff-step-desc">${myToday?.check_out_at ? "Sudah Check Out" : "Izin Dari Rumah"}</div>
           </div>
         </div>
       </div>
@@ -784,8 +784,8 @@
             <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:10px;">
               ⏱ Jadwal Hari Ini • ${esc(parts.dateString)} (${esc(tz)})
             </span>
-            <h1 style="font-size:25px;font-weight:800;margin-bottom:6px;letter-spacing:-0.02em;">Selamat Bertugas, ${esc(u.full_name)}</h1>
-            <p style="font-size:13px;color:var(--coffee-200);margin-bottom:14px;">
+            <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;letter-spacing:-0.02em;">Selamat Bertugas, ${esc(u.full_name)}</h1>
+            <p style="font-size:12.5px;color:var(--coffee-200);margin-bottom:12px;">
               ID: <strong class="mono" style="color:var(--gold-200);">${esc(u.employee_code)}</strong> •
               Outlet: <strong style="color:var(--white);">${esc(myOutlet ? myOutlet.name : "-")}</strong> •
               Shift: <strong style="color:var(--white);">${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
@@ -794,16 +794,31 @@
             <div class="hero-actions-wrap">
               ${
                 canCheckIn
-                  ? `<button class="btn btn-emerald btn-lg hero-cta-btn" data-action="open-camera" data-mode="check_in">
-                      📷 Ambil Selfie &amp; Check In (${esc(myShift ? myShift.name : "Shift")})
+                  ? `<button class="btn btn-emerald hero-cta-btn" data-action="open-camera" data-mode="check_in">
+                      📷 Check In Masuk (${esc(myShift ? myShift.name : "Shift")})
                     </button>`
                   : ""
               }
               ${
                 canCheckOut
-                  ? `<button class="btn btn-amber btn-lg hero-cta-btn" data-action="open-camera" data-mode="check_out">
-                      📷 Ambil Selfie &amp; Check Out (${esc(myShift ? myShift.name : "Shift")})
+                  ? `<button class="btn btn-amber hero-cta-btn" data-action="open-camera" data-mode="check_out">
+                      📷 Check Out Pulang (${esc(myShift ? myShift.name : "Shift")})
                     </button>`
+                  : ""
+              }
+              ${
+                !canCheckIn && !canCheckOut && myToday?.check_in_at && myToday?.check_out_at
+                  ? `<div class="hero-completed-card">
+                      <div class="hero-completed-icon">✓</div>
+                      <div>
+                        <div class="hero-completed-title">Absensi Hari Ini Lengkap &amp; Selesai</div>
+                        <div class="hero-completed-desc">
+                          Check In: <strong>${Core.formatOperationalDateTime(myToday.check_in_at, tz, false).slice(12, 17)}</strong> • 
+                          Check Out: <strong>${Core.formatOperationalDateTime(myToday.check_out_at, tz, false).slice(12, 17)}</strong> • 
+                          Durasi: <strong>${Core.formatDurationMinutes(myToday.work_duration_minutes)}</strong>
+                        </div>
+                      </div>
+                    </div>`
                   : ""
               }
               <div class="hero-secondary-btns">
