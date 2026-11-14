@@ -960,6 +960,106 @@ window.SUKA_LATTE_CONFIG = {
     return { mode: "deactivated", target };
   }
 
+  function canDeleteAttendance(rec) {
+    if (!rec || !isManager()) return false;
+    if (isSuperAdmin()) return true;
+    const actorId = state.currentUser?.id;
+    const targetEmp = state.profiles.find((p) => p.id === rec.employee_id);
+    if (!targetEmp) return true;
+    if (targetEmp.role === "super_admin" && targetEmp.id !== actorId) {
+      return false;
+    }
+    return true;
+  }
+
+  async function deleteAttendanceRecord(attendanceId, reason) {
+    assertManagerAccess("DeleteAttendanceRecord");
+    if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
+    const rec = state.attendance.find((a) => a.id === attendanceId);
+    if (!rec) throw new Error("Catatan absensi tidak ditemukan.");
+    if (!canDeleteAttendance(rec)) {
+      throw new Error("Anda tidak memiliki izin untuk menghapus catatan absensi ini.");
+    }
+
+    const cleanReason = String(reason || "").trim() || "Uji coba sistem / pembersihan data oleh pengelola";
+
+    const rpcRes = await withTimeout(
+      state.supabase.rpc("delete_attendance_by_manager", {
+        p_attendance_id: attendanceId,
+        p_reason: cleanReason,
+      }),
+      15000,
+      "Penghapusan absensi timeout setelah 15 detik. Periksa koneksi internet."
+    );
+
+    if (rpcRes.error) {
+      throw rpcRes.error;
+    }
+
+    const paths = Array.isArray(rpcRes.data?.photo_paths) ? rpcRes.data.photo_paths.filter(Boolean) : [];
+    if (paths.length > 0) {
+      try {
+        await state.supabase.storage.from(state.storageBucket).remove(paths);
+      } catch {}
+      try {
+        await state.supabase.storage.from("attendance-photos").remove(paths);
+      } catch {}
+    }
+
+    state.attendance = state.attendance.filter((a) => a.id !== attendanceId);
+    state.corrections = state.corrections.filter((c) => c.attendance_id !== attendanceId);
+
+    setTimeout(() => {
+      refreshProfilesAndAuditInBackground();
+    }, 50);
+
+    return rpcRes.data;
+  }
+
+  async function clearAllTrialAttendance(confirmationKeyword, reason) {
+    assertSuperAdminAccess("ClearAllTrialAttendance");
+    if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
+
+    const cleanKeyword = String(confirmationKeyword || "").trim().toUpperCase();
+    if (cleanKeyword !== "HAPUS") {
+      throw new Error('Kata kunci konfirmasi salah. Ketik "HAPUS" untuk mengonfirmasi reset data absensi.');
+    }
+
+    const cleanReason = String(reason || "").trim() || "Reset data absensi uji coba sebelum operasional resmi";
+
+    const rpcRes = await withTimeout(
+      state.supabase.rpc("clear_all_trial_attendance", {
+        p_confirmation_keyword: cleanKeyword,
+        p_reason: cleanReason,
+      }),
+      25000,
+      "Pembersihan seluruh data absensi timeout setelah 25 detik."
+    );
+
+    if (rpcRes.error) {
+      throw rpcRes.error;
+    }
+
+    const paths = Array.isArray(rpcRes.data?.photo_paths) ? rpcRes.data.photo_paths.filter(Boolean) : [];
+    if (paths.length > 0) {
+      try {
+        await state.supabase.storage.from(state.storageBucket).remove(paths);
+      } catch {}
+      try {
+        await state.supabase.storage.from("attendance-photos").remove(paths);
+      } catch {}
+    }
+
+    state.attendance = [];
+    state.corrections = [];
+
+    setTimeout(() => {
+      refreshProfilesAndAuditInBackground();
+    }, 50);
+
+    return rpcRes.data;
+  }
+
   window.SukaCore = {
     state,
     DEFAULT_SETTINGS,
@@ -991,6 +1091,9 @@ window.SUKA_LATTE_CONFIG = {
     changeEmployeeRoleFast,
     canDeleteEmployee,
     deleteEmployeeAccount,
+    canDeleteAttendance,
+    deleteAttendanceRecord,
+    clearAllTrialAttendance,
     uploadPrivateSelfieAndSubmit,
   };
 })();

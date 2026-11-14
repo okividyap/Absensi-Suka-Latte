@@ -816,6 +816,17 @@
                     </div>`
                   : ""
               }
+
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid var(--coffee-200);gap:10px;flex-wrap:wrap;">
+                <div>
+                  ${
+                    Core.canDeleteAttendance(rec)
+                      ? `<button class="btn btn-outline btn-sm" style="color:var(--rose-700);border-color:#fca5a5;" data-action="delete-attendance" data-id="${esc(rec.id)}">🗑️ Hapus Catatan Absensi Ini</button>`
+                      : ""
+                  }
+                </div>
+                <button class="btn btn-primary btn-sm" data-action="close-modal">Tutup</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1235,6 +1246,68 @@
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
                   <button type="button" class="btn btn-danger" data-action="confirm-delete-item">🗑️ Ya, Hapus Member Sekarang</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (uiState.modal.kind === "attendance") {
+        const rec = s.attendance.find((a) => a.id === uiState.modal.id);
+        const emp = rec ? s.profiles.find((p) => p.id === rec.employee_id) : null;
+        return `
+          <div class="modal-backdrop">
+            <div class="modal-window sm">
+              <div class="modal-header">
+                <h3 style="font-size:16px;font-weight:800;">🗑️ Hapus Catatan Absensi (Uji Coba)</h3>
+                <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+              </div>
+              <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+                <div class="card-subtle" style="border-color:#fda4af;background:var(--rose-50);font-size:12.5px;color:var(--rose-800);line-height:1.55;">
+                  Anda akan menghapus catatan absensi tanggal <strong>${esc(rec?.work_date || uiState.modal.name || "-")}</strong>
+                  milik <strong>${esc(emp?.full_name || "Karyawan")}</strong>.<br/>
+                  Foto selfie dan data kehadiran ini akan dihapus permanen dari server Supabase dan storage.
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Alasan Penghapusan (Tercatat di Audit Log)</label>
+                  <input id="confirm-delete-reason" class="form-input" value="Uji coba sistem absensi" placeholder="Contoh: Uji coba sistem / data keliru" />
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="button" class="btn btn-danger" data-action="confirm-delete-item">🗑️ Ya, Hapus Absensi Ini</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (uiState.modal.kind === "clear_trial_attendance") {
+        return `
+          <div class="modal-backdrop">
+            <div class="modal-window sm">
+              <div class="modal-header">
+                <h3 style="font-size:16px;font-weight:800;">🗑️ Bersihkan Seluruh Data Absensi Uji Coba</h3>
+                <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+              </div>
+              <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+                <div class="card-subtle" style="border-color:#fda4af;background:var(--rose-50);font-size:12.5px;color:var(--rose-800);line-height:1.55;">
+                  <strong>PERINGATAN SUPER ADMIN:</strong><br/>
+                  Tindakan ini akan <strong>menghapus seluruh (${s.attendance.length}) catatan absensi</strong> beserta seluruh arsip foto selfie uji coba dari database.<br/>
+                  Gunakan fitur ini setelah masa uji coba selesai untuk memulai operasional normal yang bersih.
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Ketik kata kunci konfirmasi: <span class="mono" style="color:var(--rose-700);font-weight:800;">HAPUS</span></label>
+                  <input id="confirm-clear-keyword" class="form-input mono" placeholder="Ketik HAPUS di sini..." autocomplete="off" />
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Alasan Reset (Audit Log)</label>
+                  <input id="confirm-delete-reason" class="form-input" value="Pembersihan data uji coba sebelum operasional resmi" />
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="button" class="btn btn-danger" data-action="confirm-delete-item">🗑️ Bersihkan Seluruh Data Uji Coba</button>
                 </div>
               </div>
             </div>
@@ -1838,6 +1911,27 @@
           res.mode === "hard_deleted"
             ? `Member '${name}' berhasil dihapus permanen dari sistem.`
             : `Member '${name}' telah dikeluarkan dari daftar karyawan aktif & akses loginnya diblokir (Resign).`
+        );
+        return;
+      } else if (kind === "attendance") {
+        const reasonInput = document.getElementById("confirm-delete-reason");
+        const reason = reasonInput ? reasonInput.value : uiState.modal.reason || "Uji coba sistem absensi";
+        await Core.deleteAttendanceRecord(id, reason);
+        uiState.modal = null;
+        render();
+        showBanner(true, `Catatan absensi ${name || ""} berhasil dihapus dari sistem.`);
+        return;
+      } else if (kind === "clear_trial_attendance") {
+        const keywordInput = document.getElementById("confirm-clear-keyword");
+        const keyword = keywordInput ? keywordInput.value : "";
+        const reasonInput = document.getElementById("confirm-delete-reason");
+        const reason = reasonInput ? reasonInput.value : "Pembersihan data uji coba sebelum operasional resmi";
+        const res = await Core.clearAllTrialAttendance(keyword, reason);
+        uiState.modal = null;
+        render();
+        showBanner(
+          true,
+          `Berhasil membersihkan seluruh data absensi uji coba (${res.deleted_count || 0} catatan dihapus). Sistem siap untuk operasional normal.`
         );
         return;
       }
@@ -3129,6 +3223,42 @@
           kind: "employee",
           id: emp.id,
           name: emp.full_name,
+        };
+        render();
+        return;
+      }
+
+      if (action === "delete-attendance") {
+        Core.assertManagerAccess("DeleteAttendance");
+        const recordId = btn.getAttribute("data-id");
+        const rec = Core.state.attendance.find((a) => a.id === recordId);
+        if (!rec) return;
+        if (!Core.canDeleteAttendance(rec)) {
+          showBanner(false, "Anda tidak memiliki izin untuk menghapus catatan absensi ini.");
+          return;
+        }
+        const emp = Core.state.profiles.find((p) => p.id === rec.employee_id);
+        uiState.modal = {
+          type: "confirm_delete",
+          kind: "attendance",
+          id: rec.id,
+          name: `${rec.work_date} (${emp ? emp.full_name : "Karyawan"})`,
+        };
+        render();
+        return;
+      }
+
+      if (action === "clear-all-trial-attendance") {
+        Core.assertSuperAdminAccess("ClearAllTrialAttendance");
+        if (Core.state.attendance.length === 0) {
+          showBanner(true, "Tidak ada data absensi untuk dibersihkan.");
+          return;
+        }
+        uiState.modal = {
+          type: "confirm_delete",
+          kind: "clear_trial_attendance",
+          id: "ALL",
+          name: "Seluruh Data Absensi Uji Coba",
         };
         render();
         return;

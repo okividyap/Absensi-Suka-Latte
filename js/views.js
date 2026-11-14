@@ -520,10 +520,15 @@
           <button class="btn btn-outline btn-sm" data-action="inspect-record" data-id="${esc(rec.id)}">
             🔍 Lihat Detail Bukti
           </button>
-          <div style="display:flex;gap:6px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
             ${
               allowManagerEdit
-                ? `<button class="btn btn-primary btn-sm" data-action="open-admin-edit-att" data-id="${esc(rec.id)}">✏️ Edit Kehadiran</button>`
+                ? `<button class="btn btn-primary btn-sm" data-action="open-admin-edit-att" data-id="${esc(rec.id)}">✏️ Edit</button>`
+                : ""
+            }
+            ${
+              Core.canDeleteAttendance(rec)
+                ? `<button class="btn btn-outline btn-sm" style="color:var(--rose-700);border-color:#fca5a5;" data-action="delete-attendance" data-id="${esc(rec.id)}" title="Hapus catatan absensi (Uji coba)">🗑️ Hapus</button>`
                 : ""
             }
           </div>
@@ -1406,7 +1411,12 @@
           <h2 style="font-size:20px;font-weight:800;">Rekapitulasi Kehadiran, Keterlambatan, &amp; Ekspor Data</h2>
           <p style="font-size:12px;color:var(--stone-600);">Total ${filtered.length} catatan • Akumulasi Durasi: <strong>${Core.formatDurationMinutes(totalDuration)}</strong></p>
         </div>
-        <div style="display:flex;gap:10px;" class="no-print">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
+          ${
+            Core.isSuperAdmin() && s.attendance.length > 0
+              ? `<button class="btn btn-outline" style="color:var(--rose-700);border-color:#fca5a5;" data-action="clear-all-trial-attendance" title="Bersihkan seluruh catatan absensi uji coba sebelum operasional normal">🗑️ Bersihkan Data Uji Coba</button>`
+              : ""
+          }
           <button class="btn btn-emerald" data-action="export-csv">📊 Ekspor CSV / Excel</button>
           <button class="btn btn-primary" data-action="export-pdf">🖨️ Cetak / Simpan PDF</button>
         </div>
@@ -1495,7 +1505,14 @@
                           </td>
                           <td>${Core.getStatusBadgeHtml(r.attendance_status, r.late_minutes)}</td>
                           <td class="no-print">
-                            <button class="btn btn-outline btn-sm" data-action="open-admin-edit-att" data-id="${esc(r.id)}">✏️ Edit</button>
+                            <div style="display:inline-flex;gap:4px;flex-wrap:wrap;">
+                              <button class="btn btn-outline btn-sm" data-action="open-admin-edit-att" data-id="${esc(r.id)}">✏️ Edit</button>
+                              ${
+                                Core.canDeleteAttendance(r)
+                                  ? `<button class="btn btn-outline btn-sm" style="color:var(--rose-700);border-color:#fca5a5;" data-action="delete-attendance" data-id="${esc(r.id)}" title="Hapus catatan absensi">🗑️ Hapus</button>`
+                                  : ""
+                              }
+                            </div>
                           </td>
                         </tr>`;
                     })
@@ -2497,6 +2514,26 @@
               : `<div style="font-size:11.5px;color:var(--stone-500);">Pengaturan infrastruktur cloud dikhususkan bagi Super Admin.</div>`
           }
         </div>
+
+        ${
+          isSuper
+            ? `
+        <div class="card" style="border:1px solid #fca5a5;background:linear-gradient(180deg,#fff,#fff1f2);grid-column:1 / -1;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div>
+              <span class="badge badge-danger" style="margin-bottom:6px;">Uji Coba &amp; Pembersihan Data</span>
+              <h3 style="font-size:15px;font-weight:800;color:var(--rose-900);margin:0 0 4px 0;">Reset / Bersihkan Seluruh Data Absensi Uji Coba</h3>
+              <p style="font-size:12px;color:var(--rose-700);margin:0;max-width:700px;line-height:1.5;">
+                Saat ini terdapat <strong>${s.attendance.length} catatan absensi</strong> di database. Jika Anda telah selesai melakukan uji coba dan ingin memulai operasional normal yang bersih, Anda dapat menghapus seluruh data absensi uji coba sekaligus beserta foto selfie-nya.
+              </p>
+            </div>
+            <button type="button" class="btn btn-danger" data-action="clear-all-trial-attendance" ${s.attendance.length === 0 ? "disabled" : ""}>
+              🗑️ Bersihkan Seluruh Absensi Uji Coba
+            </button>
+          </div>
+        </div>`
+            : ""
+        }
       </div>
     `;
   }
