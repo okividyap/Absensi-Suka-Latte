@@ -1118,11 +1118,9 @@
       `;
     }
 
-    // H. MODAL PENGAJUAN KOREKSI PRIBADI (HANYA JIKA DIAKTIFKAN OLEH PENGELOLA)
+    // H. MODAL PENGAJUAN KOREKSI PRIBADI (DIKUNCI KHUSUS PENGELOLA)
     if (uiState.modal.type === "member_corr") {
-      if (!Core.isManager() && !s.settings.allow_member_request_corrections) {
-        Core.assertManagerAccess("ModalMemberCorrection");
-      }
+      Core.assertManagerAccess("ModalMemberCorrection");
       const rec = s.attendance.find(
         (a) => a.id === uiState.modal.recordId && a.employee_id === s.currentUser.id
       );
@@ -2122,7 +2120,7 @@
       strict_geofence_enforcement: form.querySelector('[name="strict_geofence_enforcement"]')?.checked ?? true,
       operational_timezone: String(fd.get("operational_timezone") || "Asia/Makassar"),
       clock_skew_warning_threshold_seconds: Math.max(30, parseInt(fd.get("clock_skew_warning_threshold_seconds") || "120", 10) || 120),
-      allow_member_request_corrections: form.querySelector('[name="allow_member_request_corrections"]')?.checked ?? true,
+      allow_member_request_corrections: false,
       allow_member_request_leaves: form.querySelector('[name="allow_member_request_leaves"]')?.checked ?? true,
     };
 
@@ -2640,11 +2638,9 @@
     }
   }
 
-  // 16. Pengajuan Koreksi Absensi Pribadi oleh Anggota (Terkunci kecuali diaktifkan pengelola)
+  // 16. Pengajuan Koreksi Absensi Pribadi (Dikunci Khusus Pengelola)
   async function handleMemberCorrection(btn) {
-    if (!Core.isManager() && !Core.state.settings.allow_member_request_corrections) {
-      Core.assertManagerAccess("SubmitMemberCorrection");
-    }
+    Core.assertManagerAccess("SubmitMemberCorrection");
     const form = document.getElementById("form-member-corr");
     if (!form) return;
 
@@ -3121,9 +3117,7 @@
       }
 
       if (action === "open-member-corr") {
-        if (!Core.isManager() && !Core.state.settings.allow_member_request_corrections) {
-          Core.assertManagerAccess("OpenMemberCorrection");
-        }
+        Core.assertManagerAccess("OpenMemberCorrection");
         const recordId = btn.getAttribute("data-id");
         uiState.modal = { type: "member_corr", recordId };
         render();

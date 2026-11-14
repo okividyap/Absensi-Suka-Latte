@@ -522,7 +522,7 @@
           </button>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             ${
-              allowManagerEdit
+              allowManagerEdit && Core.isManager()
                 ? `<button class="btn btn-primary btn-sm" data-action="open-admin-edit-att" data-id="${esc(rec.id)}">✏️ Edit</button>`
                 : ""
             }
@@ -786,13 +786,15 @@
       <div class="hero-banner">
         <div class="grid-12" style="align-items:center;">
           <div class="col-7">
-            <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:10px;">
-              ⏱ Jadwal Hari Ini • ${esc(parts.dateString)} (${esc(tz)})
-            </span>
-            <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;letter-spacing:-0.02em;">Selamat Bertugas, ${esc(u.full_name)}</h1>
-            <p style="font-size:12.5px;color:var(--coffee-200);margin-bottom:12px;">
-              ID: <strong class="mono" style="color:var(--gold-200);">${esc(u.employee_code)}</strong> •
-              Outlet: <strong style="color:var(--white);">${esc(myOutlet ? myOutlet.name : "-")}</strong> •
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+              <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);">
+                ☕ ${esc(parts.dateString)} (${esc(tz)})
+              </span>
+              <span class="badge badge-coffee mono" style="background:rgba(255,255,255,0.08);color:var(--gold-200);">ID: ${esc(u.employee_code)}</span>
+            </div>
+            <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Selamat Bertugas, ${esc(u.full_name)}</h1>
+            <p style="font-size:12px;color:var(--coffee-200);margin-bottom:12px;">
+              Outlet: <strong style="color:var(--white);">${esc(myOutlet ? myOutlet.name : "Suka Latte")}</strong> •
               Shift: <strong style="color:var(--white);">${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
             </p>
             ${renderShiftSelectorHtml(s.shifts, selectedShiftId, !canCheckIn)}
@@ -800,15 +802,21 @@
               ${
                 canCheckIn
                   ? `<button class="btn btn-emerald hero-cta-btn" data-action="open-camera" data-mode="check_in">
-                      📷 Check In Masuk (${esc(myShift ? myShift.name : "Shift")})
-                    </button>`
+                      📷 Check In Masuk Sekarang (${esc(myShift ? myShift.name : "Shift")})
+                    </button>
+                    <div style="font-size:11px;color:var(--coffee-300);text-align:center;margin-top:-2px;margin-bottom:4px;">
+                      Ambil foto selfie di area outlet untuk verifikasi kehadiran
+                    </div>`
                   : ""
               }
               ${
                 canCheckOut
                   ? `<button class="btn btn-amber hero-cta-btn" data-action="open-camera" data-mode="check_out">
-                      📷 Check Out Pulang (${esc(myShift ? myShift.name : "Shift")})
-                    </button>`
+                      📷 Check Out Pulang Sekarang (${esc(myShift ? myShift.name : "Shift")})
+                    </button>
+                    <div style="font-size:11px;color:var(--coffee-300);text-align:center;margin-top:-2px;margin-bottom:4px;">
+                      Konfirmasi selfie pulang di akhir jam kerja bertugas
+                    </div>`
                   : ""
               }
               ${
@@ -816,18 +824,19 @@
                   ? `<div class="hero-completed-card">
                       <div class="hero-completed-icon">✓</div>
                       <div>
-                        <div class="hero-completed-title">Absensi Hari Ini Lengkap &amp; Selesai</div>
+                        <div class="hero-completed-title">Presensi Hari Ini Lengkap &amp; Selesai</div>
                         <div class="hero-completed-desc">
-                          Check In: <strong>${Core.formatOperationalDateTime(myToday.check_in_at, tz, false).slice(12, 17)}</strong> • 
-                          Check Out: <strong>${Core.formatOperationalDateTime(myToday.check_out_at, tz, false).slice(12, 17)}</strong> • 
-                          Durasi: <strong>${Core.formatDurationMinutes(myToday.work_duration_minutes)}</strong>
+                          Masuk: <strong>${Core.formatOperationalDateTime(myToday.check_in_at, tz, false).slice(12, 17)}</strong> • 
+                          Pulang: <strong>${Core.formatOperationalDateTime(myToday.check_out_at, tz, false).slice(12, 17)}</strong> • 
+                          Durasi: <strong>${Core.formatDurationMinutes(myToday.work_duration_minutes)}</strong><br/>
+                          <span style="color:#6ee7b7;font-weight:700;">Terima kasih atas kerja keras Anda hari ini! ☕</span>
                         </div>
                       </div>
                     </div>`
                   : ""
               }
               <div class="hero-secondary-btns">
-                <button class="btn btn-gold hero-sub-btn" data-action="open-member-leave">
+                <button class="btn btn-gold hero-sub-btn" data-action="open-member-leave" title="Ajukan izin tidak masuk kerja atau cuti">
                   📅 Ajukan Izin / Cuti
                 </button>
                 <button class="btn btn-outline hero-sub-btn" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);" data-action="nav" data-target="riwayat_saya">
@@ -2193,13 +2202,19 @@
                 <label class="form-label">Batas Peringatan Selisih Jam Perangkat vs Server (Detik)</label>
                 <input type="number" class="form-input" name="clock_skew_warning_threshold_seconds" min="30" max="3600" value="${cfg.clock_skew_warning_threshold_seconds || 120}" />
               </div>
-              <label style="display:flex;gap:10px;align-items:center;font-size:12.5px;">
-                <input type="checkbox" name="allow_member_request_corrections" ${cfg.allow_member_request_corrections ? "checked" : ""} />
-                <span>Izinkan Anggota mengajukan koreksi absensi pribadi</span>
-              </label>
+              <div class="card-subtle" style="font-size:12px;background:var(--coffee-50);border:1px solid var(--coffee-200);border-radius:10px;padding:10px 12px;margin-top:6px;">
+                <div style="font-weight:800;color:var(--coffee-900);margin-bottom:3px;">
+                  🔒 Hak Akses Edit Kehadiran
+                </div>
+                <div style="color:var(--stone-600);line-height:1.5;">
+                  • <strong>Edit &amp; Hapus Absensi:</strong> Khusus <strong>Super Admin &amp; Admin</strong>.<br/>
+                  • <strong>Anggota Biasa:</strong> Hanya dapat melakukan absensi dan mengajukan izin/sakit/cuti (tidak dapat mengedit catatan kehadiran pribadi).
+                </div>
+                <input type="hidden" name="allow_member_request_corrections" value="false" />
+              </div>
               <label style="display:flex;gap:10px;align-items:center;font-size:12.5px;">
                 <input type="checkbox" name="allow_member_request_leaves" ${cfg.allow_member_request_leaves ? "checked" : ""} />
-                <span>Izinkan Anggota mengajukan izin / sakit / cuti dari aplikasi</span>
+                <span>Izinkan Anggota mengajukan izin / sakit / cuti dari aplikasi (bisa dari luar outlet)</span>
               </label>
             </div>
           </div>
