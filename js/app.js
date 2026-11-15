@@ -30,7 +30,11 @@
     scheduleMonthOffset: 0,
     scheduleTab: "mine", // "mine" | "team" | "calendar"
     scheduleEmployeeFilter: "all",
+    scheduleDeptFilter: "all", // "all" | "bar" | "kitchen" | "manager"
     prefilledScheduleDate: null,
+    cpDeptFilter: "all", // "all" | "bar" | "kitchen" | "manager"
+    quickScheduleMonthOffset: 0,
+    quickScheduleDeptFilter: "all",
 
     // Filter Arsip & Riwayat
     archivePeriodFilter: "all",
@@ -1486,9 +1490,17 @@
                     <input class="form-input" name="position_title" value="${esc(emp.position_title)}" required />
                   </div>
                   <div class="form-group">
-                    <label class="form-label">No. Telepon / WhatsApp</label>
-                    <input class="form-input" name="phone" value="${esc(emp.phone || "")}" />
+                    <label class="form-label">Divisi / Stasiun Kerja *</label>
+                    <select class="form-select" name="department" required>
+                      <option value="bar" ${emp.department === "bar" ? "selected" : ""}>🍹 Bar / Barista</option>
+                      <option value="kitchen" ${emp.department === "kitchen" ? "selected" : ""}>🍳 Kitchen / Dapur</option>
+                      <option value="manager" ${emp.department === "manager" ? "selected" : ""}>👔 Manajer / Supervisor</option>
+                    </select>
                   </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">No. Telepon / WhatsApp</label>
+                  <input class="form-input" name="phone" value="${esc(emp.phone || "")}" />
                 </div>
                 <div class="grid-2" style="gap:10px;">
                   <div class="form-group">
@@ -1925,36 +1937,69 @@
       `;
     }
 
-    // I. MODAL ATUR CEPAT JADWAL 1 MINGGU SEKALIGUS
-    if (uiState.modal.type === "quick_weekly_schedule") {
-      Core.assertManagerAccess("ModalQuickWeeklySchedule");
-      const offset = uiState.scheduleWeekOffset || 0;
+    // I. MODAL ATUR CEPAT JADWAL 1 BULAN PENUH (MONTHLY ROSTER BULK)
+    if (uiState.modal.type === "quick_weekly_schedule" || uiState.modal.type === "quick_monthly_schedule") {
+      Core.assertManagerAccess("ModalQuickMonthlySchedule");
+      const offset = uiState.quickScheduleMonthOffset ?? (uiState.scheduleMonthOffset || 0);
       const tz = s.settings.operational_timezone || "Asia/Makassar";
       const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
-      const week = Views.getWeekCalendarRange ? Views.getWeekCalendarRange(parts.dateString, offset) : { days: [], label: "" };
+      const month = Views.getMonthCalendarRange ? Views.getMonthCalendarRange(parts.dateString, offset) : { days: [], label: "" };
       const activeEmployees = s.profiles.filter((p) => p.status === "active" && p.first_login_approved);
-      const targetEmpId = uiState.modal.employee_id || (activeEmployees[0]?.id ?? "");
+      const qDept = uiState.quickScheduleDeptFilter || "all";
+      const filteredEmployees = qDept === "all" ? activeEmployees : activeEmployees.filter((p) => (p.department || "bar") === qDept);
+      const targetEmpId = uiState.modal.employee_id || (filteredEmployees[0]?.id ?? activeEmployees[0]?.id ?? "");
+
+      // Hitung jumlah per divisi untuk tombol filter
+      const barCount = activeEmployees.filter((p) => (p.department || "bar") === "bar").length;
+      const kitchenCount = activeEmployees.filter((p) => p.department === "kitchen").length;
+      const managerCount = activeEmployees.filter((p) => p.department === "manager").length;
 
       return `
         <div class="modal-backdrop">
-          <div class="modal-window lg">
-            <div class="modal-header">
+          <div class="modal-window lg" style="max-height:90vh;display:flex;flex-direction:column;">
+            <div class="modal-header" style="flex-shrink:0;">
               <div>
-                <h3 style="font-size:16px;font-weight:800;margin:0;">⚡ Atur Cepat Jadwal 1 Minggu Sekaligus</h3>
-                <div style="font-size:12px;color:var(--coffee-700);margin-top:2px;">Periode: ${esc(week.label)}</div>
+                <h3 style="font-size:16.5px;font-weight:800;margin:0;">⚡ Atur Cepat Jadwal 1 Bulan Penuh</h3>
+                <div style="font-size:12px;color:var(--coffee-700);margin-top:2px;">
+                  Periode Roster: <strong>${esc(month.label)} (${month.days.length} Hari)</strong>
+                </div>
               </div>
-              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <button type="button" class="btn btn-outline btn-xs" data-action="quick-month-prev">‹ Bulan Lalu</button>
+                <button type="button" class="btn btn-outline btn-xs" data-action="quick-month-next">Bulan Depan ›</button>
+                <button class="btn btn-outline btn-sm" data-action="close-modal" style="margin-left:6px;">✕ Tutup</button>
+              </div>
             </div>
-            <div class="modal-body">
+            <div class="modal-body" style="overflow-y:auto;flex:1;padding-right:8px;">
               <form id="form-quick-weekly" style="display:flex;flex-direction:column;gap:14px;">
-                <div class="form-group" style="margin:0;">
-                  <label class="form-label" style="font-weight:700;font-size:12px;">Pilih Karyawan</label>
-                  <select name="employee_id" class="form-input" required data-action="change-quick-weekly-emp">
-                    ${activeEmployees
+                <input type="hidden" name="total_days" value="${month.days.length}" />
+
+                <!-- PILIH DIVISI & KARYAWAN -->
+                <div class="card-subtle" style="padding:10px 12px;background:var(--stone-50);border:1px solid var(--stone-200);">
+                  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                    <label class="form-label" style="font-weight:700;font-size:12px;margin:0;">Pilih Karyawan:</label>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                      <button type="button" class="btn btn-xs ${qDept === 'all' ? 'btn-primary' : 'btn-outline'}" data-action="filter-quick-modal-dept" data-dept="all" style="padding:2px 7px;font-size:10.5px;">
+                        Semua (${activeEmployees.length})
+                      </button>
+                      <button type="button" class="btn btn-xs ${qDept === 'bar' ? 'btn-emerald' : 'btn-outline'}" data-action="filter-quick-modal-dept" data-dept="bar" style="padding:2px 7px;font-size:10.5px;${qDept === 'bar' ? '' : 'color:#065f46;border-color:#a7f3d0;'}">
+                        🍹 Bar (${barCount})
+                      </button>
+                      <button type="button" class="btn btn-xs ${qDept === 'kitchen' ? 'btn-amber' : 'btn-outline'}" data-action="filter-quick-modal-dept" data-dept="kitchen" style="padding:2px 7px;font-size:10.5px;${qDept === 'kitchen' ? '' : 'color:#9a3412;border-color:#fed7aa;'}">
+                        🍳 Kitchen (${kitchenCount})
+                      </button>
+                      <button type="button" class="btn btn-xs ${qDept === 'manager' ? 'btn-primary' : 'btn-outline'}" data-action="filter-quick-modal-dept" data-dept="manager" style="padding:2px 7px;font-size:10.5px;${qDept === 'manager' ? '' : 'color:#92400e;border-color:#fde68a;'}">
+                        👔 Manajer (${managerCount})
+                      </button>
+                    </div>
+                  </div>
+
+                  <select name="employee_id" class="form-input" required data-action="change-quick-weekly-emp" style="font-size:13px;">
+                    ${filteredEmployees
                       .map(
                         (p) => `
                       <option value="${p.id}" ${targetEmpId === p.id ? "selected" : ""}>
-                        ${esc(p.full_name)} [${esc(p.employee_code || "KARYAWAN")}] - ${esc(p.role)}
+                        ${Views.getDepartmentLabel ? Views.getDepartmentLabel(p.department) : p.department} • ${esc(p.full_name)} [${esc(p.employee_code || "KARYAWAN")}] - ${esc(p.position_title || p.role)}
                       </option>
                     `
                       )
@@ -1962,37 +2007,60 @@
                   </select>
                 </div>
 
-                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-                  <span style="font-size:11.5px;font-weight:700;color:var(--stone-600);">Pintasan Cepat:</span>
-                  <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="all-morning" style="padding:3px 8px;font-size:11px;">
-                    Semua Pagi
-                  </button>
-                  <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="all-afternoon" style="padding:3px 8px;font-size:11px;">
-                    Semua Siang
-                  </button>
-                  <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="mon-fri-morning" style="padding:3px 8px;font-size:11px;">
-                    Senin–Jumat Pagi, Weekend Libur
-                  </button>
+                <!-- PINTASAN CEPAT SEBULAN PENUH -->
+                <div style="background:linear-gradient(135deg, #fffbeb, #fef3c7);border:1px solid #fde68a;border-radius:10px;padding:10px 12px;">
+                  <div style="font-size:11.5px;font-weight:800;color:#92400e;margin-bottom:6px;">
+                    ⚡ Pintasan Cepat Jadwal 1 Bulan (${month.label}):
+                  </div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                    <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="all-morning" style="background:#fff;padding:4px 8px;font-size:11px;font-weight:700;">
+                      🌅 Semua Shift Pagi
+                    </button>
+                    <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="all-afternoon" style="background:#fff;padding:4px 8px;font-size:11px;font-weight:700;">
+                      🌇 Semua Shift Siang
+                    </button>
+                    <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="mon-fri-morning" style="background:#fff;padding:4px 8px;font-size:11px;font-weight:700;">
+                      💼 Senin–Jumat Pagi, Libur Weekend
+                    </button>
+                    <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="pattern-5-2" style="background:#fff;padding:4px 8px;font-size:11px;font-weight:700;">
+                      🔄 Pola 5 Kerja 2 Libur
+                    </button>
+                    <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="weekend-off" style="background:#fff;padding:4px 8px;font-size:11px;color:var(--rose-700);border-color:#fca5a5;">
+                      🏖️ Set Libur Weekend (Sabtu &amp; Minggu)
+                    </button>
+                  </div>
                 </div>
 
-                <div style="display:flex;flex-direction:column;gap:8px;">
-                  ${week.days
+                <!-- DAFTAR HARI 1 BULAN PENUH -->
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  ${month.days
                     .map((d, idx) => {
                       const existing = Core.getScheduleForDate(d.dateStr, targetEmpId);
                       const isToday = d.dateStr === parts.dateString;
+                      const isWeekend = d.dayOfWeek === 0 || d.dayOfWeek === 6;
                       const defaultShiftVal = existing?.schedule_type === "off" ? "off" : (existing?.shift_id || s.shifts[0]?.id || "");
 
+                      // Tampilkan pemisah minggu jika awal minggu (Senin) atau tanggal 1
+                      const isWeekHeader = idx === 0 || d.dayOfWeek === 1;
+                      const weekNumber = Math.floor(idx / 7) + 1;
+
                       return `
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--stone-50);border-radius:10px;border:1px solid var(--stone-200);gap:8px;flex-wrap:wrap;">
+                        ${isWeekHeader ? `
+                          <div style="font-size:11px;font-weight:800;color:var(--coffee-800);background:var(--coffee-100);padding:4px 10px;border-radius:6px;margin-top:6px;">
+                            📅 Minggu ke-${weekNumber} (${month.label})
+                          </div>
+                        ` : ''}
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:${isToday ? "#fef3c7" : isWeekend ? "#f8fafc" : "var(--stone-50)"};border-radius:8px;border:1px solid ${isToday ? "var(--amber-400)" : "var(--stone-200)"};gap:8px;flex-wrap:wrap;">
                           <div style="min-width:140px;">
                             <input type="hidden" name="day_date_${idx}" value="${d.dateStr}" />
                             <div style="display:flex;align-items:center;gap:6px;">
-                              <strong style="font-size:13px;color:var(--stone-900);">${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)}</strong>
-                              ${isToday ? `<span class="badge badge-amber" style="font-size:9.5px;">HARI INI</span>` : ""}
+                              <strong style="font-size:12.5px;color:var(--stone-900);">${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)}</strong>
+                              ${isToday ? `<span class="badge badge-amber" style="font-size:9px;padding:1px 5px;">HARI INI</span>` : ""}
+                              ${isWeekend && !isToday ? `<span class="badge" style="background:#e2e8f0;color:#475569;font-size:9px;padding:1px 4px;">WEEKEND</span>` : ""}
                             </div>
                           </div>
                           <div style="flex:1;min-width:180px;">
-                            <select name="day_shift_${idx}" class="form-input quick-day-select" data-day-index="${idx}" style="font-size:12.5px;padding:6px 10px;">
+                            <select name="day_shift_${idx}" class="form-input quick-day-select" data-day-index="${idx}" data-day-of-week="${d.dayOfWeek}" style="font-size:12px;padding:5px 8px;">
                               ${s.shifts
                                 .map(
                                   (sh) => `
@@ -2013,9 +2081,11 @@
                     .join("")}
                 </div>
 
-                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;position:sticky;bottom:0;background:white;padding:10px 0;border-top:1px solid var(--stone-200);">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="submit" class="btn btn-primary">💾 Terapkan Jadwal 1 Minggu</button>
+                  <button type="submit" class="btn btn-primary" style="font-weight:700;">
+                    💾 Terapkan Jadwal 1 Bulan Penuh (${month.days.length} Hari)
+                  </button>
                 </div>
               </form>
             </div>
@@ -2793,7 +2863,7 @@
   }
 
   async function handleSaveQuickWeeklySchedule(btn) {
-    Core.assertManagerAccess("SaveQuickWeeklySchedule");
+    Core.assertManagerAccess("SaveQuickMonthlySchedule");
     const form = document.getElementById("form-quick-weekly");
     if (!form) return;
     const fd = new FormData(form);
@@ -2803,37 +2873,48 @@
       return;
     }
 
+    const totalDays = Number(fd.get("total_days") || 31);
     const daysData = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < totalDays; i++) {
       const date = fd.get(`day_date_${i}`);
+      if (!date) continue;
       const shiftValue = fd.get(`day_shift_${i}`);
       const isOff = shiftValue === "off";
       daysData.push({
         date,
         schedule_type: isOff ? "off" : "work",
         shift_id: isOff ? null : shiftValue,
-        notes: isOff ? "Libur mingguan" : null,
+        notes: isOff ? "Libur bulanan" : null,
       });
+    }
+
+    if (daysData.length === 0) {
+      showBanner(false, "Tidak ada data tanggal yang dipilih.");
+      return;
     }
 
     const origText = btn ? btn.innerHTML : "";
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = "⏳ Menerapkan 7 Hari...";
+      btn.innerHTML = `⏳ Menerapkan ${daysData.length} Hari...`;
     }
 
     try {
-      await Core.bulkSaveWeeklySchedule(employeeId, daysData);
+      await Core.bulkSaveMonthlySchedule(employeeId, daysData);
       uiState.modal = null;
       render();
       const emp = Core.state.profiles.find((p) => p.id === employeeId);
-      showBanner(true, `Jadwal 1 minggu untuk ${emp?.full_name || "karyawan"} berhasil diterapkan!`);
+      showBanner(
+        true,
+        `✓ Jadwal 1 bulan penuh (${daysData.length} hari) untuk ${emp?.full_name || "karyawan"} berhasil diterapkan!`,
+        6000
+      );
     } catch (err) {
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = origText || "💾 Terapkan Jadwal 1 Minggu";
+        btn.innerHTML = origText || `💾 Terapkan Jadwal 1 Bulan Penuh (${daysData.length} Hari)`;
       }
-      showBanner(false, "Gagal menyimpan jadwal mingguan: " + (err.message || err));
+      showBanner(false, "Gagal menyimpan jadwal bulanan: " + (err.message || err));
     }
   }
 
@@ -3333,6 +3414,7 @@
         full_name: fullName,
         phone,
         position_title: pos,
+        department: fd.get("department") || "bar",
         outlet_id: fd.get("outlet_id") || null,
         shift_id: fd.get("shift_id") || null,
         created_by: s.currentUser.id,
@@ -3393,6 +3475,7 @@
         p_outlet_id: outletId,
         p_shift_id: shiftId,
         p_note: "Disetujui oleh Pengelola",
+        p_department: fd.get("department") || "bar",
       });
       if (error) throw error;
       await Core.refreshAllData();
@@ -3486,6 +3569,7 @@
         p_outlet_id: fd.get("outlet_id") || null,
         p_shift_id: fd.get("shift_id") || null,
         p_status: statusVal,
+        p_department: fd.get("department") || "bar",
       });
       if (error) throw error;
       uiState.modal = null;
@@ -4181,6 +4265,36 @@
         return;
       }
 
+      if (action === "quick-month-prev") {
+        uiState.quickScheduleMonthOffset = (uiState.quickScheduleMonthOffset || 0) - 1;
+        render();
+        return;
+      }
+
+      if (action === "quick-month-next") {
+        uiState.quickScheduleMonthOffset = (uiState.quickScheduleMonthOffset || 0) + 1;
+        render();
+        return;
+      }
+
+      if (action === "filter-quick-modal-dept") {
+        uiState.quickScheduleDeptFilter = btn.getAttribute("data-dept") || "all";
+        render();
+        return;
+      }
+
+      if (action === "filter-schedule-dept") {
+        uiState.scheduleDeptFilter = btn.getAttribute("data-dept") || "all";
+        render();
+        return;
+      }
+
+      if (action === "filter-cp-dept") {
+        uiState.cpDeptFilter = btn.getAttribute("data-dept") || "all";
+        render();
+        return;
+      }
+
       if (action === "quick-fill-week") {
         const preset = btn.getAttribute("data-preset");
         const selects = document.querySelectorAll(".quick-day-select");
@@ -4189,15 +4303,26 @@
         const afternoonShift = s.shifts.find((sh) => sh.name.toLowerCase().includes("siang")) || s.shifts[1] || s.shifts[0];
 
         selects.forEach((sel, idx) => {
+          const dayOfWeek = Number(sel.getAttribute("data-day-of-week") || "0");
           if (preset === "all-morning" && morningShift) {
             sel.value = morningShift.id;
           } else if (preset === "all-afternoon" && afternoonShift) {
             sel.value = afternoonShift.id;
           } else if (preset === "mon-fri-morning") {
-            if (idx >= 5) {
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
               sel.value = "off";
             } else if (morningShift) {
               sel.value = morningShift.id;
+            }
+          } else if (preset === "pattern-5-2") {
+            if (idx % 7 === 5 || idx % 7 === 6) {
+              sel.value = "off";
+            } else if (morningShift) {
+              sel.value = morningShift.id;
+            }
+          } else if (preset === "weekend-off") {
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+              sel.value = "off";
             }
           }
         });

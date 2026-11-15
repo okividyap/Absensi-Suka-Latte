@@ -849,6 +849,24 @@
     };
   }
 
+  function getDepartmentBadge(dept) {
+    const d = String(dept || "bar").toLowerCase();
+    if (d === "kitchen") {
+      return `<span class="badge" style="background:#ffedd5;color:#9a3412;border:1px solid #fed7aa;font-weight:700;">🍳 Kitchen</span>`;
+    }
+    if (d === "manager") {
+      return `<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:700;">👔 Manajer</span>`;
+    }
+    return `<span class="badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-weight:700;">🍹 Bar</span>`;
+  }
+
+  function getDepartmentLabel(dept) {
+    const d = String(dept || "bar").toLowerCase();
+    if (d === "kitchen") return "🍳 Kitchen";
+    if (d === "manager") return "👔 Manajer";
+    return "🍹 Bar";
+  }
+
   function getColleaguesForSchedule(dateStr, shiftId, currentUserId) {
     const s = Core.state;
     if (!dateStr || !shiftId) return [];
@@ -870,6 +888,7 @@
         id: sc.employee_id,
         name: emp?.full_name || "Karyawan",
         role: emp?.role || "member",
+        department: emp?.department || "bar",
         code: emp?.employee_code || "",
         notes: sc.notes,
         profile: emp,
@@ -1447,7 +1466,7 @@
         subTab === "mine"
           ? renderMemberOwnScheduleList(month, parts.dateString, u, s, tz)
           : subTab === "team"
-          ? renderMemberTeamScheduleList(month, parts.dateString, u, s)
+          ? renderMemberTeamScheduleList(month, parts.dateString, u, s, uiState)
           : subTab === "calendar"
           ? renderMemberMonthCalendarGrid(month, parts.dateString, u.id, s)
           : renderMemberShiftSwapsView(u, s, tz)
@@ -1559,17 +1578,50 @@
     `;
   }
 
-  function renderMemberTeamScheduleList(month, todayDateStr, u, s) {
+  function renderMemberTeamScheduleList(month, todayDateStr, u, s, uiState = {}) {
     const activeProfiles = s.profiles.filter(
       (p) => p.status === "active" && p.first_login_approved
     );
+    const deptFilter = uiState?.scheduleDeptFilter || "all";
+
+    const allMonthScheds = s.workSchedules.filter(
+      (sc) => sc.schedule_date >= month.startDateStr && sc.schedule_date <= month.endDateStr
+    );
+    const barCount = allMonthScheds.filter((sc) => {
+      const p = activeProfiles.find((x) => x.id === sc.employee_id) || s.profiles.find((x) => x.id === sc.employee_id);
+      return (p?.department || "bar") === "bar";
+    }).length;
+    const kitchenCount = allMonthScheds.filter((sc) => {
+      const p = activeProfiles.find((x) => x.id === sc.employee_id) || s.profiles.find((x) => x.id === sc.employee_id);
+      return p?.department === "kitchen";
+    }).length;
 
     return `
+      <!-- TAB FILTER 2 JADWAL: TIM BAR VS TIM KITCHEN -->
+      <div class="tab-pills" style="margin-bottom:14px;gap:6px;flex-wrap:wrap;">
+        <button class="tab-pill ${deptFilter === 'all' ? 'active' : ''}" data-action="filter-schedule-dept" data-dept="all">
+          👥 Semua Tim (${allMonthScheds.length})
+        </button>
+        <button class="tab-pill ${deptFilter === 'bar' ? 'active' : ''}" data-action="filter-schedule-dept" data-dept="bar" style="${deptFilter === 'bar' ? '' : 'color:#065f46;'}">
+          🍹 Tim Bar (${barCount})
+        </button>
+        <button class="tab-pill ${deptFilter === 'kitchen' ? 'active' : ''}" data-action="filter-schedule-dept" data-dept="kitchen" style="${deptFilter === 'kitchen' ? '' : 'color:#9a3412;'}">
+          🍳 Tim Kitchen (${kitchenCount})
+        </button>
+      </div>
+
       <div style="display:flex;flex-direction:column;gap:12px;">
         ${month.days
           .map((d) => {
             const isToday = d.dateStr === todayDateStr;
-            const dayScheds = s.workSchedules.filter((x) => x.schedule_date === d.dateStr);
+            let dayScheds = s.workSchedules.filter((x) => x.schedule_date === d.dateStr);
+
+            if (deptFilter !== "all") {
+              dayScheds = dayScheds.filter((sc) => {
+                const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
+                return (emp?.department || "bar") === deptFilter;
+              });
+            }
 
             // Shift user aktif hari ini
             const mySched = Core.getScheduleForDate(d.dateStr, u.id);
@@ -1585,6 +1637,37 @@
               return sc.schedule_type === "work" && sh && sh.name.toLowerCase().includes("siang");
             });
             const offScheds = dayScheds.filter((sc) => sc.schedule_type === "off");
+
+            const renderTeamMemberItem = (sc, shiftType) => {
+              const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
+              const isMe = sc.employee_id === u.id;
+              const isMyPartner = !myIsOff && myShift && myShift.name.toLowerCase().includes(shiftType) && !isMe;
+              const bg = isMe
+                ? (shiftType === "pagi" ? "#fef9c3" : shiftType === "siang" ? "#e0e7ff" : "#ffe4e6")
+                : isMyPartner
+                ? (shiftType === "pagi" ? "#fef3c7" : "#ede9fe")
+                : "transparent";
+
+              return `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11.5px;padding:4px 6px;border-radius:6px;background:${bg};">
+                  ${renderAvatarHtml(emp)}
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(emp?.full_name || "Karyawan")}</span>
+                      ${getDepartmentBadge(emp?.department)}
+                      ${isMe ? `<span class="badge badge-amber" style="font-size:9.5px;padding:1px 4px;">(Anda)</span>` : ""}
+                    </div>
+                    ${
+                      isMyPartner
+                        ? `<div style="font-size:10px;color:${shiftType === 'siang' ? '#4338ca' : '#b45309'};font-weight:700;">🤝 Partner Shift Anda</div>`
+                        : sc.notes
+                        ? `<div style="font-size:10px;color:var(--stone-500);">${esc(sc.notes)}</div>`
+                        : ""
+                    }
+                  </div>
+                </div>
+              `;
+            };
 
             return `
               <div class="schedule-roster-day-card ${isToday ? "is-today" : ""}">
@@ -1613,31 +1696,7 @@
                     </div>
                     ${
                       morningScheds.length > 0
-                        ? morningScheds
-                            .map((sc) => {
-                              const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
-                              const isMe = sc.employee_id === u.id;
-                              const isMyPartner = !myIsOff && myShift && myShift.name.toLowerCase().includes("pagi") && !isMe;
-                              return `
-                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11.5px;padding:4px 6px;border-radius:6px;background:${isMe ? "#fef9c3" : isMyPartner ? "#fef3c7" : "transparent"};">
-                                  ${renderAvatarHtml(emp)}
-                                  <div style="flex:1;min-width:0;">
-                                    <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                                      ${esc(emp?.full_name || "Karyawan")}
-                                      ${isMe ? `<span class="badge badge-amber" style="font-size:9.5px;padding:1px 4px;margin-left:2px;">(Anda)</span>` : ""}
-                                    </div>
-                                    ${
-                                      isMyPartner
-                                        ? `<div style="font-size:10px;color:#b45309;font-weight:700;">🤝 Partner Shift Anda</div>`
-                                        : sc.notes
-                                        ? `<div style="font-size:10px;color:var(--stone-500);">${esc(sc.notes)}</div>`
-                                        : ""
-                                    }
-                                  </div>
-                                </div>
-                              `;
-                            })
-                            .join("")
+                        ? morningScheds.map((sc) => renderTeamMemberItem(sc, "pagi")).join("")
                         : `<div style="font-size:11px;color:var(--stone-400);font-style:italic;">Belum ada jadwal</div>`
                     }
                   </div>
@@ -1650,31 +1709,7 @@
                     </div>
                     ${
                       afternoonScheds.length > 0
-                        ? afternoonScheds
-                            .map((sc) => {
-                              const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
-                              const isMe = sc.employee_id === u.id;
-                              const isMyPartner = !myIsOff && myShift && myShift.name.toLowerCase().includes("siang") && !isMe;
-                              return `
-                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11.5px;padding:4px 6px;border-radius:6px;background:${isMe ? "#e0e7ff" : isMyPartner ? "#ede9fe" : "transparent"};">
-                                  ${renderAvatarHtml(emp)}
-                                  <div style="flex:1;min-width:0;">
-                                    <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                                      ${esc(emp?.full_name || "Karyawan")}
-                                      ${isMe ? `<span class="badge badge-coffee" style="font-size:9.5px;padding:1px 4px;margin-left:2px;">(Anda)</span>` : ""}
-                                    </div>
-                                    ${
-                                      isMyPartner
-                                        ? `<div style="font-size:10px;color:#4338ca;font-weight:700;">🤝 Partner Shift Anda</div>`
-                                        : sc.notes
-                                        ? `<div style="font-size:10px;color:var(--stone-500);">${esc(sc.notes)}</div>`
-                                        : ""
-                                    }
-                                  </div>
-                                </div>
-                              `;
-                            })
-                            .join("")
+                        ? afternoonScheds.map((sc) => renderTeamMemberItem(sc, "siang")).join("")
                         : `<div style="font-size:11px;color:var(--stone-400);font-style:italic;">Belum ada jadwal</div>`
                     }
                   </div>
@@ -1687,24 +1722,7 @@
                     </div>
                     ${
                       offScheds.length > 0
-                        ? offScheds
-                            .map((sc) => {
-                              const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
-                              const isMe = sc.employee_id === u.id;
-                              return `
-                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11.5px;padding:4px 6px;border-radius:6px;background:${isMe ? "#ffe4e6" : "transparent"};">
-                                  ${renderAvatarHtml(emp)}
-                                  <div style="flex:1;min-width:0;">
-                                    <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                                      ${esc(emp?.full_name || "Karyawan")}
-                                      ${isMe ? `<span class="badge badge-rose" style="font-size:9.5px;padding:1px 4px;margin-left:2px;">(Anda)</span>` : ""}
-                                    </div>
-                                    ${sc.notes ? `<div style="font-size:10px;color:var(--stone-500);">${esc(sc.notes)}</div>` : ""}
-                                  </div>
-                                </div>
-                              `;
-                            })
-                            .join("")
+                        ? offScheds.map((sc) => renderTeamMemberItem(sc, "off")).join("")
                         : `<div style="font-size:11px;color:var(--stone-400);font-style:italic;">Tidak ada</div>`
                     }
                   </div>
@@ -2008,6 +2026,7 @@
     const offset = uiState.scheduleMonthOffset || 0;
     const month = getMonthCalendarRange(parts.dateString, offset);
     const empFilter = uiState.scheduleEmployeeFilter || "all";
+    const deptFilter = uiState.scheduleDeptFilter || "all";
 
     const activeEmployees = s.profiles.filter(
       (p) => p.status === "active" && p.first_login_approved
@@ -2020,10 +2039,28 @@
       (sc) => sc.schedule_date >= monthStart && sc.schedule_date <= monthEnd
     );
 
-    const filteredSchedules =
-      empFilter === "all"
-        ? monthSchedules
-        : monthSchedules.filter((sc) => sc.employee_id === empFilter);
+    const filteredSchedules = monthSchedules.filter((sc) => {
+      if (empFilter !== "all" && sc.employee_id !== empFilter) return false;
+      if (deptFilter !== "all") {
+        const emp = s.profiles.find((p) => p.id === sc.employee_id);
+        const dept = emp?.department || "bar";
+        if (dept !== deptFilter) return false;
+      }
+      return true;
+    });
+
+    const barMonthCount = monthSchedules.filter((sc) => {
+      const p = s.profiles.find((x) => x.id === sc.employee_id);
+      return (p?.department || "bar") === "bar";
+    }).length;
+    const kitchenMonthCount = monthSchedules.filter((sc) => {
+      const p = s.profiles.find((x) => x.id === sc.employee_id);
+      return p?.department === "kitchen";
+    }).length;
+    const managerMonthCount = monthSchedules.filter((sc) => {
+      const p = s.profiles.find((x) => x.id === sc.employee_id);
+      return p?.department === "manager";
+    }).length;
 
     // Default tanggal untuk form jadwal
     const defaultDate = uiState.prefilledScheduleDate || parts.dateString;
@@ -2038,7 +2075,7 @@
           </span>
           <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Pengaturan Jadwal Kerja &amp; Shift Karyawan</h2>
           <p style="font-size:12px;color:var(--coffee-200);margin-bottom:14px;max-width:720px;">
-            Atur jadwal shift pagi, shift siang, atau hari libur (day off) untuk seluruh staf Suka Latte per bulan. Seluruh karyawan dapat melihat jadwal ini beserta nama rekan shift-nya di HP masing-masing.
+            Atur jadwal shift pagi, shift siang, atau hari libur (day off) untuk seluruh staf Suka Latte per bulan. Pisahkan jadwal antara Tim Bar dan Tim Kitchen agar terorganisir rapi di HP.
           </p>
 
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:rgba(12,7,4,0.6);border:1px solid rgba(218,175,118,0.25);border-radius:14px;padding:10px 14px;">
@@ -2069,27 +2106,43 @@
       }
 
       <!-- AKSI PINTAS & FILTER -->
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-        <button class="btn btn-amber" data-action="open-quick-weekly-modal" style="display:flex;align-items:center;gap:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+        <button class="btn btn-amber" data-action="open-quick-weekly-modal" style="display:flex;align-items:center;gap:6px;font-weight:700;">
           <span>⚡</span>
-          <span>Atur Cepat Jadwal 1 Minggu Sekaligus</span>
+          <span>Atur Cepat Jadwal 1 Bulan Penuh</span>
         </button>
 
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:12px;font-weight:700;color:var(--stone-600);">Filter Staf:</span>
-          <select class="form-input" data-action="filter-schedule-employee" style="max-width:200px;padding:6px 10px;font-size:12px;">
+          <select class="form-input" data-action="filter-schedule-employee" style="max-width:220px;padding:6px 10px;font-size:12px;">
             <option value="all" ${empFilter === "all" ? "selected" : ""}>👥 Semua Karyawan (${activeEmployees.length})</option>
             ${activeEmployees
               .map(
                 (emp) => `
               <option value="${emp.id}" ${empFilter === emp.id ? "selected" : ""}>
-                ${esc(emp.full_name)} (${esc(emp.role)})
+                ${getDepartmentLabel(emp.department)} • ${esc(emp.full_name)} (${esc(emp.role)})
               </option>
             `
               )
               .join("")}
           </select>
         </div>
+      </div>
+
+      <!-- FILTER TAB 2 JADWAL: TIM BAR VS TIM KITCHEN -->
+      <div class="tab-pills" style="margin-bottom:14px;gap:6px;flex-wrap:wrap;">
+        <button class="tab-pill ${deptFilter === 'all' ? 'active' : ''}" data-action="filter-schedule-dept" data-dept="all">
+          👥 Semua Jadwal (${monthSchedules.length})
+        </button>
+        <button class="tab-pill ${deptFilter === 'bar' ? 'active' : ''}" data-action="filter-schedule-dept" data-dept="bar" style="${deptFilter === 'bar' ? '' : 'color:#065f46;'}">
+          🍹 Jadwal Tim Bar (${barMonthCount})
+        </button>
+        <button class="tab-pill ${deptFilter === 'kitchen' ? 'active' : ''}" data-action="filter-schedule-dept" data-dept="kitchen" style="${deptFilter === 'kitchen' ? '' : 'color:#9a3412;'}">
+          🍳 Jadwal Tim Kitchen (${kitchenMonthCount})
+        </button>
+        <button class="tab-pill ${deptFilter === 'manager' ? 'active' : ''}" data-action="filter-schedule-dept" data-dept="manager" style="${deptFilter === 'manager' ? '' : 'color:#92400e;'}">
+          👔 Tim Manajer (${managerMonthCount})
+        </button>
       </div>
 
       <!-- FORM INPUT JADWAL HARIAN BARU -->
@@ -2115,7 +2168,7 @@
                   .map(
                     (p) => `
                   <option value="${p.id}" ${empFilter === p.id ? "selected" : ""}>
-                    ${esc(p.full_name)} [${esc(p.employee_code || "KARYAWAN")}] - ${esc(p.role)}
+                    ${getDepartmentLabel(p.department)} • ${esc(p.full_name)} [${esc(p.employee_code || "KARYAWAN")}] - ${esc(p.role)}
                   </option>
                 `
                   )
@@ -2212,6 +2265,65 @@
             const isToday = d.dateStr === parts.dateString;
             const dayScheds = filteredSchedules.filter((x) => x.schedule_date === d.dateStr);
 
+            const renderScheduleRow = (sc) => {
+              const emp = s.profiles.find((p) => p.id === sc.employee_id);
+              const sh = sc.shift_id ? s.shifts.find((x) => x.id === sc.shift_id) : null;
+              const isOff = sc.schedule_type === "off";
+              const outl = sc.outlet_id ? s.outlets.find((o) => o.id === sc.outlet_id) : s.outlets[0];
+
+              return `
+                <div class="schedule-emp-row" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--stone-50);border-radius:8px;border:1px solid var(--stone-200);flex-wrap:wrap;gap:8px;">
+                  <div style="display:flex;align-items:center;gap:8px;min-width:180px;">
+                    ${renderAvatarHtml(emp)}
+                    <div>
+                      <div style="font-size:12.5px;font-weight:700;color:var(--stone-900);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <span>${esc(emp?.full_name || "Karyawan")}</span>
+                        ${getDepartmentBadge(emp?.department)}
+                        <span style="font-size:10px;color:var(--stone-500);font-weight:normal;">(${esc(emp?.role || "member")})</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap;">
+                        ${
+                          isOff
+                            ? `<span class="badge badge-rose" style="font-size:10.5px;">🏖️ LIBUR / OFF</span>`
+                            : sh
+                            ? `<span class="badge badge-amber" style="font-size:10.5px;">🌅 ${esc(sh.name)} (${String(sh.start_time).slice(0, 5)}–${String(sh.end_time).slice(0, 5)})</span>`
+                            : `<span class="badge" style="background:#e2e8f0;font-size:10.5px;">📋 Shift Standar</span>`
+                        }
+                        <span style="font-size:10.5px;color:var(--stone-500);">• ${esc(outl?.name || "Outlet")}</span>
+                      </div>
+                      ${
+                        sc.notes
+                          ? `<div style="font-size:11px;color:var(--coffee-800);margin-top:2px;font-style:italic;">💬 "${esc(sc.notes)}"</div>`
+                          : ""
+                      }
+                    </div>
+                  </div>
+
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <button class="btn btn-outline btn-xs" data-action="open-edit-schedule" data-schedule-id="${sc.id}" style="padding:4px 8px;font-size:11px;">
+                      ✏️ Edit
+                    </button>
+                    <button class="btn btn-outline btn-xs" data-action="delete-schedule" data-schedule-id="${sc.id}" style="padding:4px 8px;font-size:11px;color:var(--rose-700);border-color:#fca5a5;">
+                      🗑️ Hapus
+                    </button>
+                  </div>
+                </div>
+              `;
+            };
+
+            const barDayScheds = dayScheds.filter((sc) => {
+              const emp = s.profiles.find((p) => p.id === sc.employee_id);
+              return (emp?.department || "bar") === "bar";
+            });
+            const kitchenDayScheds = dayScheds.filter((sc) => {
+              const emp = s.profiles.find((p) => p.id === sc.employee_id);
+              return emp?.department === "kitchen";
+            });
+            const managerDayScheds = dayScheds.filter((sc) => {
+              const emp = s.profiles.find((p) => p.id === sc.employee_id);
+              return emp?.department === "manager";
+            });
+
             return `
               <div class="schedule-roster-day-card ${isToday ? "is-today" : ""}">
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--stone-100);margin-bottom:8px;">
@@ -2236,54 +2348,64 @@
                     Belum ada jadwal khusus yang diatur untuk hari ${esc(d.dayName)} ini. (Karyawan menggunakan shift default profil).
                   </div>
                 `
+                    : deptFilter === "all"
+                    ? `
+                  <div style="display:flex;flex-direction:column;gap:10px;">
+                    <!-- JADWAL TIM BAR -->
+                    ${
+                      barScheds.length > 0
+                        ? `
+                      <div style="background:#f0fdf4;border-left:3px solid #10b981;border-radius:8px;padding:8px 10px;">
+                        <div style="font-size:11.5px;font-weight:800;color:#065f46;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+                          <span>🍹 JADWAL TIM BAR</span>
+                          <span class="badge" style="background:#d1fae5;color:#065f46;font-size:10px;">${barScheds.length} Staf</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:5px;">
+                          ${barScheds.map(renderScheduleRow).join("")}
+                        </div>
+                      </div>
+                    `
+                        : ""
+                    }
+
+                    <!-- JADWAL TIM KITCHEN -->
+                    ${
+                      kitchenDayScheds.length > 0
+                        ? `
+                      <div style="background:#fff7ed;border-left:3px solid #f97316;border-radius:8px;padding:8px 10px;">
+                        <div style="font-size:11.5px;font-weight:800;color:#9a3412;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+                          <span>🍳 JADWAL TIM KITCHEN</span>
+                          <span class="badge" style="background:#ffedd5;color:#9a3412;font-size:10px;">${kitchenDayScheds.length} Staf</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:5px;">
+                          ${kitchenDayScheds.map(renderScheduleRow).join("")}
+                        </div>
+                      </div>
+                    `
+                        : ""
+                    }
+
+                    <!-- JADWAL MANAJER / PENGAWAS -->
+                    ${
+                      managerDayScheds.length > 0
+                        ? `
+                      <div style="background:#fffbeb;border-left:3px solid #f59e0b;border-radius:8px;padding:8px 10px;">
+                        <div style="font-size:11.5px;font-weight:800;color:#92400e;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+                          <span>👔 PENGAWAS / MANAJER</span>
+                          <span class="badge" style="background:#fef3c7;color:#92400e;font-size:10px;">${managerDayScheds.length} Staf</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:5px;">
+                          ${managerDayScheds.map(renderScheduleRow).join("")}
+                        </div>
+                      </div>
+                    `
+                        : ""
+                    }
+                  </div>
+                `
                     : `
                   <div style="display:flex;flex-direction:column;gap:6px;">
-                    ${dayScheds
-                      .map((sc) => {
-                        const emp = s.profiles.find((p) => p.id === sc.employee_id);
-                        const sh = sc.shift_id ? s.shifts.find((x) => x.id === sc.shift_id) : null;
-                        const isOff = sc.schedule_type === "off";
-                        const outl = sc.outlet_id ? s.outlets.find((o) => o.id === sc.outlet_id) : s.outlets[0];
-
-                        return `
-                          <div class="schedule-emp-row" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--stone-50);border-radius:8px;border:1px solid var(--stone-200);flex-wrap:wrap;gap:8px;">
-                            <div style="display:flex;align-items:center;gap:8px;min-width:180px;">
-                              ${renderAvatarHtml(emp)}
-                              <div>
-                                <div style="font-size:12.5px;font-weight:700;color:var(--stone-900);">
-                                  ${esc(emp?.full_name || "Karyawan")}
-                                  <span style="font-size:10px;color:var(--stone-500);font-weight:normal;">(${esc(emp?.role || "member")})</span>
-                                </div>
-                                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap;">
-                                  ${
-                                    isOff
-                                      ? `<span class="badge badge-rose" style="font-size:10.5px;">🏖️ LIBUR / OFF</span>`
-                                      : sh
-                                      ? `<span class="badge badge-amber" style="font-size:10.5px;">🌅 ${esc(sh.name)} (${String(sh.start_time).slice(0, 5)}–${String(sh.end_time).slice(0, 5)})</span>`
-                                      : `<span class="badge" style="background:#e2e8f0;font-size:10.5px;">📋 Shift Standar</span>`
-                                  }
-                                  <span style="font-size:10.5px;color:var(--stone-500);">• ${esc(outl?.name || "Outlet")}</span>
-                                </div>
-                                ${
-                                  sc.notes
-                                    ? `<div style="font-size:11px;color:var(--coffee-800);margin-top:2px;font-style:italic;">💬 "${esc(sc.notes)}"</div>`
-                                    : ""
-                                }
-                              </div>
-                            </div>
-
-                            <div style="display:flex;align-items:center;gap:6px;">
-                              <button class="btn btn-outline btn-xs" data-action="open-edit-schedule" data-schedule-id="${sc.id}" style="padding:4px 8px;font-size:11px;">
-                                ✏️ Edit
-                              </button>
-                              <button class="btn btn-outline btn-xs" data-action="delete-schedule" data-schedule-id="${sc.id}" style="padding:4px 8px;font-size:11px;color:var(--rose-700);border-color:#fca5a5;">
-                                🗑️ Hapus
-                              </button>
-                            </div>
-                          </div>
-                        `;
-                      })
-                      .join("")}
+                    ${dayScheds.map(renderScheduleRow).join("")}
                   </div>
                 `
                 }
@@ -2970,15 +3092,25 @@
                       </div>
                       <span class="badge badge-warning">Menunggu Persetujuan Pertama</span>
                     </div>
-                    <div class="grid-4" style="gap:10px;">
+                    <div class="grid-3" style="gap:10px;">
                       <div class="form-group" style="margin:0;">
                         <label class="form-label">ID Karyawan *</label>
                         <input class="form-input mono" name="employee_code" value="SL-0${101 + managedUsers.length + idx}" required />
                       </div>
                       <div class="form-group" style="margin:0;">
+                        <label class="form-label">Divisi / Stasiun Kerja *</label>
+                        <select class="form-select" name="department" style="font-weight:700;">
+                          <option value="bar" selected>🍹 Tim Bar</option>
+                          <option value="kitchen">🍳 Tim Kitchen</option>
+                          <option value="manager">👔 Pengawas / Manajer</option>
+                        </select>
+                      </div>
+                      <div class="form-group" style="margin:0;">
                         <label class="form-label">Jabatan / Posisi *</label>
                         <input class="form-input" name="position_title" value="Barista / Crew" required />
                       </div>
+                    </div>
+                    <div class="grid-2" style="gap:10px;margin-top:10px;">
                       <div class="form-group" style="margin:0;">
                         <label class="form-label">Outlet Penugasan *</label>
                         <select class="form-select" name="outlet_id">
@@ -3029,10 +3161,18 @@
               <label class="form-label">Alamat Email Google (Gmail) *</label>
               <input type="email" class="form-input" name="email" placeholder="nama.karyawan@gmail.com" required />
             </div>
-            <div class="grid-2" style="gap:10px;">
+            <div class="grid-3" style="gap:10px;">
               <div class="form-group">
                 <label class="form-label">ID Karyawan *</label>
                 <input class="form-input mono" name="employee_code" placeholder="SL-0105" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Divisi / Stasiun *</label>
+                <select class="form-select" name="department" style="font-weight:700;">
+                  <option value="bar" selected>🍹 Tim Bar</option>
+                  <option value="kitchen">🍳 Tim Kitchen</option>
+                  <option value="manager">👔 Pengawas / Manajer</option>
+                </select>
               </div>
               <div class="form-group">
                 <label class="form-label">Jabatan *</label>
@@ -3091,14 +3231,38 @@
 
         <!-- BAGIAN C: DAFTAR KARYAWAN AKTIF + EDIT & HAPUS RESIGN -->
         <div class="col-7 card">
-          <h3 style="font-size:15px;font-weight:800;margin-bottom:4px;">
-            3. Daftar Karyawan Aktif (${managedUsers.length} Akun)
-          </h3>
-          <p style="font-size:11.5px;color:var(--stone-500);margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+            <h3 style="font-size:15px;font-weight:800;margin:0;">
+              3. Daftar Karyawan Aktif (${managedUsers.length} Akun)
+            </h3>
+          </div>
+          <p style="font-size:11.5px;color:var(--stone-500);margin-bottom:10px;">
             Klik <strong>🗑️ Hapus</strong> jika ada member/karyawan yang resign agar langsung dihapus permanen dan otomatis hilang dari sistem.
           </p>
+
+          <!-- FILTER DIVISI KARYAWAN (MANAJER / BAR / KITCHEN) -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+            <button type="button" class="btn btn-xs ${(uiState?.cpDeptFilter || 'all') === 'all' ? 'btn-primary' : 'btn-outline'}" data-action="filter-cp-dept" data-dept="all" style="padding:3px 8px;font-size:11px;">
+              Semua (${managedUsers.length})
+            </button>
+            <button type="button" class="btn btn-xs ${(uiState?.cpDeptFilter || 'all') === 'bar' ? 'btn-emerald' : 'btn-outline'}" data-action="filter-cp-dept" data-dept="bar" style="padding:3px 8px;font-size:11px;${(uiState?.cpDeptFilter || 'all') === 'bar' ? '' : 'color:#065f46;border-color:#a7f3d0;'}">
+              🍹 Tim Bar (${managedUsers.filter((e) => (e.department || 'bar') === 'bar').length})
+            </button>
+            <button type="button" class="btn btn-xs ${(uiState?.cpDeptFilter || 'all') === 'kitchen' ? 'btn-amber' : 'btn-outline'}" data-action="filter-cp-dept" data-dept="kitchen" style="padding:3px 8px;font-size:11px;${(uiState?.cpDeptFilter || 'all') === 'kitchen' ? '' : 'color:#9a3412;border-color:#fed7aa;'}">
+              🍳 Tim Kitchen (${managedUsers.filter((e) => e.department === 'kitchen').length})
+            </button>
+            <button type="button" class="btn btn-xs ${(uiState?.cpDeptFilter || 'all') === 'manager' ? 'btn-primary' : 'btn-outline'}" data-action="filter-cp-dept" data-dept="manager" style="padding:3px 8px;font-size:11px;${(uiState?.cpDeptFilter || 'all') === 'manager' ? '' : 'color:#92400e;border-color:#fde68a;'}">
+              👔 Tim Manajer (${managedUsers.filter((e) => e.department === 'manager').length})
+            </button>
+          </div>
+
           <div style="display:flex;flex-direction:column;gap:10px;">
             ${managedUsers
+              .filter((emp) => {
+                const f = uiState?.cpDeptFilter || "all";
+                if (f === "all") return true;
+                return (emp.department || "bar") === f;
+              })
               .map((emp) => {
                 const out = s.outlets.find((o) => o.id === emp.outlet_id);
                 const sh = s.shifts.find((x) => x.id === emp.shift_id);
@@ -3116,11 +3280,12 @@
                           <strong style="font-size:13.5px;">${esc(emp.full_name)}</strong>
                           <span class="mono" style="font-size:11px;color:var(--coffee-700);">(${esc(emp.employee_code)})</span>
                           <span class="badge ${emp.role === "super_admin" ? "badge-super" : emp.role === "admin" ? "badge-admin" : "badge-member"}">${esc(emp.role.replace("_", " ").toUpperCase())}</span>
+                          ${getDepartmentBadge(emp.department)}
                           <span class="badge ${emp.status === "active" ? "badge-success" : "badge-danger"}">${esc(emp.status.toUpperCase())}</span>
                           ${emp.face_id_enrolled ? `<span class="badge badge-success" title="Face ID terdaftar pada 1 akun Google ini" style="font-size:10px;">🔒 Face ID Aktif</span>` : `<span class="badge badge-warning" title="Belum mendaftarkan Face ID" style="font-size:10px;">⚠️ Belum Face ID</span>`}
                         </div>
-                        <div style="font-size:11.5px;color:var(--stone-600);">${esc(emp.position_title)} • ${esc(emp.email)} ${emp.phone ? "• " + esc(emp.phone) : ""}</div>
-                        <div style="font-size:11px;color:var(--coffee-800);">Outlet: <strong>${esc(out ? out.name : "-")}</strong> • Shift: <strong>${esc(sh ? sh.name : "-")}</strong></div>
+                        <div style="font-size:11.5px;color:var(--stone-600);margin-top:2px;">${esc(emp.position_title)} • ${esc(emp.email)} ${emp.phone ? "• " + esc(emp.phone) : ""}</div>
+                        <div style="font-size:11px;color:var(--coffee-800);margin-top:2px;">Divisi: <strong>${esc(getDepartmentLabel(emp.department))}</strong> • Outlet: <strong>${esc(out ? out.name : "-")}</strong> • Shift: <strong>${esc(sh ? sh.name : "-")}</strong></div>
                       </div>
                     </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -3888,6 +4053,8 @@
     getWeekCalendarRange,
     getMonthCalendarRange,
     getColleaguesForSchedule,
+    getDepartmentBadge,
+    getDepartmentLabel,
     formatIndoDate,
     renderAvatarHtml,
     renderCloudSetupScreen,

@@ -592,7 +592,14 @@ window.SUKA_LATTE_CONFIG = {
       state.preapprovedEmails = preRes.data || [];
       state.auditLogs = audRes.data || [];
     } else {
-      const { data: cowRes } = await state.supabase.rpc("get_active_coworkers");
+      let cowRes = null;
+      try {
+        const { data: teamDir } = await state.supabase.rpc("get_active_team_directory");
+        cowRes = teamDir;
+      } catch {
+        const { data: oldCow } = await state.supabase.rpc("get_active_coworkers");
+        cowRes = oldCow;
+      }
       state.profiles = cowRes && cowRes.length ? cowRes : [state.currentUser];
       state.preapprovedEmails = [];
       state.auditLogs = [];
@@ -1113,26 +1120,45 @@ window.SUKA_LATTE_CONFIG = {
     return res.data;
   }
 
-  async function bulkSaveWeeklySchedule(employeeId, dailyConfigs) {
-    assertManagerAccess("BulkSaveWeeklySchedule");
+  async function bulkSaveMonthlySchedule(employeeId, dailyConfigs) {
+    assertManagerAccess("BulkSaveMonthlySchedule");
     if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
     if (!employeeId) throw new Error("Pilih karyawan terlebih dahulu.");
     if (!Array.isArray(dailyConfigs) || dailyConfigs.length === 0) {
-      throw new Error("Konfigurasi jadwal mingguan tidak valid.");
+      throw new Error("Konfigurasi jadwal bulanan tidak valid.");
     }
 
-    for (const conf of dailyConfigs) {
-      await saveWorkSchedule({
-        employee_id: employeeId,
-        schedule_date: conf.date,
-        shift_id: conf.schedule_type === "off" ? null : conf.shift_id,
-        outlet_id: conf.outlet_id || (state.outlets[0]?.id ?? null),
-        schedule_type: conf.schedule_type || "work",
-        notes: conf.notes || null,
-      });
+    try {
+      const { data, error } = await withTimeout(
+        state.supabase.rpc("bulk_upsert_work_schedules", {
+          p_employee_id: employeeId,
+          p_schedules: dailyConfigs,
+        }),
+        25000,
+        "Penyimpanan jadwal bulanan timeout setelah 25 detik."
+      );
+      if (error) throw error;
+      await refreshAllData();
+      return data;
+    } catch (err) {
+      // Fallback: simpan bertahap jika RPC terhalang
+      for (const conf of dailyConfigs) {
+        await saveWorkSchedule({
+          employee_id: employeeId,
+          schedule_date: conf.date,
+          shift_id: conf.schedule_type === "off" ? null : conf.shift_id,
+          outlet_id: conf.outlet_id || (state.outlets[0]?.id ?? null),
+          schedule_type: conf.schedule_type || "work",
+          notes: conf.notes || null,
+        });
+      }
+      await refreshAllData();
+      return { ok: true, count: dailyConfigs.length };
     }
+  }
 
-    return true;
+  async function bulkSaveWeeklySchedule(employeeId, dailyConfigs) {
+    return bulkSaveMonthlySchedule(employeeId, dailyConfigs);
   }
 
   // ==========================================================================
@@ -1333,6 +1359,7 @@ window.SUKA_LATTE_CONFIG = {
     saveWorkSchedule,
     deleteWorkSchedule,
     bulkSaveWeeklySchedule,
+    bulkSaveMonthlySchedule,
     uploadPrivateSelfieAndSubmit,
     registerFaceId,
     resetFaceId,
