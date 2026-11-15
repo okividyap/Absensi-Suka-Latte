@@ -709,6 +709,99 @@
   }
 
   // ==========================================================================
+  // 4.5 HELPER ROSTER KALENDER & JADWAL KERJA (INDONESIA)
+  // ==========================================================================
+  const INDO_DAYS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+  const INDO_MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+  function formatIndoDate(dateStr) {
+    if (!dateStr) return "-";
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return `${INDO_DAYS[dt.getDay()]}, ${d} ${INDO_MONTHS_SHORT[m - 1]} ${y}`;
+  }
+
+  function getWeekCalendarRange(baseDateStr, weekOffset = 0) {
+    const [y, m, d] = baseDateStr.split("-").map(Number);
+    const curr = new Date(y, m - 1, d);
+    const dayOfWeek = curr.getDay();
+    const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
+    const monday = new Date(curr);
+    monday.setDate(curr.getDate() + diffToMonday + weekOffset * 7);
+
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const dt = new Date(monday);
+      dt.setDate(monday.getDate() + i);
+      const dy = dt.getFullYear();
+      const dm = String(dt.getMonth() + 1).padStart(2, "0");
+      const dd = String(dt.getDate()).padStart(2, "0");
+      const dateStr = `${dy}-${dm}-${dd}`;
+      days.push({
+        dateStr,
+        dayNum: dd,
+        dayName: INDO_DAYS[dt.getDay()],
+        monthShort: INDO_MONTHS_SHORT[dt.getMonth()],
+        dateObj: dt,
+      });
+    }
+
+    const first = days[0];
+    const last = days[6];
+    const label = `${first.dayNum} ${first.monthShort} - ${last.dayNum} ${last.monthShort} ${last.dateObj.getFullYear()}`;
+    return { days, label, mondayStr: first.dateStr, sundayStr: last.dateStr };
+  }
+
+  function renderMemberScheduleHomeWidget(todayDateStr, currentUserId) {
+    const s = Core.state;
+    const week = getWeekCalendarRange(todayDateStr, 0);
+
+    return `
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <h3 style="font-size:15px;font-weight:800;margin:0 0 2px 0;">🗓️ Roster Jadwal Kerja Saya (Minggu Ini)</h3>
+            <p style="font-size:11.5px;color:var(--stone-500);margin:0;">
+              Jadwal shift &amp; hari libur resmi yang diatur oleh Admin Suka Latte.
+            </p>
+          </div>
+          <button class="btn btn-outline btn-sm" data-action="nav" data-target="jadwal_saya" style="font-size:11px;padding:4px 10px;">
+            Lihat Jadwal Lengkap ›
+          </button>
+        </div>
+
+        <div class="schedule-week-strip">
+          ${week.days
+            .map((d) => {
+              const isToday = d.dateStr === todayDateStr;
+              const sched = Core.getScheduleForDate(d.dateStr, currentUserId);
+              const isOff = sched?.schedule_type === "off";
+              const sh = sched?.shift_id
+                ? s.shifts.find((x) => x.id === sched.shift_id)
+                : null;
+
+              return `
+                <div class="schedule-day-pill ${isToday ? "is-today" : ""} ${isOff ? "is-off" : ""}">
+                  <span class="sched-pill-day">${esc(d.dayName.slice(0, 3))}</span>
+                  <span class="sched-pill-date">${d.dayNum}</span>
+                  ${
+                    isOff
+                      ? `<span class="badge-pill-off">LIBUR</span>`
+                      : sh
+                      ? `<span class="badge-pill-shift">${esc(sh.name.split(" ")[1] || sh.name.slice(0, 5))}</span>`
+                      : `<span class="badge-pill-none">-</span>`
+                  }
+                  ${sched?.notes ? `<span class="sched-pill-note" title="${esc(sched.notes)}">${esc(sched.notes)}</span>` : ""}
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // ==========================================================================
   // 5. TAMPILAN TERISOLASI KHUSUS ANGGOTA (HANYA ABSENSI & CEK RIWAYAT SENDIRI)
   //    Anggota TIDAK BISA mengakses Control Panel, Laporan Global, atau Data Orang Lain!
   // ==========================================================================
@@ -718,7 +811,16 @@
     const tz = s.settings.operational_timezone || "Asia/Makassar";
     const myOutlet = s.outlets.find((o) => o.id === u.outlet_id) || s.outlets[0];
     const activeShifts = s.shifts.filter((sh) => sh.status === "active");
+
+    // Sinkronisasi otomatis shift hari ini dari Roster Jadwal Kerja Admin
+    const myTodaySchedule = Core.getScheduleForDate(parts.dateString, u.id);
+    const scheduledShift = myTodaySchedule?.shift_id
+      ? s.shifts.find((sh) => sh.id === myTodaySchedule.shift_id)
+      : null;
+    const isTodayScheduledOff = myTodaySchedule?.schedule_type === "off";
+
     const myShift =
+      scheduledShift ||
       s.shifts.find((sh) => sh.id === (myToday?.shift_id || u.shift_id)) ||
       activeShifts[0] ||
       s.shifts[0];
@@ -726,6 +828,22 @@
     const { todayHolidays, myTodayApprovedLeave } = getHolidayAndLeaveSummary(parts.dateString, u.id);
 
     return `
+      ${
+        isTodayScheduledOff
+          ? `<div class="card" style="margin-bottom:16px;border:1.5px solid #fca5a5;background:#fff1f2;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-size:14px;font-weight:800;color:var(--rose-900);">
+                  🏖️ Hari Ini Adalah Jadwal Libur Anda (Day Off)
+                </div>
+                <div style="font-size:12px;color:var(--rose-700);">
+                  Berdasarkan roster jadwal yang ditetapkan Pengelola, Anda dijadwalkan LIBUR hari ini. Anda tidak perlu melakukan absensi selfie.
+                </div>
+              </div>
+              <span class="badge badge-danger">LIBUR (OFF)</span>
+            </div>`
+          : ""
+      }
+
       ${
         todayHolidays.length > 0
           ? `<div class="card" style="margin-bottom:16px;border:1.5px solid #fda4af;background:var(--rose-50);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -907,6 +1025,8 @@
           : ""
       }
 
+      ${renderMemberScheduleHomeWidget(parts.dateString, u.id)}
+
       ${renderMemberHolidayAndLeaveCard(parts.dateString, u.id)}
 
       <div class="grid-12">
@@ -993,6 +1113,548 @@
         ${renderMyLeaveListHtml(s.currentUser.id)}
       </div>
     `;
+  }
+
+  // ==========================================================================
+  // 5.2 TAMPILAN KHUSUS ANGGOTA: ROSTER JADWAL KERJA SAYA
+  // ==========================================================================
+  function renderMemberScheduleView(uiState) {
+    const s = Core.state;
+    const u = s.currentUser;
+    const tz = s.settings.operational_timezone || "Asia/Makassar";
+    const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+    const offset = uiState.scheduleWeekOffset || 0;
+    const week = getWeekCalendarRange(parts.dateString, offset);
+    const subTab = uiState.scheduleTab || "mine";
+
+    return `
+      <div class="hero-banner">
+        <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:8px;">
+          🗓️ Roster Jadwal Kerja &amp; Shift
+        </span>
+        <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Jadwal Kerja Anda di Suka Latte</h2>
+        <p style="font-size:12px;color:var(--coffee-200);margin-bottom:14px;max-width:700px;">
+          Jadwal shift operasional yang telah disusun dan ditetapkan oleh Pengelola. Pantau tanggal masuk, jam kerja, dan hari libur Anda.
+        </p>
+
+        <!-- KONTROL NAVIGASI MINGGU -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:rgba(12,7,4,0.6);border:1px solid rgba(218,175,118,0.25);border-radius:14px;padding:10px 14px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn btn-outline btn-sm" data-action="schedule-prev-week" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);">‹ Minggu Lalu</button>
+            <button class="btn btn-primary btn-sm" data-action="schedule-today-week">Minggu Ini</button>
+            <button class="btn btn-outline btn-sm" data-action="schedule-next-week" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);">Minggu Depan ›</button>
+          </div>
+          <div style="font-size:13px;font-weight:800;color:var(--gold-200);">
+            📅 ${esc(week.label)}
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB PILIHAN ANGGOTA: JADWAL SAYA VS REKAN KERJA -->
+      <div class="tab-pills" style="margin-bottom:16px;">
+        <button class="tab-pill ${subTab === "mine" ? "active" : ""}" data-action="schedule-subtab" data-tab="mine">
+          <span>📅 Jadwal Saya Sendiri</span>
+        </button>
+        <button class="tab-pill ${subTab === "team" ? "active" : ""}" data-action="schedule-subtab" data-tab="team">
+          <span>👥 Jadwal Tim Outlet (${esc(s.outlets[0]?.name || "Suka Latte")})</span>
+        </button>
+      </div>
+
+      ${
+        subTab === "mine"
+          ? renderMemberOwnScheduleList(week, parts.dateString, u.id, s, tz)
+          : renderMemberTeamScheduleList(week, parts.dateString, s)
+      }
+    `;
+  }
+
+  function renderMemberOwnScheduleList(week, todayDateStr, userId, s, tz) {
+    return `
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${week.days
+          .map((d) => {
+            const isToday = d.dateStr === todayDateStr;
+            const sched = Core.getScheduleForDate(d.dateStr, userId);
+            const sh = sched?.shift_id
+              ? s.shifts.find((x) => x.id === sched.shift_id)
+              : null;
+            const isOff = sched?.schedule_type === "off";
+            const outlet = sched?.outlet_id
+              ? s.outlets.find((o) => o.id === sched.outlet_id)
+              : s.outlets[0];
+
+            // Cek absensi pada tanggal tersebut
+            const att = s.attendance.find(
+              (a) => a.employee_id === userId && a.work_date === d.dateStr
+            );
+
+            return `
+              <div class="schedule-roster-day-card ${isToday ? "is-today" : ""}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                      <strong style="font-size:14px;color:var(--stone-900);">${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)} ${d.dateObj.getFullYear()}</strong>
+                      ${isToday ? `<span class="badge badge-amber" style="font-size:10px;">HARI INI</span>` : ""}
+                    </div>
+                    <div style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                      ${
+                        isOff
+                          ? `<span class="badge badge-rose" style="font-size:11.5px;">🏖️ LIBUR / DAY OFF</span>`
+                          : sh
+                          ? `<span class="badge badge-amber" style="font-size:11.5px;">🌅 ${esc(sh.name)} (${String(sh.start_time).slice(0, 5)}–${String(sh.end_time).slice(0, 5)})</span>`
+                          : `<span class="badge" style="background:var(--stone-100);color:var(--stone-700);font-size:11.5px;">📋 Shift Standar</span>`
+                      }
+                      <span style="font-size:11.5px;color:var(--stone-600);">• Outlet: <strong>${esc(outlet ? outlet.name : "Suka Latte")}</strong></span>
+                    </div>
+                    ${
+                      sched?.notes
+                        ? `<div style="font-size:11.5px;color:var(--coffee-800);margin-top:4px;font-style:italic;">
+                             💬 Catatan: "${esc(sched.notes)}"
+                           </div>`
+                        : ""
+                    }
+                  </div>
+                  <div>
+                    ${
+                      att
+                        ? `<span class="badge badge-emerald" style="font-size:11px;">
+                             ✓ Hadir (${att.check_in_at ? Core.formatOperationalDateTime(att.check_in_at, tz, false).slice(12, 17) : "--:--"})
+                           </span>`
+                        : isToday && !isOff
+                        ? `<button class="btn btn-emerald btn-sm" data-action="nav" data-target="absensi_saya">
+                             📷 Absen Sekarang
+                           </button>`
+                        : `<span style="font-size:11px;color:var(--stone-400);">${d.dateStr < todayDateStr ? "Selesai" : "Mendatang"}</span>`
+                    }
+                  </div>
+                </div>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
+  function renderMemberTeamScheduleList(week, todayDateStr, s) {
+    const activeProfiles = s.profiles.filter(
+      (p) => p.status === "active" && p.first_login_approved
+    );
+
+    return `
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${week.days
+          .map((d) => {
+            const isToday = d.dateStr === todayDateStr;
+            const dayScheds = s.workSchedules.filter((x) => x.schedule_date === d.dateStr);
+
+            const morningScheds = dayScheds.filter((sc) => {
+              const sh = s.shifts.find((x) => x.id === sc.shift_id);
+              return sc.schedule_type === "work" && (!sh || sh.name.toLowerCase().includes("pagi"));
+            });
+            const afternoonScheds = dayScheds.filter((sc) => {
+              const sh = s.shifts.find((x) => x.id === sc.shift_id);
+              return sc.schedule_type === "work" && sh && sh.name.toLowerCase().includes("siang");
+            });
+            const offScheds = dayScheds.filter((sc) => sc.schedule_type === "off");
+
+            return `
+              <div class="schedule-roster-day-card ${isToday ? "is-today" : ""}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <strong style="font-size:14px;color:var(--stone-900);">${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)}</strong>
+                    ${isToday ? `<span class="badge badge-amber" style="font-size:10px;">HARI INI</span>` : ""}
+                  </div>
+                  <span style="font-size:11.5px;color:var(--stone-500);">${dayScheds.length} jadwal terdaftar</span>
+                </div>
+
+                <div class="grid-3" style="gap:10px;">
+                  <!-- SHIFT PAGI -->
+                  <div style="background:var(--stone-50);border-radius:10px;padding:10px;border:1px solid #fef3c7;">
+                    <div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+                      <span>🌅 Shift Pagi</span>
+                      <span class="badge" style="background:#fde68a;font-size:10px;">${morningScheds.length}</span>
+                    </div>
+                    ${
+                      morningScheds.length > 0
+                        ? morningScheds
+                            .map((sc) => {
+                              const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
+                              return `
+                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11.5px;">
+                                  ${renderAvatarHtml(emp)}
+                                  <div>
+                                    <div style="font-weight:700;">${esc(emp?.full_name || "Karyawan")}</div>
+                                    ${sc.notes ? `<div style="font-size:10.5px;color:var(--stone-500);">${esc(sc.notes)}</div>` : ""}
+                                  </div>
+                                </div>
+                              `;
+                            })
+                            .join("")
+                        : `<div style="font-size:11px;color:var(--stone-400);font-style:italic;">Belum ada jadwal</div>`
+                    }
+                  </div>
+
+                  <!-- SHIFT SIANG -->
+                  <div style="background:var(--stone-50);border-radius:10px;padding:10px;border:1px solid #e0e7ff;">
+                    <div style="font-size:12px;font-weight:800;color:#3730a3;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+                      <span>🌇 Shift Siang</span>
+                      <span class="badge" style="background:#c7d2fe;font-size:10px;">${afternoonScheds.length}</span>
+                    </div>
+                    ${
+                      afternoonScheds.length > 0
+                        ? afternoonScheds
+                            .map((sc) => {
+                              const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
+                              return `
+                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11.5px;">
+                                  ${renderAvatarHtml(emp)}
+                                  <div>
+                                    <div style="font-weight:700;">${esc(emp?.full_name || "Karyawan")}</div>
+                                    ${sc.notes ? `<div style="font-size:10.5px;color:var(--stone-500);">${esc(sc.notes)}</div>` : ""}
+                                  </div>
+                                </div>
+                              `;
+                            })
+                            .join("")
+                        : `<div style="font-size:11px;color:var(--stone-400);font-style:italic;">Belum ada jadwal</div>`
+                    }
+                  </div>
+
+                  <!-- LIBUR / OFF -->
+                  <div style="background:var(--stone-50);border-radius:10px;padding:10px;border:1px solid #fecdd3;">
+                    <div style="font-size:12px;font-weight:800;color:#9f1239;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+                      <span>🏖️ Libur (OFF)</span>
+                      <span class="badge" style="background:#ffe4e6;font-size:10px;">${offScheds.length}</span>
+                    </div>
+                    ${
+                      offScheds.length > 0
+                        ? offScheds
+                            .map((sc) => {
+                              const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
+                              return `
+                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11.5px;">
+                                  ${renderAvatarHtml(emp)}
+                                  <div>
+                                    <div style="font-weight:700;">${esc(emp?.full_name || "Karyawan")}</div>
+                                    ${sc.notes ? `<div style="font-size:10.5px;color:var(--stone-500);">${esc(sc.notes)}</div>` : ""}
+                                  </div>
+                                </div>
+                              `;
+                            })
+                            .join("")
+                        : `<div style="font-size:11px;color:var(--stone-400);font-style:italic;">Tidak ada</div>`
+                    }
+                  </div>
+                </div>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
+  // ==========================================================================
+  // 5.3 TAMPILAN PENGELOLA: ROSTER JADWAL KERJA & SHIFT STAF
+  // ==========================================================================
+  function renderManagerScheduleView(uiState, isEmbeddedInCp = false) {
+    Core.assertManagerAccess("ManagerScheduleView");
+    const s = Core.state;
+    const tz = s.settings.operational_timezone || "Asia/Makassar";
+    const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+    const offset = uiState.scheduleWeekOffset || 0;
+    const week = getWeekCalendarRange(parts.dateString, offset);
+    const empFilter = uiState.scheduleEmployeeFilter || "all";
+
+    const activeEmployees = s.profiles.filter(
+      (p) => p.status === "active" && p.first_login_approved
+    );
+
+    // Filter jadwal untuk minggu aktif
+    const weekStart = week.days[0].dateStr;
+    const weekEnd = week.days[6].dateStr;
+    const weekSchedules = s.workSchedules.filter(
+      (sc) => sc.schedule_date >= weekStart && sc.schedule_date <= weekEnd
+    );
+
+    const filteredSchedules =
+      empFilter === "all"
+        ? weekSchedules
+        : weekSchedules.filter((sc) => sc.employee_id === empFilter);
+
+    // Default tanggal untuk form jadwal
+    const defaultDate = uiState.prefilledScheduleDate || parts.dateString;
+
+    return `
+      ${
+        !isEmbeddedInCp
+          ? `
+        <div class="hero-banner">
+          <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:8px;">
+            🗓️ Roster Jadwal Operasional Outlet
+          </span>
+          <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Pengaturan Jadwal Kerja &amp; Shift Karyawan</h2>
+          <p style="font-size:12px;color:var(--coffee-200);margin-bottom:14px;max-width:720px;">
+            Atur jadwal masuk shift pagi, shift siang, atau hari libur (day off) untuk seluruh staf Suka Latte. Seluruh karyawan dapat melihat jadwal ini secara langsung dan teratur di HP mereka.
+          </p>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:rgba(12,7,4,0.6);border:1px solid rgba(218,175,118,0.25);border-radius:14px;padding:10px 14px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button class="btn btn-outline btn-sm" data-action="schedule-prev-week" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);">‹ Minggu Lalu</button>
+              <button class="btn btn-primary btn-sm" data-action="schedule-today-week">Minggu Ini</button>
+              <button class="btn btn-outline btn-sm" data-action="schedule-next-week" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);">Minggu Depan ›</button>
+            </div>
+            <div style="font-size:13px;font-weight:800;color:var(--gold-200);">
+              📅 ${esc(week.label)}
+            </div>
+          </div>
+        </div>
+        `
+          : `
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:var(--coffee-900);color:white;border-radius:14px;padding:12px 16px;margin-bottom:16px;">
+          <div>
+            <div style="font-size:15px;font-weight:800;color:var(--gold-200);">🗓️ Navigasi Roster Jadwal Mingguan</div>
+            <div style="font-size:12px;color:var(--coffee-200);">${esc(week.label)}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn btn-outline btn-sm" data-action="schedule-prev-week" style="color:white;border-color:rgba(255,255,255,0.3);">‹ Minggu Lalu</button>
+            <button class="btn btn-primary btn-sm" data-action="schedule-today-week">Minggu Ini</button>
+            <button class="btn btn-outline btn-sm" data-action="schedule-next-week" style="color:white;border-color:rgba(255,255,255,0.3);">Minggu Depan ›</button>
+          </div>
+        </div>
+        `
+      }
+
+      <!-- AKSI PINTAS & FILTER -->
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <button class="btn btn-amber" data-action="open-quick-weekly-modal" style="display:flex;align-items:center;gap:6px;">
+          <span>⚡</span>
+          <span>Atur Cepat Jadwal 1 Minggu Sekaligus</span>
+        </button>
+
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;font-weight:700;color:var(--stone-600);">Filter Staf:</span>
+          <select class="form-input" data-action="filter-schedule-employee" style="max-width:200px;padding:6px 10px;font-size:12px;">
+            <option value="all" ${empFilter === "all" ? "selected" : ""}>👥 Semua Karyawan (${activeEmployees.length})</option>
+            ${activeEmployees
+              .map(
+                (emp) => `
+              <option value="${emp.id}" ${empFilter === emp.id ? "selected" : ""}>
+                ${esc(emp.full_name)} (${esc(emp.role)})
+              </option>
+            `
+              )
+              .join("")}
+          </select>
+        </div>
+      </div>
+
+      <!-- FORM INPUT JADWAL HARIAN BARU -->
+      <div class="card" id="card-schedule-input-form" style="margin-bottom:18px;border-top:3px solid var(--amber-600);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <h3 style="font-size:15px;font-weight:800;margin:0 0 2px 0;">➕ Input / Perbarui Jadwal Kerja Karyawan</h3>
+            <p style="font-size:11.5px;color:var(--stone-500);margin:0;">
+              Tetapkan shift atau hari libur untuk karyawan pada tanggal tertentu.
+            </p>
+          </div>
+          <span class="badge badge-amber" style="font-size:11px;">Input Mandiri Admin</span>
+        </div>
+
+        <form id="form-work-schedule" style="display:flex;flex-direction:column;gap:12px;">
+          <div class="grid-2" style="gap:12px;">
+            <!-- PILIH KARYAWAN -->
+            <div class="form-group" style="margin:0;">
+              <label class="form-label" style="font-size:12px;font-weight:700;">Pilih Karyawan <span style="color:var(--rose-600);">*</span></label>
+              <select name="employee_id" id="sched-emp-select" class="form-input" required style="font-size:13px;">
+                <option value="">-- Pilih Anggota / Karyawan --</option>
+                ${activeEmployees
+                  .map(
+                    (p) => `
+                  <option value="${p.id}" ${empFilter === p.id ? "selected" : ""}>
+                    ${esc(p.full_name)} [${esc(p.employee_code || "KARYAWAN")}] - ${esc(p.role)}
+                  </option>
+                `
+                  )
+                  .join("")}
+              </select>
+            </div>
+
+            <!-- TANGGAL JADWAL -->
+            <div class="form-group" style="margin:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <label class="form-label" style="font-size:12px;font-weight:700;margin:0;">Tanggal Kerja <span style="color:var(--rose-600);">*</span></label>
+                <div style="display:flex;gap:4px;">
+                  <button type="button" class="btn btn-outline btn-xs" data-action="set-sched-date-quick" data-days="0" style="padding:2px 6px;font-size:10.5px;">Hari Ini</button>
+                  <button type="button" class="btn btn-outline btn-xs" data-action="set-sched-date-quick" data-days="1" style="padding:2px 6px;font-size:10.5px;">+1 Besok</button>
+                  <button type="button" class="btn btn-outline btn-xs" data-action="set-sched-date-quick" data-days="2" style="padding:2px 6px;font-size:10.5px;">+2 Lusa</button>
+                </div>
+              </div>
+              <input type="date" name="schedule_date" id="sched-date-input" class="form-input" value="${defaultDate}" required style="font-size:13px;" />
+            </div>
+          </div>
+
+          <!-- TIPE JADWAL (MASUK VS LIBUR) -->
+          <div class="form-group" style="margin:0;">
+            <label class="form-label" style="font-size:12px;font-weight:700;">Status Kehadiran Hari Itu</label>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;background:var(--stone-50);padding:8px 14px;border-radius:10px;border:1px solid var(--stone-200);">
+                <input type="radio" name="schedule_type" value="work" checked data-action="toggle-schedule-type" />
+                <span>💼 Masuk Kerja Sesuai Shift</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;background:#fff1f2;padding:8px 14px;border-radius:10px;border:1px solid #fecdd3;color:var(--rose-800);">
+                <input type="radio" name="schedule_type" value="off" data-action="toggle-schedule-type" />
+                <span>🏖️ Libur / Day Off (Tidak Perlu Absen)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- SHIFT & OUTLET (DISEMBUNYIKAN JIKA LIBUR) -->
+          <div id="sched-shift-outlet-fields" class="grid-2" style="gap:12px;">
+            <div class="form-group" style="margin:0;">
+              <label class="form-label" style="font-size:12px;font-weight:700;">Pilih Shift Kerja</label>
+              <select name="shift_id" id="sched-shift-select" class="form-input" style="font-size:13px;">
+                ${s.shifts
+                  .map(
+                    (sh) => `
+                  <option value="${sh.id}">
+                    ${esc(sh.name)} (${String(sh.start_time).slice(0, 5)} - ${String(sh.end_time).slice(0, 5)})
+                  </option>
+                `
+                  )
+                  .join("")}
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label" style="font-size:12px;font-weight:700;">Pilih Lokasi Outlet</label>
+              <select name="outlet_id" id="sched-outlet-select" class="form-input" style="font-size:13px;">
+                ${s.outlets
+                  .map(
+                    (o) => `
+                  <option value="${o.id}">${esc(o.name)}</option>
+                `
+                  )
+                  .join("")}
+              </select>
+            </div>
+          </div>
+
+          <!-- CATATAN TAMBAHAN -->
+          <div class="form-group" style="margin:0;">
+            <label class="form-label" style="font-size:12px;font-weight:700;">Catatan Khusus (Opsional)</label>
+            <input type="text" name="notes" id="sched-notes-input" class="form-input" placeholder="Contoh: Buka outlet pagi, lembur promo, tukar shift dengan Rizky" style="font-size:12.5px;" />
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;margin-top:4px;">
+            <button type="submit" id="btn-submit-schedule" class="btn btn-primary" style="min-width:180px;">
+              💾 Simpan Jadwal Kerja
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- ROSTER 7 HARI MINGGU INI -->
+      <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="font-size:15px;font-weight:800;color:var(--stone-800);margin:0;">
+          📅 Roster Mingguan (${esc(week.label)})
+        </h3>
+        <span style="font-size:11.5px;color:var(--stone-500);">
+          ${filteredSchedules.length} jadwal terdaftar
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${week.days
+          .map((d) => {
+            const isToday = d.dateStr === parts.dateString;
+            const dayScheds = filteredSchedules.filter((x) => x.schedule_date === d.dateStr);
+
+            return `
+              <div class="schedule-roster-day-card ${isToday ? "is-today" : ""}">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--stone-100);margin-bottom:8px;">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <strong style="font-size:14px;color:var(--stone-900);">
+                      ${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)} ${d.dateObj.getFullYear()}
+                    </strong>
+                    ${isToday ? `<span class="badge badge-amber" style="font-size:10px;">HARI INI</span>` : ""}
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="font-size:11px;color:var(--stone-500);">${dayScheds.length} staf terjadwal</span>
+                    <button class="btn btn-outline btn-xs" data-action="prefill-schedule-date" data-date="${d.dateStr}" style="padding:2px 8px;font-size:10.5px;">
+                      + Tambah di Tanggal Ini
+                    </button>
+                  </div>
+                </div>
+
+                ${
+                  dayScheds.length === 0
+                    ? `
+                  <div style="padding:10px 0;font-size:11.5px;color:var(--stone-400);font-style:italic;">
+                    Belum ada jadwal khusus yang diatur untuk hari ${esc(d.dayName)} ini. (Karyawan menggunakan shift default profil).
+                  </div>
+                `
+                    : `
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    ${dayScheds
+                      .map((sc) => {
+                        const emp = s.profiles.find((p) => p.id === sc.employee_id);
+                        const sh = sc.shift_id ? s.shifts.find((x) => x.id === sc.shift_id) : null;
+                        const isOff = sc.schedule_type === "off";
+                        const outl = sc.outlet_id ? s.outlets.find((o) => o.id === sc.outlet_id) : s.outlets[0];
+
+                        return `
+                          <div class="schedule-emp-row" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--stone-50);border-radius:8px;border:1px solid var(--stone-200);flex-wrap:wrap;gap:8px;">
+                            <div style="display:flex;align-items:center;gap:8px;min-width:180px;">
+                              ${renderAvatarHtml(emp)}
+                              <div>
+                                <div style="font-size:12.5px;font-weight:700;color:var(--stone-900);">
+                                  ${esc(emp?.full_name || "Karyawan")}
+                                  <span style="font-size:10px;color:var(--stone-500);font-weight:normal;">(${esc(emp?.role || "member")})</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap;">
+                                  ${
+                                    isOff
+                                      ? `<span class="badge badge-rose" style="font-size:10.5px;">🏖️ LIBUR / OFF</span>`
+                                      : sh
+                                      ? `<span class="badge badge-amber" style="font-size:10.5px;">🌅 ${esc(sh.name)} (${String(sh.start_time).slice(0, 5)}–${String(sh.end_time).slice(0, 5)})</span>`
+                                      : `<span class="badge" style="background:#e2e8f0;font-size:10.5px;">📋 Shift Standar</span>`
+                                  }
+                                  <span style="font-size:10.5px;color:var(--stone-500);">• ${esc(outl?.name || "Outlet")}</span>
+                                </div>
+                                ${
+                                  sc.notes
+                                    ? `<div style="font-size:11px;color:var(--coffee-800);margin-top:2px;font-style:italic;">💬 "${esc(sc.notes)}"</div>`
+                                    : ""
+                                }
+                              </div>
+                            </div>
+
+                            <div style="display:flex;align-items:center;gap:6px;">
+                              <button class="btn btn-outline btn-xs" data-action="open-edit-schedule" data-schedule-id="${sc.id}" style="padding:4px 8px;font-size:11px;">
+                                ✏️ Edit
+                              </button>
+                              <button class="btn btn-outline btn-xs" data-action="delete-schedule" data-schedule-id="${sc.id}" style="padding:4px 8px;font-size:11px;color:var(--rose-700);border-color:#fca5a5;">
+                                🗑️ Hapus
+                              </button>
+                            </div>
+                          </div>
+                        `;
+                      })
+                      .join("")}
+                  </div>
+                `
+                }
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
+  function renderCpSchedule(uiState) {
+    return renderManagerScheduleView(uiState, true);
   }
 
   // ==========================================================================
@@ -1570,6 +2232,7 @@
         count: pendingCount,
       },
       { id: "roles", label: "Role & Admin" },
+      { id: "schedule", label: "🗓️ Roster Jadwal Kerja" },
       { id: "shifts", label: "Jadwal Shift" },
       { id: "outlets", label: "Outlet & Geofence GPS" },
       { id: "rules", label: "Aturan & Zona Waktu" },
@@ -1606,6 +2269,7 @@
 
       ${tab === "employees" ? renderCpEmployeesAndApproval(uiState) : ""}
       ${tab === "roles" ? renderCpRoles() : ""}
+      ${tab === "schedule" ? renderCpSchedule(uiState) : ""}
       ${tab === "shifts" ? renderCpShifts(uiState) : ""}
       ${tab === "outlets" ? renderCpOutlets(uiState) : ""}
       ${tab === "rules" ? renderCpRules() : ""}
@@ -2571,6 +3235,8 @@
   }
 
   window.SukaViews = {
+    getWeekCalendarRange,
+    formatIndoDate,
     renderAvatarHtml,
     renderCloudSetupScreen,
     renderGoogleLoginOrBootstrapScreen,
@@ -2578,8 +3244,11 @@
     renderGeofenceMapCard,
     renderAttendanceRecordCard,
     renderMemberAttendanceHome,
+    renderMemberScheduleView,
     renderMemberOwnHistoryView,
     renderManagerDashboardView,
+    renderManagerScheduleView,
+    renderCpSchedule,
     renderManagerArchiveView,
     renderManagerReportsView,
     renderControlPanelView,

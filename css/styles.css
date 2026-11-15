@@ -2045,6 +2045,143 @@ p {
 }
 
 /* ==========================================================================
+   ROSTER & JADWAL KERJA (SCHEDULE) - MOBILE-FIRST & CLASSIC LATTE
+   ========================================================================== */
+.schedule-week-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.schedule-week-strip::-webkit-scrollbar {
+  height: 4px;
+}
+.schedule-week-strip::-webkit-scrollbar-thumb {
+  background: rgba(218, 175, 118, 0.4);
+  border-radius: 4px;
+}
+
+.schedule-day-pill {
+  flex: 1 0 76px;
+  min-width: 72px;
+  background: var(--stone-50, #fafaf9);
+  border: 1px solid var(--border-soft, #e7e5e4);
+  border-radius: 12px;
+  padding: 8px 6px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.schedule-day-pill.is-today {
+  border: 1.5px solid var(--gold-500, #d4a373);
+  background: linear-gradient(180deg, #fffcf8, #faf5ee);
+  box-shadow: 0 4px 12px rgba(212, 163, 115, 0.2);
+}
+
+.schedule-day-pill.is-off {
+  background: #fdf2f4;
+  border-color: #fecdd3;
+}
+
+.sched-pill-day {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--stone-500, #78716c);
+}
+
+.schedule-day-pill.is-today .sched-pill-day {
+  color: var(--gold-700, #8c5a32);
+}
+
+.sched-pill-date {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--stone-900, #1c1917);
+}
+
+.schedule-day-pill.is-today .sched-pill-date {
+  color: var(--gold-800, #6d421d);
+}
+
+.badge-pill-shift {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  white-space: nowrap;
+}
+
+.badge-pill-off {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #ffe4e6;
+  color: #9f1239;
+  border: 1px solid #fecdd3;
+  white-space: nowrap;
+}
+
+.badge-pill-none {
+  font-size: 11px;
+  color: var(--stone-400);
+}
+
+.sched-pill-note {
+  font-size: 9.5px;
+  color: var(--stone-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 66px;
+}
+
+.schedule-roster-day-card {
+  background: #ffffff;
+  border: 1px solid var(--border-soft, #e7e5e4);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+  transition: border-color 0.2s ease;
+}
+
+.schedule-roster-day-card.is-today {
+  border: 1.5px solid var(--gold-400, #e0b589);
+  background: linear-gradient(180deg, #ffffff, #faf6f0);
+  box-shadow: 0 4px 14px rgba(212, 163, 115, 0.12);
+}
+
+.schedule-shift-group {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-soft, #e7e5e4);
+}
+
+.schedule-emp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--stone-50, #fafaf9);
+  margin-bottom: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
    PRINT MODE UNTUK EKSPOR PDF LAPORAN RESMI
    ========================================================================== */
 @media print {

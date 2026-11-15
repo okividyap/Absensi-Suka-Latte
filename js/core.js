@@ -209,6 +209,7 @@
     attendance: [],
     corrections: [],
     holidaysAndLeaves: [],
+    workSchedules: [],
     auditLogs: [],
 
     signedUrls: {}, // path -> { url, exp }
@@ -516,8 +517,8 @@ window.SUKA_LATTE_CONFIG = {
   async function loadRoleScopedOperationalData() {
     if (!state.supabase || !isApprovedUser()) return;
 
-    // Data dasar yang diizinkan dibaca oleh pengguna aktif (Outlets, Shifts, Settings)
-    const [outRes, shRes, setRes, attRes, corrRes, hlRes] = await Promise.all([
+    // Data dasar yang diizinkan dibaca oleh pengguna aktif (Outlets, Shifts, Settings, Schedules)
+    const [outRes, shRes, setRes, attRes, corrRes, hlRes, schedRes] = await Promise.all([
       state.supabase.from("outlets").select("*").order("created_at", { ascending: true }),
       state.supabase.from("work_shifts").select("*").order("start_time", { ascending: true }),
       state.supabase.from("system_settings").select("*").eq("key", "operational_config").maybeSingle(),
@@ -550,6 +551,10 @@ window.SUKA_LATTE_CONFIG = {
         .from("holidays_and_leaves")
         .select("*")
         .order("date_start", { ascending: false }),
+      state.supabase
+        .from("work_schedules")
+        .select("*")
+        .order("schedule_date", { ascending: true }),
     ]);
 
     state.outlets = outRes.data || [];
@@ -560,6 +565,7 @@ window.SUKA_LATTE_CONFIG = {
     state.attendance = attRes.data || [];
     state.corrections = corrRes.data || [];
     state.holidaysAndLeaves = hlRes.data || [];
+    state.workSchedules = schedRes.data || [];
 
     // DATA MENDALAM: Hanya dimuat jika pengguna adalah SUPER ADMIN atau ADMIN!
     // Anggota TIDAK BOLEH dan TIDAK BISA memuat daftar karyawan lain, daftar pra-setuju, atau Audit Log!
@@ -1013,6 +1019,116 @@ window.SUKA_LATTE_CONFIG = {
     return rpcRes.data;
   }
 
+  // ==========================================================================
+  // 6. MANAJEMEN ROSTER & JADWAL KERJA KARYAWAN (SCHEDULE)
+  // ==========================================================================
+  function getScheduleForDate(dateStr, employeeId = null) {
+    const empId = employeeId || state.currentUser?.id;
+    if (!empId || !dateStr) return null;
+    return (
+      state.workSchedules.find(
+        (s) => s.employee_id === empId && s.schedule_date === dateStr
+      ) || null
+    );
+  }
+
+  function getSchedulesForRange(startDateStr, endDateStr, employeeId = null) {
+    return state.workSchedules.filter((s) => {
+      const matchEmp = !employeeId || s.employee_id === employeeId;
+      const matchRange =
+        (!startDateStr || s.schedule_date >= startDateStr) &&
+        (!endDateStr || s.schedule_date <= endDateStr);
+      return matchEmp && matchRange;
+    });
+  }
+
+  async function saveWorkSchedule(payload) {
+    assertManagerAccess("SaveWorkSchedule");
+    if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
+    if (!payload.employee_id) throw new Error("Pilih karyawan terlebih dahulu.");
+    if (!payload.schedule_date) throw new Error("Tanggal jadwal kerja wajib diisi.");
+
+    const res = await withTimeout(
+      state.supabase.rpc("upsert_work_schedule", {
+        p_employee_id: payload.employee_id,
+        p_schedule_date: payload.schedule_date,
+        p_shift_id: payload.schedule_type === "off" ? null : payload.shift_id || null,
+        p_outlet_id: payload.outlet_id || (state.outlets[0]?.id ?? null),
+        p_schedule_type: payload.schedule_type || "work",
+        p_notes: payload.notes || null,
+      }),
+      15000,
+      "Penyimpanan jadwal timeout setelah 15 detik."
+    );
+
+    if (res.error) throw res.error;
+
+    const saved = res.data?.schedule;
+    if (saved) {
+      const idx = state.workSchedules.findIndex(
+        (s) => s.employee_id === saved.employee_id && s.schedule_date === saved.schedule_date
+      );
+      if (idx >= 0) {
+        state.workSchedules[idx] = saved;
+      } else {
+        state.workSchedules.push(saved);
+      }
+      state.workSchedules.sort((a, b) => a.schedule_date.localeCompare(b.schedule_date));
+    }
+
+    setTimeout(() => {
+      refreshProfilesAndAuditInBackground();
+    }, 50);
+
+    return saved;
+  }
+
+  async function deleteWorkSchedule(scheduleId) {
+    assertManagerAccess("DeleteWorkSchedule");
+    if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
+    if (!scheduleId) throw new Error("ID jadwal tidak valid.");
+
+    const res = await withTimeout(
+      state.supabase.rpc("delete_work_schedule", {
+        p_schedule_id: scheduleId,
+      }),
+      15000,
+      "Penghapusan jadwal timeout setelah 15 detik."
+    );
+
+    if (res.error) throw res.error;
+
+    state.workSchedules = state.workSchedules.filter((s) => s.id !== scheduleId);
+
+    setTimeout(() => {
+      refreshProfilesAndAuditInBackground();
+    }, 50);
+
+    return res.data;
+  }
+
+  async function bulkSaveWeeklySchedule(employeeId, dailyConfigs) {
+    assertManagerAccess("BulkSaveWeeklySchedule");
+    if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
+    if (!employeeId) throw new Error("Pilih karyawan terlebih dahulu.");
+    if (!Array.isArray(dailyConfigs) || dailyConfigs.length === 0) {
+      throw new Error("Konfigurasi jadwal mingguan tidak valid.");
+    }
+
+    for (const conf of dailyConfigs) {
+      await saveWorkSchedule({
+        employee_id: employeeId,
+        schedule_date: conf.date,
+        shift_id: conf.schedule_type === "off" ? null : conf.shift_id,
+        outlet_id: conf.outlet_id || (state.outlets[0]?.id ?? null),
+        schedule_type: conf.schedule_type || "work",
+        notes: conf.notes || null,
+      });
+    }
+
+    return true;
+  }
+
   window.SukaCore = {
     state,
     DEFAULT_SETTINGS,
@@ -1047,6 +1163,11 @@ window.SUKA_LATTE_CONFIG = {
     canDeleteAttendance,
     deleteAttendanceRecord,
     clearAllTrialAttendance,
+    getScheduleForDate,
+    getSchedulesForRange,
+    saveWorkSchedule,
+    deleteWorkSchedule,
+    bulkSaveWeeklySchedule,
     uploadPrivateSelfieAndSubmit,
   };
 })();

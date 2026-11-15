@@ -21,9 +21,15 @@
   const esc = Core.escapeHtml;
 
   const uiState = {
-    activeNav: "dashboard", // Manajer: dashboard|archive|reports|control_panel ; Anggota: absensi_saya|riwayat_saya
+    activeNav: "dashboard", // Manajer: dashboard|schedules|archive|reports|control_panel ; Anggota: absensi_saya|jadwal_saya|riwayat_saya
     activeControlTab: "employees",
     banner: null, // { ok: boolean, message: string }
+
+    // Filter Roster Jadwal Kerja
+    scheduleWeekOffset: 0,
+    scheduleTab: "mine", // "mine" | "team"
+    scheduleEmployeeFilter: "all",
+    prefilledScheduleDate: null,
 
     // Filter Arsip & Riwayat
     archivePeriodFilter: "all",
@@ -1254,9 +1260,230 @@
       `;
     }
 
+    // H. MODAL EDIT JADWAL KERJA KARYAWAN
+    if (uiState.modal.type === "edit_work_schedule") {
+      Core.assertManagerAccess("ModalEditWorkSchedule");
+      const sched = s.workSchedules.find((x) => x.id === uiState.modal.id);
+      if (!sched) return "";
+      const emp = s.profiles.find((p) => p.id === sched.employee_id);
+      const isOff = sched.schedule_type === "off";
+
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window">
+            <div class="modal-header">
+              <h3 style="font-size:16px;font-weight:800;">✏️ Edit Jadwal Kerja Karyawan</h3>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body">
+              <form id="form-modal-edit-schedule" style="display:flex;flex-direction:column;gap:14px;">
+                <input type="hidden" name="schedule_id" value="${sched.id}" />
+                <input type="hidden" name="employee_id" value="${sched.employee_id}" />
+
+                <div class="card-subtle" style="display:flex;align-items:center;gap:10px;">
+                  ${Views.renderAvatarHtml(emp)}
+                  <div>
+                    <strong style="font-size:14px;color:var(--stone-900);">${esc(emp?.full_name || "Karyawan")}</strong>
+                    <div style="font-size:11.5px;color:var(--stone-600);">${esc(emp?.employee_code || "")} • Role: ${esc(emp?.role || "member")}</div>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label" style="font-size:12px;font-weight:700;">Tanggal Jadwal</label>
+                  <input type="date" name="schedule_date" class="form-input" value="${esc(sched.schedule_date)}" required />
+                </div>
+
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label" style="font-size:12px;font-weight:700;">Tipe Kehadiran</label>
+                  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;">
+                      <input type="radio" name="schedule_type" value="work" ${!isOff ? "checked" : ""} data-action="toggle-modal-schedule-type" />
+                      <span>💼 Masuk Kerja Sesuai Shift</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;color:var(--rose-700);">
+                      <input type="radio" name="schedule_type" value="off" ${isOff ? "checked" : ""} data-action="toggle-modal-schedule-type" />
+                      <span>🏖️ Libur / Day Off</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div id="modal-sched-shift-fields" style="${isOff ? "display:none;" : ""}">
+                  <div class="grid-2" style="gap:10px;">
+                    <div class="form-group" style="margin:0;">
+                      <label class="form-label" style="font-size:12px;font-weight:700;">Pilih Shift</label>
+                      <select name="shift_id" class="form-input">
+                        ${s.shifts
+                          .map(
+                            (sh) => `
+                          <option value="${sh.id}" ${sched.shift_id === sh.id ? "selected" : ""}>
+                            ${esc(sh.name)} (${String(sh.start_time).slice(0, 5)} - ${String(sh.end_time).slice(0, 5)})
+                          </option>
+                        `
+                          )
+                          .join("")}
+                      </select>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                      <label class="form-label" style="font-size:12px;font-weight:700;">Pilih Outlet</label>
+                      <select name="outlet_id" class="form-input">
+                        ${s.outlets
+                          .map(
+                            (o) => `
+                          <option value="${o.id}" ${sched.outlet_id === o.id ? "selected" : ""}>
+                            ${esc(o.name)}
+                          </option>
+                        `
+                          )
+                          .join("")}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label" style="font-size:12px;font-weight:700;">Catatan Tambahan (Opsional)</label>
+                  <input type="text" name="notes" class="form-input" value="${esc(sched.notes || "")}" placeholder="Contoh: Buka toko pagi, gantikan rekan" />
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="submit" class="btn btn-primary">💾 Simpan Perubahan Jadwal</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // I. MODAL ATUR CEPAT JADWAL 1 MINGGU SEKALIGUS
+    if (uiState.modal.type === "quick_weekly_schedule") {
+      Core.assertManagerAccess("ModalQuickWeeklySchedule");
+      const offset = uiState.scheduleWeekOffset || 0;
+      const tz = s.settings.operational_timezone || "Asia/Makassar";
+      const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+      const week = Views.getWeekCalendarRange ? Views.getWeekCalendarRange(parts.dateString, offset) : { days: [], label: "" };
+      const activeEmployees = s.profiles.filter((p) => p.status === "active" && p.first_login_approved);
+      const targetEmpId = uiState.modal.employee_id || (activeEmployees[0]?.id ?? "");
+
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window lg">
+            <div class="modal-header">
+              <div>
+                <h3 style="font-size:16px;font-weight:800;margin:0;">⚡ Atur Cepat Jadwal 1 Minggu Sekaligus</h3>
+                <div style="font-size:12px;color:var(--coffee-700);margin-top:2px;">Periode: ${esc(week.label)}</div>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body">
+              <form id="form-quick-weekly" style="display:flex;flex-direction:column;gap:14px;">
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label" style="font-weight:700;font-size:12px;">Pilih Karyawan</label>
+                  <select name="employee_id" class="form-input" required data-action="change-quick-weekly-emp">
+                    ${activeEmployees
+                      .map(
+                        (p) => `
+                      <option value="${p.id}" ${targetEmpId === p.id ? "selected" : ""}>
+                        ${esc(p.full_name)} [${esc(p.employee_code || "KARYAWAN")}] - ${esc(p.role)}
+                      </option>
+                    `
+                      )
+                      .join("")}
+                  </select>
+                </div>
+
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                  <span style="font-size:11.5px;font-weight:700;color:var(--stone-600);">Pintasan Cepat:</span>
+                  <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="all-morning" style="padding:3px 8px;font-size:11px;">
+                    Semua Pagi
+                  </button>
+                  <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="all-afternoon" style="padding:3px 8px;font-size:11px;">
+                    Semua Siang
+                  </button>
+                  <button type="button" class="btn btn-outline btn-xs" data-action="quick-fill-week" data-preset="mon-fri-morning" style="padding:3px 8px;font-size:11px;">
+                    Senin–Jumat Pagi, Weekend Libur
+                  </button>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  ${week.days
+                    .map((d, idx) => {
+                      const existing = Core.getScheduleForDate(d.dateStr, targetEmpId);
+                      const isToday = d.dateStr === parts.dateString;
+                      const defaultShiftVal = existing?.schedule_type === "off" ? "off" : (existing?.shift_id || s.shifts[0]?.id || "");
+
+                      return `
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--stone-50);border-radius:10px;border:1px solid var(--stone-200);gap:8px;flex-wrap:wrap;">
+                          <div style="min-width:140px;">
+                            <input type="hidden" name="day_date_${idx}" value="${d.dateStr}" />
+                            <div style="display:flex;align-items:center;gap:6px;">
+                              <strong style="font-size:13px;color:var(--stone-900);">${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)}</strong>
+                              ${isToday ? `<span class="badge badge-amber" style="font-size:9.5px;">HARI INI</span>` : ""}
+                            </div>
+                          </div>
+                          <div style="flex:1;min-width:180px;">
+                            <select name="day_shift_${idx}" class="form-input quick-day-select" data-day-index="${idx}" style="font-size:12.5px;padding:6px 10px;">
+                              ${s.shifts
+                                .map(
+                                  (sh) => `
+                                <option value="${sh.id}" ${defaultShiftVal === sh.id ? "selected" : ""}>
+                                  🌅 ${esc(sh.name)} (${String(sh.start_time).slice(0, 5)} - ${String(sh.end_time).slice(0, 5)})
+                                </option>
+                              `
+                                )
+                                .join("")}
+                              <option value="off" ${defaultShiftVal === "off" ? "selected" : ""} style="color:#b91c1c;font-weight:700;">
+                                🏖️ Libur (Day Off)
+                              </option>
+                            </select>
+                          </div>
+                        </div>
+                      `;
+                    })
+                    .join("")}
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="submit" class="btn btn-primary">💾 Terapkan Jadwal 1 Minggu</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     // J. MODAL KONFIRMASI HAPUS / ARSIPKAN (PENGGANTI BROWSER CONFIRM)
     if (uiState.modal.type === "confirm_delete") {
       Core.assertManagerAccess("ModalConfirmDelete");
+      if (uiState.modal.kind === "work_schedule") {
+        const sched = s.workSchedules.find((x) => x.id === uiState.modal.id);
+        const emp = sched ? s.profiles.find((p) => p.id === sched.employee_id) : null;
+        return `
+          <div class="modal-backdrop">
+            <div class="modal-window sm">
+              <div class="modal-header">
+                <h3 style="font-size:16px;font-weight:800;">🗑️ Hapus Jadwal Kerja</h3>
+                <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+              </div>
+              <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+                <div class="card-subtle" style="border-color:#fda4af;background:var(--rose-50);font-size:12.5px;color:var(--rose-800);line-height:1.55;">
+                  Anda akan menghapus jadwal kerja tanggal <strong>${esc(sched?.schedule_date || "-")}</strong>
+                  untuk karyawan <strong>${esc(emp?.full_name || "Karyawan")}</strong>.<br/>
+                  Jadwal ini akan dihapus dari sistem roster operasional.
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="button" class="btn btn-danger" data-action="confirm-delete-item">🗑️ Ya, Hapus Jadwal</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       if (uiState.modal.kind === "employee") {
         const emp = s.profiles.find((p) => p.id === uiState.modal.id);
         return `
@@ -1434,7 +1661,7 @@
 
     if (!isManager) {
       // ANGGOTA DILARANG BERADA DI MENU PENGELOLA DALAM!
-      if (uiState.activeNav !== "absensi_saya" && uiState.activeNav !== "riwayat_saya") {
+      if (uiState.activeNav !== "absensi_saya" && uiState.activeNav !== "riwayat_saya" && uiState.activeNav !== "jadwal_saya") {
         uiState.activeNav = "absensi_saya";
       }
     } else {
@@ -1470,6 +1697,7 @@
     const navItems = isManager
       ? [
           { id: "dashboard", icon: "🏠", label: "Dashboard & Absensi" },
+          { id: "schedules", icon: "📅", label: "Jadwal Kerja" },
           { id: "archive", icon: "🗂️", label: "Arsip Foto Bulanan" },
           { id: "reports", icon: "📊", label: "Laporan & Ekspor" },
           {
@@ -1481,6 +1709,7 @@
         ]
       : [
           { id: "absensi_saya", icon: "🏠", label: "Dashboard & Absensi" },
+          { id: "jadwal_saya", icon: "📅", label: "Jadwal Kerja" },
           { id: "riwayat_saya", icon: "📋", label: "Riwayat Absensi & Izin" },
         ];
 
@@ -1493,12 +1722,17 @@
 
     let mainContentHtml = "";
     if (!isManager) {
-      mainContentHtml =
-        uiState.activeNav === "riwayat_saya"
-          ? Views.renderMemberOwnHistoryView(uiState)
-          : Views.renderMemberAttendanceHome(parts, todayAttendance, canCheckIn, canCheckOut);
+      if (uiState.activeNav === "jadwal_saya") {
+        mainContentHtml = Views.renderMemberScheduleView(uiState);
+      } else if (uiState.activeNav === "riwayat_saya") {
+        mainContentHtml = Views.renderMemberOwnHistoryView(uiState);
+      } else {
+        mainContentHtml = Views.renderMemberAttendanceHome(parts, todayAttendance, canCheckIn, canCheckOut);
+      }
     } else {
-      if (uiState.activeNav === "archive") {
+      if (uiState.activeNav === "schedules") {
+        mainContentHtml = Views.renderManagerScheduleView(uiState);
+      } else if (uiState.activeNav === "archive") {
         mainContentHtml = Views.renderManagerArchiveView(parts, uiState);
       } else if (uiState.activeNav === "reports") {
         mainContentHtml = Views.renderManagerReportsView(uiState);
@@ -1890,6 +2124,142 @@
     }
   }
 
+  // 1.5 Simpan / Update Roster Jadwal Kerja (Schedule)
+  async function handleSaveWorkSchedule(btn) {
+    Core.assertManagerAccess("SaveWorkSchedule");
+    const form = document.getElementById("form-work-schedule");
+    if (!form) return;
+    const fd = new FormData(form);
+    const employeeId = fd.get("employee_id");
+    const scheduleDate = fd.get("schedule_date");
+    const scheduleType = fd.get("schedule_type") || "work";
+    const shiftId = scheduleType === "off" ? null : fd.get("shift_id") || null;
+    const outletId = scheduleType === "off" ? null : fd.get("outlet_id") || null;
+    const notes = (fd.get("notes") || "").trim();
+
+    if (!employeeId) {
+      showBanner(false, "Pilih karyawan terlebih dahulu.");
+      return;
+    }
+    if (!scheduleDate) {
+      showBanner(false, "Pilih tanggal kerja.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan...";
+    }
+
+    try {
+      await Core.saveWorkSchedule({
+        employee_id: employeeId,
+        schedule_date: scheduleDate,
+        schedule_type: scheduleType,
+        shift_id: shiftId,
+        outlet_id: outletId,
+        notes: notes || null,
+      });
+      render();
+      const emp = Core.state.profiles.find((p) => p.id === employeeId);
+      showBanner(
+        true,
+        `Jadwal kerja ${emp?.full_name || "karyawan"} tanggal ${scheduleDate} (${scheduleType === "off" ? "LIBUR" : "MASUK"}) berhasil disimpan.`
+      );
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan Jadwal Kerja";
+      }
+      showBanner(false, "Gagal menyimpan jadwal kerja: " + (err.message || err));
+    }
+  }
+
+  async function handleSaveModalWorkSchedule(btn) {
+    Core.assertManagerAccess("SaveModalWorkSchedule");
+    const form = document.getElementById("form-modal-edit-schedule");
+    if (!form) return;
+    const fd = new FormData(form);
+    const employeeId = fd.get("employee_id");
+    const scheduleDate = fd.get("schedule_date");
+    const scheduleType = fd.get("schedule_type") || "work";
+    const shiftId = scheduleType === "off" ? null : fd.get("shift_id") || null;
+    const outletId = scheduleType === "off" ? null : fd.get("outlet_id") || null;
+    const notes = (fd.get("notes") || "").trim();
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan...";
+    }
+
+    try {
+      await Core.saveWorkSchedule({
+        employee_id: employeeId,
+        schedule_date: scheduleDate,
+        schedule_type: scheduleType,
+        shift_id: shiftId,
+        outlet_id: outletId,
+        notes: notes || null,
+      });
+      uiState.modal = null;
+      render();
+      showBanner(true, "Perubahan jadwal kerja berhasil disimpan.");
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Simpan Perubahan Jadwal";
+      }
+      showBanner(false, "Gagal mengubah jadwal kerja: " + (err.message || err));
+    }
+  }
+
+  async function handleSaveQuickWeeklySchedule(btn) {
+    Core.assertManagerAccess("SaveQuickWeeklySchedule");
+    const form = document.getElementById("form-quick-weekly");
+    if (!form) return;
+    const fd = new FormData(form);
+    const employeeId = fd.get("employee_id");
+    if (!employeeId) {
+      showBanner(false, "Pilih karyawan terlebih dahulu.");
+      return;
+    }
+
+    const daysData = [];
+    for (let i = 0; i < 7; i++) {
+      const date = fd.get(`day_date_${i}`);
+      const shiftValue = fd.get(`day_shift_${i}`);
+      const isOff = shiftValue === "off";
+      daysData.push({
+        date,
+        schedule_type: isOff ? "off" : "work",
+        shift_id: isOff ? null : shiftValue,
+        notes: isOff ? "Libur mingguan" : null,
+      });
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menerapkan 7 Hari...";
+    }
+
+    try {
+      await Core.bulkSaveWeeklySchedule(employeeId, daysData);
+      uiState.modal = null;
+      render();
+      const emp = Core.state.profiles.find((p) => p.id === employeeId);
+      showBanner(true, `Jadwal 1 minggu untuk ${emp?.full_name || "karyawan"} berhasil diterapkan!`);
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "💾 Terapkan Jadwal 1 Minggu";
+      }
+      showBanner(false, "Gagal menyimpan jadwal mingguan: " + (err.message || err));
+    }
+  }
+
   // 2. Hapus / Arsipkan Jadwal Shift
   async function handleDeleteShift(btn) {
     Core.assertManagerAccess("DeleteShift");
@@ -1951,6 +2321,12 @@
         uiState.modal = null;
         render();
         showBanner(true, `Catatan absensi ${name || ""} berhasil dihapus dari sistem.`);
+        return;
+      } else if (kind === "work_schedule") {
+        await Core.deleteWorkSchedule(id);
+        uiState.modal = null;
+        render();
+        showBanner(true, "Jadwal kerja berhasil dihapus dari roster.");
         return;
       } else if (kind === "clear_trial_attendance") {
         const keywordInput = document.getElementById("confirm-clear-keyword");
@@ -3098,12 +3474,138 @@
 
       if (action === "nav") {
         const target = btn.getAttribute("data-target");
-        const managerViews = ["dashboard", "archive", "reports", "control_panel"];
+        const managerViews = ["dashboard", "schedules", "archive", "reports", "control_panel"];
         if (managerViews.includes(target)) {
           Core.assertManagerAccess(`Nav:${target}`);
         }
         uiState.activeNav = target;
         render();
+        return;
+      }
+
+      // KONTROL ROSTER JADWAL KERJA (SCHEDULE)
+      if (action === "schedule-prev-week") {
+        uiState.scheduleWeekOffset = (uiState.scheduleWeekOffset || 0) - 1;
+        render();
+        return;
+      }
+
+      if (action === "schedule-next-week") {
+        uiState.scheduleWeekOffset = (uiState.scheduleWeekOffset || 0) + 1;
+        render();
+        return;
+      }
+
+      if (action === "schedule-today-week") {
+        uiState.scheduleWeekOffset = 0;
+        render();
+        return;
+      }
+
+      if (action === "schedule-subtab") {
+        uiState.scheduleTab = btn.getAttribute("data-tab") || "mine";
+        render();
+        return;
+      }
+
+      if (action === "prefill-schedule-date") {
+        const dt = btn.getAttribute("data-date");
+        uiState.prefilledScheduleDate = dt;
+        const dateInput = document.getElementById("sched-date-input");
+        if (dateInput) {
+          dateInput.value = dt;
+        }
+        const formCard = document.getElementById("card-schedule-input-form");
+        if (formCard) {
+          formCard.scrollIntoView({ behavior: "smooth" });
+        }
+        return;
+      }
+
+      if (action === "set-sched-date-quick") {
+        const days = parseInt(btn.getAttribute("data-days") || "0", 10);
+        const tz = Core.state.settings.operational_timezone || "Asia/Makassar";
+        const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+        const [y, m, d] = parts.dateString.split("-").map(Number);
+        const targetDate = new Date(y, m - 1, d + days);
+        const dy = targetDate.getFullYear();
+        const dm = String(targetDate.getMonth() + 1).padStart(2, "0");
+        const dd = String(targetDate.getDate()).padStart(2, "0");
+        const dateStr = `${dy}-${dm}-${dd}`;
+        uiState.prefilledScheduleDate = dateStr;
+        const dateInput = document.getElementById("sched-date-input");
+        if (dateInput) {
+          dateInput.value = dateStr;
+        }
+        return;
+      }
+
+      if (action === "toggle-schedule-type") {
+        const fields = document.getElementById("sched-shift-outlet-fields");
+        if (fields) {
+          const isOff = btn.value === "off";
+          fields.style.display = isOff ? "none" : "grid";
+        }
+        return;
+      }
+
+      if (action === "toggle-modal-schedule-type") {
+        const fields = document.getElementById("modal-sched-shift-fields");
+        if (fields) {
+          const isOff = btn.value === "off";
+          fields.style.display = isOff ? "none" : "block";
+        }
+        return;
+      }
+
+      if (action === "open-edit-schedule") {
+        Core.assertManagerAccess("OpenEditSchedule");
+        const schedId = btn.getAttribute("data-schedule-id");
+        if (!schedId) return;
+        uiState.modal = { type: "edit_work_schedule", id: schedId };
+        render();
+        return;
+      }
+
+      if (action === "delete-schedule") {
+        Core.assertManagerAccess("DeleteSchedule");
+        const schedId = btn.getAttribute("data-schedule-id");
+        if (!schedId) return;
+        uiState.modal = { type: "confirm_delete", kind: "work_schedule", id: schedId };
+        render();
+        return;
+      }
+
+      if (action === "open-quick-weekly-modal") {
+        Core.assertManagerAccess("OpenQuickWeeklyModal");
+        uiState.modal = {
+          type: "quick_weekly_schedule",
+          employee_id: uiState.scheduleEmployeeFilter !== "all" ? uiState.scheduleEmployeeFilter : null,
+        };
+        render();
+        return;
+      }
+
+      if (action === "quick-fill-week") {
+        const preset = btn.getAttribute("data-preset");
+        const selects = document.querySelectorAll(".quick-day-select");
+        const s = Core.state;
+        const morningShift = s.shifts.find((sh) => sh.name.toLowerCase().includes("pagi")) || s.shifts[0];
+        const afternoonShift = s.shifts.find((sh) => sh.name.toLowerCase().includes("siang")) || s.shifts[1] || s.shifts[0];
+
+        selects.forEach((sel, idx) => {
+          if (preset === "all-morning" && morningShift) {
+            sel.value = morningShift.id;
+          } else if (preset === "all-afternoon" && afternoonShift) {
+            sel.value = afternoonShift.id;
+          } else if (preset === "mon-fri-morning") {
+            if (idx >= 5) {
+              sel.value = "off";
+            } else if (morningShift) {
+              sel.value = morningShift.id;
+            }
+          }
+        });
         return;
       }
 
@@ -3673,6 +4175,9 @@
     ev.preventDefault();
 
     try {
+      if (form.id === "form-work-schedule") return await handleSaveWorkSchedule(form.querySelector("#btn-submit-schedule") || form.querySelector('button[type="submit"]'));
+      if (form.id === "form-modal-edit-schedule") return await handleSaveModalWorkSchedule(form.querySelector('button[type="submit"]'));
+      if (form.id === "form-quick-weekly") return await handleSaveQuickWeeklySchedule(form.querySelector('button[type="submit"]'));
       if (form.id === "form-save-shift") return await handleSaveShift(form.querySelector("#btn-save-shift") || form.querySelector('button[type="submit"]'));
       if (form.id === "form-save-outlet") return await handleSaveOutlet(form.querySelector("#btn-save-outlet") || form.querySelector('button[type="submit"]'));
       if (form.id === "form-save-rules") return await handleSaveRules(form.querySelector("#btn-save-rules") || form.querySelector('button[type="submit"]'));
@@ -3700,7 +4205,23 @@
   // ==========================================================================
   document.addEventListener("change", (ev) => {
     const el = ev.target;
-    if (!el || !el.id) return;
+    if (!el) return;
+
+    if (el.getAttribute && el.getAttribute("data-action") === "filter-schedule-employee") {
+      uiState.scheduleEmployeeFilter = el.value;
+      render();
+      return;
+    }
+
+    if (el.getAttribute && el.getAttribute("data-action") === "change-quick-weekly-emp") {
+      if (uiState.modal && uiState.modal.type === "quick_weekly_schedule") {
+        uiState.modal.employee_id = el.value;
+        render();
+      }
+      return;
+    }
+
+    if (!el.id) return;
 
     if (el.id === "camera-shift-select") {
       liveCamera.shiftId = el.value;
