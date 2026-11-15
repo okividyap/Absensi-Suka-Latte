@@ -994,6 +994,25 @@
 
     return `
       ${
+        !u.face_id_enrolled
+          ? `<div class="card" style="margin-bottom:16px;border:1.5px solid #f59e0b;background:#fffbeb;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-size:13.5px;font-weight:800;color:#92400e;display:flex;align-items:center;gap:6px;">
+                  <span>🔐</span>
+                  <span>Wajib Daftarkan 1 Wajah Face ID Anda</span>
+                </div>
+                <div style="font-size:11.5px;color:#b45309;margin-top:2px;">
+                  Sistem Suka Latte hanya menerima 1 wajah resmi pada 1 akun Google untuk mencegah joki absensi dan menjaga profesionalitas kerja.
+                </div>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" data-action="open-face-id-enrollment" style="padding:6px 14px;font-size:12px;font-weight:700;">
+                📸 Daftarkan Face ID Sekarang
+              </button>
+            </div>`
+          : ""
+      }
+
+      ${
         isTodayScheduledOff
           ? `<div class="card" style="margin-bottom:16px;border:1.5px solid #fca5a5;background:#fff1f2;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
               <div>
@@ -1091,6 +1110,11 @@
                 ☕ ${esc(parts.dateString)} (${esc(tz)})
               </span>
               <span class="badge badge-coffee mono" style="background:rgba(255,255,255,0.08);color:var(--gold-200);">ID: ${esc(u.employee_code)}</span>
+              ${
+                u.face_id_enrolled
+                  ? `<span class="badge" style="background:rgba(16,185,129,0.18);color:#6ee7b7;border:1px solid rgba(16,185,129,0.35);font-size:10px;">🔒 Face ID Aktif (1 Wajah)</span>`
+                  : `<span class="badge" style="background:rgba(245,158,11,0.18);color:#fde68a;border:1px solid rgba(245,158,11,0.35);font-size:10px;">⚠️ Belum Face ID</span>`
+              }
             </div>
             <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Selamat Bertugas, ${esc(u.full_name)}</h1>
             <p style="font-size:12px;color:var(--coffee-200);margin-bottom:12px;">
@@ -1313,15 +1337,26 @@
       }
     });
 
+    const incomingSwaps = (s.shiftSwaps || []).filter(
+      (sw) => sw.target_employee_id === u.id && sw.status === "pending"
+    );
+
     return `
       <div class="hero-banner">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-          <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);">
-            🗓️ Roster Jadwal Kerja Bulanan
-          </span>
-          <span class="badge badge-coffee mono" style="background:rgba(255,255,255,0.08);color:var(--gold-200);">
-            ${esc(u.employee_code || "KARYAWAN")}
-          </span>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);">
+              🗓️ Roster Jadwal Kerja Bulanan
+            </span>
+            <span class="badge badge-coffee mono" style="background:rgba(255,255,255,0.08);color:var(--gold-200);">
+              ${esc(u.employee_code || "KARYAWAN")}
+            </span>
+          </div>
+
+          <button class="btn btn-amber btn-sm" data-action="open-shift-swap-modal" style="display:flex;align-items:center;gap:5px;font-size:12px;padding:6px 12px;font-weight:700;">
+            <span>🔁</span>
+            <span>Ajukan Tukar Shift / Libur</span>
+          </button>
         </div>
 
         <h2 style="font-size:21px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">
@@ -1350,6 +1385,28 @@
         </div>
       </div>
 
+      <!-- NOTIFIKASI PERMINTAAN TUKAR SHIFT DARI REKAN KERJA -->
+      ${
+        incomingSwaps.length > 0
+          ? `
+        <div class="card" style="margin-bottom:16px;border:1.5px solid #f59e0b;background:#fffbeb;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="font-size:13.5px;font-weight:800;color:#92400e;display:flex;align-items:center;gap:6px;">
+              <span>🔔</span>
+              <span>Ada ${incomingSwaps.length} Permintaan Tukar Shift Menunggu Persetujuan Anda!</span>
+            </div>
+            <div style="font-size:11.5px;color:#b45309;margin-top:2px;">
+              Rekan kerja Anda mengajukan pertukaran shift kerja / libur. Persetujuan kedua belah pihak diperlukan agar jadwal diperbarui otomatis.
+            </div>
+          </div>
+          <button class="btn btn-amber btn-sm" data-action="schedule-subtab" data-tab="swaps" style="padding:6px 14px;font-size:12px;font-weight:700;">
+            Lihat &amp; Tanggapi Permintaan ›
+          </button>
+        </div>
+        `
+          : ""
+      }
+
       <!-- RINGKASAN STATISTIK BULANAN SAYA -->
       <div class="schedule-month-stats">
         <div class="sched-stat-card">
@@ -1370,7 +1427,7 @@
         </div>
       </div>
 
-      <!-- TAB PILIHAN ANGGOTA: JADWAL SAYA VS REKAN TIM VS KALENDER -->
+      <!-- TAB PILIHAN ANGGOTA: JADWAL SAYA VS REKAN TIM VS KALENDER VS TUKAR SHIFT -->
       <div class="tab-pills" style="margin-bottom:16px;">
         <button class="tab-pill ${subTab === "mine" ? "active" : ""}" data-action="schedule-subtab" data-tab="mine">
           <span>📅 Jadwal Saya Sendiri (1 Bulan)</span>
@@ -1381,6 +1438,9 @@
         <button class="tab-pill ${subTab === "calendar" ? "active" : ""}" data-action="schedule-subtab" data-tab="calendar">
           <span>🗓️ Kalender Bulanan</span>
         </button>
+        <button class="tab-pill ${subTab === "swaps" ? "active" : ""}" data-action="schedule-subtab" data-tab="swaps">
+          <span>🔁 Tukar Shift &amp; Libur ${incomingSwaps.length > 0 ? `<span class="badge badge-amber" style="margin-left:4px;font-size:10px;padding:2px 6px;">${incomingSwaps.length} Baru</span>` : ""}</span>
+        </button>
       </div>
 
       ${
@@ -1388,7 +1448,9 @@
           ? renderMemberOwnScheduleList(month, parts.dateString, u, s, tz)
           : subTab === "team"
           ? renderMemberTeamScheduleList(month, parts.dateString, u, s)
-          : renderMemberMonthCalendarGrid(month, parts.dateString, u.id, s)
+          : subTab === "calendar"
+          ? renderMemberMonthCalendarGrid(month, parts.dateString, u.id, s)
+          : renderMemberShiftSwapsView(u, s, tz)
       }
     `;
   }
@@ -1710,6 +1772,226 @@
           <span style="display:flex;align-items:center;gap:4px;"><span class="badge badge-coffee" style="font-size:10px;padding:2px 6px;">Siang</span> Shift Siang</span>
           <span style="display:flex;align-items:center;gap:4px;"><span class="badge badge-rose" style="font-size:10px;padding:2px 6px;">Libur</span> Day Off (Libur)</span>
           <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:2px solid #10b981;"></span> Hari Ini</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMemberShiftSwapsView(u, s, tz) {
+    const allSwaps = s.shiftSwaps || [];
+    const incoming = allSwaps.filter((sw) => sw.target_employee_id === u.id && sw.status === "pending");
+    const outgoing = allSwaps.filter((sw) => sw.requester_id === u.id && sw.status === "pending");
+    const history = allSwaps.filter(
+      (sw) =>
+        (sw.target_employee_id === u.id || sw.requester_id === u.id) &&
+        sw.status !== "pending"
+    );
+
+    const getShiftLabel = (schedType, shiftId) => {
+      if (schedType === "off") return "🏖️ Libur (Day Off)";
+      const sh = s.shifts.find((x) => x.id === shiftId);
+      return sh ? `🌅 ${sh.name} (${String(sh.start_time).slice(0, 5)}–${String(sh.end_time).slice(0, 5)})` : "📋 Shift Kerja";
+    };
+
+    return `
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:linear-gradient(135deg,#fff8f0,#ffffff);border:1px solid #fde68a;">
+          <div>
+            <h3 style="font-size:15.5px;font-weight:800;margin:0 0 4px 0;color:var(--coffee-950);">
+              🔁 Pertukaran Shift &amp; Libur Antar Karyawan
+            </h3>
+            <p style="font-size:12px;color:var(--stone-600);margin:0;max-width:680px;line-height:1.5;">
+              Tukar jadwal shift masuk atau hari libur dengan rekan kerja atas persetujuan kedua belah pihak. Jadwal akan otomatis langsung diperbarui di roster setelah rekan Anda menyetujui.
+            </p>
+          </div>
+          <button type="button" class="btn btn-amber" data-action="open-shift-swap-modal" style="display:flex;align-items:center;gap:6px;font-size:13px;padding:9px 16px;font-weight:700;">
+            <span>➕</span>
+            <span>Ajukan Tukar Shift / Libur</span>
+          </button>
+        </div>
+
+        <!-- 1. PERMINTAAN MASUK (MENUNGGU PERSETUJUAN ANDA) -->
+        <div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+            <h4 style="font-size:14px;font-weight:800;color:var(--stone-900);margin:0;">
+              📥 Permintaan Masuk Menunggu Persetujuan Anda
+            </h4>
+            <span class="badge ${incoming.length > 0 ? "badge-amber" : ""}" style="font-size:11px;">${incoming.length}</span>
+          </div>
+
+          ${
+            incoming.length === 0
+              ? `<div class="card-subtle" style="padding:16px;text-align:center;font-size:12px;color:var(--stone-500);font-style:italic;">
+                  Tidak ada permintaan pertukaran shift dari rekan kerja saat ini.
+                </div>`
+              : `<div style="display:flex;flex-direction:column;gap:10px;">
+                  ${incoming
+                    .map((sw) => {
+                      const reqEmp = s.profiles.find((p) => p.id === sw.requester_id);
+                      return `
+                        <div class="card" style="border:1.5px solid #fde68a;background:#fffdf7;padding:14px;">
+                          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                              ${renderAvatarHtml(reqEmp)}
+                              <div>
+                                <div style="font-size:13.5px;font-weight:800;color:var(--stone-900);">
+                                  ${esc(reqEmp ? reqEmp.full_name : "Rekan Kerja")}
+                                  <span style="font-size:11px;color:var(--stone-500);font-weight:normal;">(${esc(reqEmp?.employee_code || "-")})</span>
+                                </div>
+                                <div style="font-size:11px;color:var(--coffee-700);">
+                                  Diajukan pada ${esc(sw.created_at ? Core.formatOperationalDateTime(sw.created_at, tz, true) : "-")}
+                                </div>
+                              </div>
+                            </div>
+                            <span class="badge badge-amber" style="font-size:10.5px;">MENUNGGU ANDA</span>
+                          </div>
+
+                          <!-- RINCIAN PERTUKARAN -->
+                          <div class="grid-2" style="gap:10px;background:var(--stone-50);padding:10px 12px;border-radius:10px;border:1px solid var(--stone-200);margin-bottom:10px;">
+                            <div>
+                              <div style="font-size:10.5px;font-weight:700;color:var(--stone-500);text-transform:uppercase;">
+                                Jadwal Rekan (${esc(reqEmp?.full_name || "Pemohon")}):
+                              </div>
+                              <div style="font-size:12.5px;font-weight:800;color:var(--stone-900);margin-top:2px;">
+                                📅 ${esc(sw.requester_date)}
+                              </div>
+                              <div style="font-size:12px;color:var(--coffee-900);font-weight:700;margin-top:2px;">
+                                ${esc(getShiftLabel(sw.requester_schedule_type, sw.requester_shift_id))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div style="font-size:10.5px;font-weight:700;color:var(--stone-500);text-transform:uppercase;">
+                                Ditukar Dengan Jadwal Anda:
+                              </div>
+                              <div style="font-size:12.5px;font-weight:800;color:var(--stone-900);margin-top:2px;">
+                                📅 ${esc(sw.target_date)}
+                              </div>
+                              <div style="font-size:12px;color:var(--coffee-900);font-weight:700;margin-top:2px;">
+                                ${esc(getShiftLabel(sw.target_schedule_type, sw.target_shift_id))}
+                              </div>
+                            </div>
+                          </div>
+
+                          ${
+                            sw.requester_notes
+                              ? `<div style="font-size:12px;color:var(--coffee-900);background:#fef3c7;padding:8px 10px;border-radius:8px;margin-bottom:12px;">
+                                  💬 <strong>Alasan Rekan:</strong> "${esc(sw.requester_notes)}"
+                                </div>`
+                              : ""
+                          }
+
+                          <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-outline btn-sm" data-action="respond-shift-swap" data-id="${esc(sw.id)}" data-accept="false" style="color:var(--rose-700);border-color:#fca5a5;font-size:12px;padding:6px 12px;">
+                              ✕ Tolak Pertukaran
+                            </button>
+                            <button type="button" class="btn btn-emerald btn-sm" data-action="respond-shift-swap" data-id="${esc(sw.id)}" data-accept="true" style="font-size:12px;padding:6px 16px;font-weight:700;">
+                              ✓ Setujui &amp; Tukar Jadwal Otomatis
+                            </button>
+                          </div>
+                        </div>
+                      `;
+                    })
+                    .join("")}
+                </div>`
+          }
+        </div>
+
+        <!-- 2. PENGAJUAN ANDA (MENUNGGU PERSETUJUAN REKAN) -->
+        <div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+            <h4 style="font-size:14px;font-weight:800;color:var(--stone-900);margin:0;">
+              📤 Pengajuan Anda Yang Masih Menunggu Persetujuan Rekan
+            </h4>
+            <span class="badge" style="font-size:11px;">${outgoing.length}</span>
+          </div>
+
+          ${
+            outgoing.length === 0
+              ? `<div class="card-subtle" style="padding:14px;text-align:center;font-size:12px;color:var(--stone-500);font-style:italic;">
+                  Tidak ada pengajuan tukar shift aktif yang sedang menunggu persetujuan.
+                </div>`
+              : `<div style="display:flex;flex-direction:column;gap:10px;">
+                  ${outgoing
+                    .map((sw) => {
+                      const targetEmp = s.profiles.find((p) => p.id === sw.target_employee_id);
+                      return `
+                        <div class="card-subtle" style="padding:12px 14px;">
+                          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                            <div>
+                              <div style="font-size:13px;font-weight:800;color:var(--stone-900);">
+                                Mengajukan ke: ${esc(targetEmp ? targetEmp.full_name : "Rekan Kerja")} (${esc(targetEmp?.employee_code || "-")})
+                              </div>
+                              <div style="font-size:11px;color:var(--stone-500);margin-top:2px;">
+                                Jadwal Anda (${esc(sw.requester_date)}: ${esc(getShiftLabel(sw.requester_schedule_type, sw.requester_shift_id))}) ⇄ 
+                                Jadwal Rekan (${esc(sw.target_date)}: ${esc(getShiftLabel(sw.target_schedule_type, sw.target_shift_id))})
+                              </div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                              <span class="badge badge-amber" style="font-size:10.5px;">MENUNGGU RESPON REKAN</span>
+                              <button type="button" class="btn btn-outline btn-xs" data-action="cancel-shift-swap" data-id="${esc(sw.id)}" style="color:var(--rose-700);border-color:#fca5a5;font-size:11px;padding:3px 8px;">
+                                Batalkan
+                              </button>
+                            </div>
+                          </div>
+                          ${
+                            sw.requester_notes
+                              ? `<div style="font-size:11.5px;color:var(--stone-600);font-style:italic;">
+                                  💬 Catatan Anda: "${esc(sw.requester_notes)}"
+                                </div>`
+                              : ""
+                          }
+                        </div>
+                      `;
+                    })
+                    .join("")}
+                </div>`
+          }
+        </div>
+
+        <!-- 3. RIWAYAT PERTUKARAN SELESAI -->
+        <div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+            <h4 style="font-size:14px;font-weight:800;color:var(--stone-900);margin:0;">
+              📜 Riwayat Pertukaran Shift
+            </h4>
+            <span class="badge" style="font-size:11px;">${history.length}</span>
+          </div>
+
+          ${
+            history.length === 0
+              ? `<div class="card-subtle" style="padding:14px;text-align:center;font-size:12px;color:var(--stone-500);font-style:italic;">
+                  Belum ada riwayat pertukaran shift sebelumnya.
+                </div>`
+              : `<div style="display:flex;flex-direction:column;gap:8px;">
+                  ${history.slice(0, 15).map((sw) => {
+                    const isRequester = sw.requester_id === u.id;
+                    const otherEmp = s.profiles.find((p) => p.id === (isRequester ? sw.target_employee_id : sw.requester_id));
+                    const badgeCls = sw.status === "approved" ? "badge-success" : sw.status === "rejected" ? "badge-danger" : "badge";
+                    const statusLabel = sw.status === "approved" ? "✓ DISETUJUI & TERTUKAR" : sw.status === "rejected" ? "✕ DITOLAK" : "DIBATALKAN";
+
+                    return `
+                      <div class="card-subtle" style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <div>
+                          <div style="font-size:12.5px;font-weight:700;color:var(--stone-900);">
+                            ${isRequester ? `Anda ⇄ ${esc(otherEmp?.full_name || "Rekan")}` : `${esc(otherEmp?.full_name || "Rekan")} ⇄ Anda`}
+                          </div>
+                          <div style="font-size:11px;color:var(--stone-500);margin-top:2px;">
+                            ${esc(sw.requester_date)} (${esc(getShiftLabel(sw.requester_schedule_type, sw.requester_shift_id))}) ⇄ 
+                            ${esc(sw.target_date)} (${esc(getShiftLabel(sw.target_schedule_type, sw.target_shift_id))})
+                          </div>
+                          ${
+                            sw.target_response_notes
+                              ? `<div style="font-size:10.5px;color:var(--stone-600);margin-top:2px;">Tanggapan: "${esc(sw.target_response_notes)}"</div>`
+                              : ""
+                          }
+                        </div>
+                        <span class="badge ${badgeCls}" style="font-size:10px;">${statusLabel}</span>
+                      </div>
+                    `;
+                  }).join("")}
+                </div>`
+          }
         </div>
       </div>
     `;
@@ -2835,6 +3117,7 @@
                           <span class="mono" style="font-size:11px;color:var(--coffee-700);">(${esc(emp.employee_code)})</span>
                           <span class="badge ${emp.role === "super_admin" ? "badge-super" : emp.role === "admin" ? "badge-admin" : "badge-member"}">${esc(emp.role.replace("_", " ").toUpperCase())}</span>
                           <span class="badge ${emp.status === "active" ? "badge-success" : "badge-danger"}">${esc(emp.status.toUpperCase())}</span>
+                          ${emp.face_id_enrolled ? `<span class="badge badge-success" title="Face ID terdaftar pada 1 akun Google ini" style="font-size:10px;">🔒 Face ID Aktif</span>` : `<span class="badge badge-warning" title="Belum mendaftarkan Face ID" style="font-size:10px;">⚠️ Belum Face ID</span>`}
                         </div>
                         <div style="font-size:11.5px;color:var(--stone-600);">${esc(emp.position_title)} • ${esc(emp.email)} ${emp.phone ? "• " + esc(emp.phone) : ""}</div>
                         <div style="font-size:11px;color:var(--coffee-800);">Outlet: <strong>${esc(out ? out.name : "-")}</strong> • Shift: <strong>${esc(sh ? sh.name : "-")}</strong></div>
@@ -2845,6 +3128,13 @@
                         canEditThis
                           ? `<button class="btn btn-primary btn-sm" data-action="open-edit-employee" data-userid="${esc(emp.id)}">
                               ✏️ Edit Data
+                            </button>`
+                          : ""
+                      }
+                      ${
+                        emp.face_id_enrolled && (Core.isSuperAdmin() || Core.isAdmin())
+                          ? `<button type="button" class="btn btn-outline btn-sm" data-action="reset-face-id" data-userid="${esc(emp.id)}" data-name="${esc(emp.full_name)}" style="color:var(--coffee-800);border-color:var(--coffee-400);" title="Reset Face ID jika karyawan mengganti wajah/perlu rekam ulang">
+                              🔄 Reset Face ID
                             </button>`
                           : ""
                       }
@@ -3607,6 +3897,7 @@
     renderAttendanceRecordCard,
     renderMemberAttendanceHome,
     renderMemberScheduleView,
+    renderMemberShiftSwapsView,
     renderMemberOwnHistoryView,
     renderManagerDashboardView,
     renderManagerScheduleView,

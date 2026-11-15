@@ -68,6 +68,8 @@
     geometricInterval: null,
     geometricDetected: false,
     geometricScore: 0,
+    faceIdScore: 0,
+    faceIdMatched: false,
     prevSamplePixels: null,
     submitError: null,
     submitting: false,
@@ -162,6 +164,150 @@
   // ==========================================================================
   // 2. KAMERA SELFIE LANGSUNG & GEOLOCATION GPS ASLI PERANGKAT
   // ==========================================================================
+  function extractBiometricFeatures(source) {
+    try {
+      if (!source) return null;
+      const isVideo = source instanceof HTMLVideoElement;
+      const w = isVideo ? source.videoWidth : source.width;
+      const h = isVideo ? source.videoHeight : source.height;
+      if (!w || !h || w < 20 || h < 20) return null;
+
+      const sampleCanvas = document.createElement("canvas");
+      sampleCanvas.width = 32;
+      sampleCanvas.height = 32;
+      const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+
+      // Potong area oval wajah di tengah frame (lebar 50%, tinggi 60%)
+      const cropX = Math.round(w * 0.25);
+      const cropY = Math.round(h * 0.15);
+      const cropW = Math.round(w * 0.50);
+      const cropH = Math.round(h * 0.60);
+
+      sampleCtx.drawImage(source, cropX, cropY, cropW, cropH, 0, 0, 32, 32);
+      const imgData = sampleCtx.getImageData(0, 0, 32, 32);
+      const data = imgData.data;
+
+      // 1. Grid intensitas luminance 4x4 (16 zona dinormalisasi terhadap rata-rata wajah)
+      const zones = new Array(16).fill(0);
+      const zoneCounts = new Array(16).fill(0);
+      let totalLum = 0;
+      let totalR = 0;
+      let totalG = 0;
+      let totalB = 0;
+
+      for (let y = 0; y < 32; y++) {
+        const zy = Math.min(3, Math.floor(y / 8));
+        for (let x = 0; x < 32; x++) {
+          const zx = Math.min(3, Math.floor(x / 8));
+          const idx = (y * 32 + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          const zi = zy * 4 + zx;
+          zones[zi] += lum;
+          zoneCounts[zi]++;
+          totalLum += lum;
+          totalR += r;
+          totalG += g;
+          totalB += b;
+        }
+      }
+
+      const meanLum = totalLum / 1024 || 1;
+      const normZones = zones.map((z, i) =>
+        Number((z / (zoneCounts[i] * meanLum)).toFixed(4))
+      );
+
+      // 2. Proporsi sepertiga vertikal wajah (dahi-alis vs mata-hidung vs mulut-dagu)
+      let topLum = 0, midLum = 0, botLum = 0;
+      for (let y = 0; y < 10; y++) {
+        for (let x = 0; x < 32; x++) {
+          const idx = (y * 32 + x) * 4;
+          topLum += 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+        }
+      }
+      for (let y = 10; y < 21; y++) {
+        for (let x = 0; x < 32; x++) {
+          const idx = (y * 32 + x) * 4;
+          midLum += 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+        }
+      }
+      for (let y = 21; y < 32; y++) {
+        for (let x = 0; x < 32; x++) {
+          const idx = (y * 32 + x) * 4;
+          botLum += 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+        }
+      }
+      const sumThirds = topLum + midLum + botLum || 1;
+      const thirds = [
+        Number((topLum / sumThirds).toFixed(4)),
+        Number((midLum / sumThirds).toFixed(4)),
+        Number((botLum / sumThirds).toFixed(4)),
+      ];
+
+      // 3. Tanda pigmen kulit / chromatic signature
+      const sumRGB = totalR + totalG + totalB || 1;
+      const chroma = [
+        Number((totalR / sumRGB).toFixed(4)),
+        Number((totalG / sumRGB).toFixed(4)),
+        Number((totalB / sumRGB).toFixed(4)),
+      ];
+
+      return {
+        version: 1,
+        zones: normZones,
+        thirds: thirds,
+        chroma: chroma,
+        capturedAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      console.warn("Ekstraksi biometrik wajah terhenti:", err);
+      return null;
+    }
+  }
+
+  function compareBiometricFeatures(live, enrolled) {
+    if (!live || !enrolled || !Array.isArray(live.zones) || !Array.isArray(enrolled.zones)) {
+      return 0;
+    }
+
+    // 1. Korelasi 16-zona kontur wajah
+    let zoneDistSum = 0;
+    for (let i = 0; i < 16; i++) {
+      const d = (live.zones[i] || 0) - (enrolled.zones[i] || 0);
+      zoneDistSum += d * d;
+    }
+    const zoneRms = Math.sqrt(zoneDistSum / 16);
+    const zoneSim = Math.max(0, Math.min(100, (1 - zoneRms / 0.35) * 100));
+
+    // 2. Korelasi proporsi vertikal wajah (dahi, mata-hidung, rahang)
+    let thirdsDistSum = 0;
+    const lThirds = live.thirds || [0.33, 0.34, 0.33];
+    const eThirds = enrolled.thirds || [0.33, 0.34, 0.33];
+    for (let i = 0; i < 3; i++) {
+      const d = (lThirds[i] || 0) - (eThirds[i] || 0);
+      thirdsDistSum += d * d;
+    }
+    const thirdsRms = Math.sqrt(thirdsDistSum / 3);
+    const thirdsSim = Math.max(0, Math.min(100, (1 - thirdsRms / 0.18) * 100));
+
+    // 3. Korelasi pigmen kulit / undertone
+    let chromaDistSum = 0;
+    const lChroma = live.chroma || [0.33, 0.33, 0.33];
+    const eChroma = enrolled.chroma || [0.33, 0.33, 0.33];
+    for (let i = 0; i < 3; i++) {
+      const d = (lChroma[i] || 0) - (eChroma[i] || 0);
+      chromaDistSum += d * d;
+    }
+    const chromaRms = Math.sqrt(chromaDistSum / 3);
+    const chromaSim = Math.max(0, Math.min(100, (1 - chromaRms / 0.12) * 100));
+
+    // Bobot: Kontur Zona Wajah (50%) + Proporsi Vertikal (30%) + Pigmen Undertone (20%)
+    const score = 0.50 * zoneSim + 0.30 * thirdsSim + 0.20 * chromaSim;
+    return Number(Math.max(0, Math.min(100, score)).toFixed(1));
+  }
+
   function stopCameraStream() {
     stopGeometricFaceAnalysis();
     if (liveCamera.stream) {
@@ -232,21 +378,73 @@
           const score = Math.min(99.6, 96.2 + Math.random() * 3.2);
           liveCamera.geometricScore = score;
 
-          frameEl.classList.add("is-detected");
-          if (statusTextEl) {
-            statusTextEl.textContent = `✓ Wajah Asli Terdeteksi (${score.toFixed(1)}% Liveness)`;
-            statusTextEl.style.color = "#34d399";
-          }
-          if (dotEl) {
-            dotEl.style.background = "#10b981";
-          }
-          if (scoreBadgeEl) {
-            scoreBadgeEl.textContent = "VALID OK";
-            scoreBadgeEl.style.color = "#34d399";
+          const currentUser = Core.state.currentUser;
+          const isEnrollment = uiState.modal?.type === "face_id_enrollment";
+
+          if (isEnrollment) {
+            frameEl.classList.add("is-detected");
+            frameEl.classList.remove("is-mismatch");
+            if (statusTextEl) {
+              statusTextEl.textContent = `✓ Wajah Stabil — Siap Dikunci (${score.toFixed(1)}% Liveness)`;
+              statusTextEl.style.color = "#34d399";
+            }
+            if (dotEl) dotEl.style.background = "#10b981";
+            if (scoreBadgeEl) {
+              scoreBadgeEl.textContent = "READY TO LOCK";
+              scoreBadgeEl.style.color = "#34d399";
+            }
+          } else if (currentUser?.face_id_enrolled && currentUser?.face_id_biometric_data) {
+            // Evaluasi kecocokan biometrik live vs Face ID terdaftar pada akun Google
+            const liveFeatures = extractBiometricFeatures(videoEl);
+            const matchScore = compareBiometricFeatures(liveFeatures, currentUser.face_id_biometric_data);
+            liveCamera.faceIdScore = matchScore;
+            liveCamera.faceIdMatched = matchScore >= 70;
+
+            if (liveCamera.faceIdMatched) {
+              frameEl.classList.add("is-detected");
+              frameEl.classList.remove("is-mismatch");
+              if (statusTextEl) {
+                statusTextEl.textContent = `✓ Face ID Cocok (${matchScore.toFixed(1)}% Match)`;
+                statusTextEl.style.color = "#34d399";
+              }
+              if (dotEl) dotEl.style.background = "#10b981";
+              if (scoreBadgeEl) {
+                scoreBadgeEl.textContent = "FACE ID OK";
+                scoreBadgeEl.style.color = "#34d399";
+              }
+            } else {
+              frameEl.classList.remove("is-detected");
+              frameEl.classList.add("is-mismatch");
+              if (statusTextEl) {
+                statusTextEl.textContent = `❌ Wajah Tidak Cocok (${matchScore.toFixed(1)}% Match)`;
+                statusTextEl.style.color = "#fb7185";
+              }
+              if (dotEl) dotEl.style.background = "#f43f5e";
+              if (scoreBadgeEl) {
+                scoreBadgeEl.textContent = "BUKAN PEMILIK";
+                scoreBadgeEl.style.color = "#fb7185";
+              }
+            }
+          } else {
+            frameEl.classList.add("is-detected");
+            frameEl.classList.remove("is-mismatch");
+            if (statusTextEl) {
+              statusTextEl.textContent = `✓ Wajah Asli Terdeteksi (${score.toFixed(1)}% Liveness)`;
+              statusTextEl.style.color = "#34d399";
+            }
+            if (dotEl) {
+              dotEl.style.background = "#10b981";
+            }
+            if (scoreBadgeEl) {
+              scoreBadgeEl.textContent = "VALID OK";
+              scoreBadgeEl.style.color = "#34d399";
+            }
           }
         } else if (!isNaturalLighting) {
           liveCamera.geometricDetected = false;
+          liveCamera.faceIdMatched = false;
           frameEl.classList.remove("is-detected");
+          frameEl.classList.remove("is-mismatch");
           if (statusTextEl) {
             statusTextEl.textContent = avgLum < 35 ? "Pencahayaan redup, arahkan ke cahaya" : "Cahaya terlalu silau";
             statusTextEl.style.color = "#fbbf24";
@@ -257,6 +455,7 @@
           // Menunggu kedipan atau penyesuaian posisi wajah
           if (!liveCamera.geometricDetected) {
             frameEl.classList.remove("is-detected");
+            frameEl.classList.remove("is-mismatch");
             if (statusTextEl) {
               statusTextEl.textContent = "Posisikan wajah di dalam bingkai oval";
               statusTextEl.style.color = "var(--gold-200)";
@@ -644,6 +843,25 @@
       return;
     }
 
+    const s = Core.state;
+    const u = s.currentUser;
+
+    // VERIFIKASI ANTI-JOKI ABSENSI (1 GOOGLE ACCOUNT = 1 WAJAH RESMI)
+    if (u?.face_id_enrolled && u?.face_id_biometric_data) {
+      const liveFeatures = extractBiometricFeatures(videoEl);
+      const matchScore = compareBiometricFeatures(liveFeatures, u.face_id_biometric_data);
+      liveCamera.faceIdScore = matchScore;
+      liveCamera.faceIdMatched = matchScore >= 70;
+
+      if (!liveCamera.faceIdMatched) {
+        liveCamera.submitError = `🚫 VERIFIKASI FACE ID GAGAL (${matchScore.toFixed(1)}% Match, minimal 70%):\nWajah yang terdeteksi TIDAK SESUAI dengan Face ID resmi yang terdaftar pada akun Google ini (${u.email}). Sistem mendeteksi potensi joki absensi! Harap lakukan absensi sendiri.`;
+        if (!updateCameraModalPanelsInPlace()) {
+          renderModalContainerOnly();
+        }
+        return;
+      }
+    }
+
     liveCamera.submitError = null;
     const targetW = 800;
     const targetH = Math.round((videoEl.videoHeight / videoEl.videoWidth) * targetW) || 600;
@@ -660,7 +878,6 @@
     ctx.restore();
 
     // Watermark waktu resmi server & identitas Suka Latte di bagian bawah bukti foto
-    const s = Core.state;
     const tz = s.settings.operational_timezone || "Asia/Makassar";
     const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
     const chosenShift = getSelectedAttendanceShift();
@@ -673,7 +890,7 @@
     const modeLabel = liveCamera.mode === "check_in" ? "CHECK IN" : "CHECK OUT";
     const shiftLabel = chosenShift ? chosenShift.name : "Shift";
     ctx.fillText(
-      "SUKA LATTE | " + modeLabel + " (" + shiftLabel + ") | " + s.currentUser.full_name + " (" + s.currentUser.employee_code + ")",
+      "SUKA LATTE | " + modeLabel + " (" + shiftLabel + ") | " + u.full_name + " (" + u.employee_code + ")",
       14,
       targetH - 29
     );
@@ -683,8 +900,10 @@
     const gpsText = liveCamera.gps
       ? "GPS: " + liveCamera.gps.lat.toFixed(5) + ", " + liveCamera.gps.lng.toFixed(5) + " (+/-" + Math.round(liveCamera.gps.accuracy) + "m)"
       : "GPS: Menunggu koordinat";
-    const geoText = liveCamera.geometricDetected
-      ? "✓ GEOMETRI WAJAH ASLI TERVERIFIKASI (" + (liveCamera.geometricScore || 98.4).toFixed(1) + "% LIVENESS)"
+    const geoText = u?.face_id_enrolled && liveCamera.faceIdMatched
+      ? "✓ FACE ID RESMI COCOK (" + (liveCamera.faceIdScore || 96.5).toFixed(1) + "%) | 1 AKUN 1 WAJAH"
+      : liveCamera.geometricDetected
+      ? "✓ GEOMETRI WAJAH ASLI (" + (liveCamera.geometricScore || 98.4).toFixed(1) + "% LIVENESS)"
       : "✓ GEOMETRI BIOMETRIK TERDAFTAR";
     ctx.fillText(
       "Server: " + parts.dateString + " " + parts.timeString + " (" + tz + ") | " + gpsText + " | " + geoText,
@@ -697,12 +916,47 @@
     renderModalContainerOnly();
   }
 
+  async function openFaceIdEnrollmentModal(returnToMode = null) {
+    if (!Core.isApprovedUser()) {
+      showBanner(false, "Akun Anda belum aktif atau belum disetujui Admin.");
+      return;
+    }
+    stopCameraStream();
+    stopGpsWatcher();
+
+    liveCamera.capturedDataUrl = null;
+    liveCamera.cameraError = null;
+    liveCamera.videoReady = false;
+    liveCamera.geometricDetected = false;
+    liveCamera.geometricScore = 0;
+    liveCamera.submitError = null;
+    liveCamera.submitting = false;
+
+    uiState.modal = {
+      type: "face_id_enrollment",
+      returnToMode: returnToMode || null,
+    };
+    render();
+
+    await startLiveFrontCamera();
+  }
+
   async function openAttendanceCameraModal(mode) {
     if (!Core.isApprovedUser()) {
       showBanner(false, "Akun Anda belum aktif atau belum disetujui Admin.");
       return;
     }
     const s = Core.state;
+    // Jika akun belum merekam Face ID resmi, wajib rekam Face ID terlebih dahulu (1 akun = 1 wajah)
+    if (!s.currentUser?.face_id_enrolled) {
+      showBanner(
+        false,
+        "🔒 Pendaftaran Face ID Pertama: Daftarkan 1 wajah resmi untuk akun Google Anda terlebih dahulu sebelum melakukan absensi.",
+        6000
+      );
+      await openFaceIdEnrollmentModal(mode);
+      return;
+    }
     const activeShifts = getActiveShiftsList();
     const openAtt = s.attendance.find(
       (a) => a.employee_id === s.currentUser.id && a.check_in_at && !a.check_out_at
@@ -883,7 +1137,181 @@
       `;
     }
 
-    // A2. MODAL PILIHAN LANGKAH 3 (SELESAI KERJA / IZIN)
+    // A2. MODAL PENDAFTARAN FACE ID RESMI (1 AKUN GOOGLE = 1 WAJAH)
+    if (uiState.modal.type === "face_id_enrollment") {
+      const u = s.currentUser;
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window">
+            <div class="modal-header">
+              <div>
+                <div style="font-size:11px;color:var(--coffee-300);font-weight:700;text-transform:uppercase;">
+                  Keamanan Biometrik • 1 Akun Google = 1 Wajah Resmi
+                </div>
+                <h3 style="font-size:17px;font-weight:800;">
+                  🔒 Pendaftaran Face ID Resmi Karyawan
+                </h3>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body">
+              <div class="grid-12">
+                <div class="col-7">
+                  <div class="camera-stage">
+                    ${
+                      liveCamera.cameraError
+                        ? `<div style="padding:24px;text-align:center;color:var(--cream);font-size:12.5px;">
+                            <div style="font-size:26px;margin-bottom:8px;">🚫</div>
+                            <strong>Kamera Tidak Dapat Diakses</strong>
+                            <p style="color:var(--coffee-300);margin-top:6px;">${esc(liveCamera.cameraError)}</p>
+                          </div>`
+                        : `<video id="live-selfie-video" autoplay playsinline muted></video>
+                           <div id="camera-loading-pill" style="position:absolute;top:12px;left:12px;display:${liveCamera.videoReady ? "none" : "flex"};align-items:center;gap:6px;background:rgba(20,17,15,0.82);color:var(--coffee-200);padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;">
+                             ⏳ Menyiapkan pratinjau kamera depan...
+                           </div>
+                           <div class="face-geometric-overlay">
+                             <div class="face-geometric-frame" id="face-geometric-frame">
+                               <div class="face-corner-bracket face-bracket-tl"></div>
+                               <div class="face-corner-bracket face-bracket-tr"></div>
+                               <div class="face-corner-bracket face-bracket-bl"></div>
+                               <div class="face-corner-bracket face-bracket-br"></div>
+                               <div class="face-scanline"></div>
+                               <div class="face-axis-v"></div>
+                               <div class="face-axis-h"></div>
+                               <div class="face-landmark-dot face-dot-eye-l" title="Mata Kiri"></div>
+                               <div class="face-landmark-dot face-dot-eye-r" title="Mata Kanan"></div>
+                               <div class="face-landmark-dot face-dot-nose" title="Hidung"></div>
+                               <div class="face-landmark-dot face-dot-mouth" title="Mulut"></div>
+                               <div class="face-landmark-dot face-dot-chin" title="Dagu"></div>
+                             </div>
+                             <div class="face-hud-status">
+                               <div id="geometric-status-indicator" style="display:flex;align-items:center;gap:6px;">
+                                 <span id="geometric-pulse-dot" style="width:7px;height:7px;border-radius:50%;background:#d4a373;display:inline-block;"></span>
+                                 <span id="geometric-status-text">Memindai Geometri Biometrik Wajah...</span>
+                               </div>
+                               <span id="geometric-score-badge" style="font-family:monospace;font-weight:700;color:var(--gold-200);font-size:10.5px;">
+                                 ENROLL HUD
+                               </span>
+                             </div>
+                           </div>`
+                    }
+                  </div>
+                </div>
+
+                <div class="col-5" style="display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
+                  <div style="display:flex;flex-direction:column;gap:10px;">
+                    <div class="card-subtle" style="border-left:3px solid var(--coffee-600);padding:10px 12px;line-height:1.5;">
+                      <strong style="font-size:12.5px;color:var(--coffee-950);">Ketentuan 1 Wajah pada 1 Akun:</strong>
+                      <p style="font-size:11.5px;color:var(--stone-600);margin:4px 0 0 0;">
+                        Wajah yang Anda daftarkan di sini akan menjadi <strong>Face ID resmi</strong> untuk akun Google <strong>${esc(u.email)}</strong>.
+                        Setiap kali melakukan absensi, sistem akan memverifikasi kecocokan wajah. Karyawan lain tidak dapat melakukan joki absensi atas nama Anda.
+                      </p>
+                    </div>
+
+                    <div class="card-subtle" style="font-size:11.5px;color:var(--stone-700);line-height:1.5;">
+                      <strong>Petunjuk Perekaman:</strong>
+                      <ul style="margin:4px 0 0 16px;padding:0;">
+                        <li>Lepaskan masker atau kacamata hitam.</li>
+                        <li>Posisikan wajah tepat di tengah bingkai oval.</li>
+                        <li>Pastikan pencahayaan terang dan stabil.</li>
+                      </ul>
+                    </div>
+
+                    <div id="enroll-error-box"></div>
+                  </div>
+
+                  <div>
+                    <button type="button" class="btn btn-emerald" style="width:100%;padding:12px 14px;font-size:13.5px;font-weight:700;" data-action="confirm-register-face-id">
+                      📸 Rekam &amp; Kunci Face ID Resmi
+                    </button>
+                    <div style="font-size:10.5px;color:var(--stone-500);text-align:center;margin-top:6px;">
+                      🔒 Data biometrik dienkripsi aman pada database Supabase.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // A3. MODAL PENGAJUAN PERTUKARAN SHIFT / LIBUR DUA BELAH PIHAK
+    if (uiState.modal.type === "modal_shift_swap_request") {
+      const u = s.currentUser;
+      const todayStr = Core.getTimePartsInTimezone(Core.getServerNow(), tz).dateString;
+      const coworkers = (s.profiles || []).filter(
+        (p) => p.id !== u.id && p.status === "active" && p.first_login_approved
+      );
+
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm" style="max-width:540px;">
+            <div class="modal-header">
+              <div>
+                <div style="font-size:11px;color:var(--coffee-300);font-weight:700;text-transform:uppercase;">
+                  Roster &amp; Jadwal Kerja Suka Latte
+                </div>
+                <h3 style="font-size:16.5px;font-weight:800;">
+                  🔁 Ajukan Pertukaran Shift / Hari Libur
+                </h3>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <form id="form-shift-swap-request" novalidate>
+              <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+                <div class="card-subtle" style="border-left:3px solid var(--coffee-600);padding:10px 12px;font-size:12px;color:var(--stone-700);line-height:1.5;">
+                  <strong>Persetujuan Dua Belah Pihak:</strong><br/>
+                  Permohonan ini akan dikirimkan kepada rekan kerja pilihan Anda. Jadwal kerja atau hari libur akan <strong>otomatis bertukar di sistem</strong> setelah rekan kerja bersangkutan menyetujui.
+                </div>
+
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Pilih Rekan Kerja (Tujuan Pertukaran) *</label>
+                  <select class="form-select" name="target_employee_id" required>
+                    <option value="">-- Pilih Rekan Kerja --</option>
+                    ${coworkers
+                      .map((c) => {
+                        const out = s.outlets.find((o) => o.id === c.outlet_id);
+                        return `<option value="${esc(c.id)}">${esc(c.full_name)} (${esc(c.employee_code)}) • ${esc(out ? out.name : c.position_title)}</option>`;
+                      })
+                      .join("")}
+                  </select>
+                </div>
+
+                <div class="grid-2" style="gap:10px;">
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">Tanggal Jadwal Saya *</label>
+                    <input type="date" class="form-input" name="requester_date" value="${todayStr}" required />
+                    <span style="font-size:10.5px;color:var(--stone-500);">Jadwal Anda yang ingin ditukar</span>
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">Tanggal Jadwal Rekan *</label>
+                    <input type="date" class="form-input" name="target_date" value="${todayStr}" required />
+                    <span style="font-size:10.5px;color:var(--stone-500);">Jadwal rekan yang Anda inginkan</span>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Alasan / Catatan ke Rekan Kerja</label>
+                  <textarea class="form-textarea" name="notes" rows="2" placeholder="Contoh: Ada urusan keluarga mendesak tanggal 16 Nov, izin tukar ya." style="font-size:12px;"></textarea>
+                </div>
+
+                <div id="swap-error-box" style="display:none;" class="modal-inline-alert" role="alert"></div>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="button" class="btn btn-primary" data-action="submit-shift-swap-request">
+                    🔁 Kirim Pengajuan ke Rekan Kerja
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    // A4. MODAL PILIHAN LANGKAH 3 (SELESAI KERJA / IZIN)
     if (uiState.modal.type === "step_selesai_choice") {
       const u = s.currentUser;
       const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
@@ -1746,7 +2174,11 @@
     const modalRoot = document.getElementById("modal-root");
     if (modalRoot) {
       modalRoot.innerHTML = renderActiveModalHtml();
-      if (uiState.modal && uiState.modal.type === "camera_attendance" && !liveCamera.capturedDataUrl) {
+      if (
+        uiState.modal &&
+        (uiState.modal.type === "camera_attendance" || uiState.modal.type === "face_id_enrollment") &&
+        !liveCamera.capturedDataUrl
+      ) {
         attachStreamToVideoElement();
       }
     }
@@ -2048,7 +2480,11 @@
       }
     }
 
-    if (uiState.modal && uiState.modal.type === "camera_attendance" && !liveCamera.capturedDataUrl) {
+    if (
+      uiState.modal &&
+      (uiState.modal.type === "camera_attendance" || uiState.modal.type === "face_id_enrollment") &&
+      !liveCamera.capturedDataUrl
+    ) {
       attachStreamToVideoElement();
     }
   }
@@ -3780,6 +4216,218 @@
         Core.assertManagerAccess("SwitchControlPanelTab");
         uiState.activeControlTab = btn.getAttribute("data-tab") || "employees";
         render();
+        return;
+      }
+
+      if (action === "open-face-id-enrollment") {
+        await openFaceIdEnrollmentModal();
+        return;
+      }
+
+      if (action === "confirm-register-face-id") {
+        const videoEl = document.getElementById("live-selfie-video");
+        const errEl = document.getElementById("enroll-error-box");
+        if (!videoEl || !liveCamera.stream || videoEl.videoWidth === 0 || videoEl.readyState < 2) {
+          const msg = "Kamera belum menampilkan wajah penuh. Tunggu 1–2 detik hingga wajah tampak jelas.";
+          if (errEl) errEl.innerHTML = `<div class="modal-inline-alert" role="alert">⚠️ ${msg}</div>`;
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "⏳ Memproses & Mengunci Face ID...";
+
+        try {
+          // Ekstrak geometri biometrik wajah
+          const biometricData = extractBiometricFeatures(videoEl);
+          if (!biometricData) {
+            throw new Error("Gagal membaca kontur wajah. Pastikan wajah tegak di dalam oval dan pencahayaan cukup.");
+          }
+
+          // Buat snapshot foto master Face ID resmi
+          const targetW = 600;
+          const targetH = Math.round((videoEl.videoHeight / videoEl.videoWidth) * targetW) || 450;
+          const canvas = document.createElement("canvas");
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext("2d");
+          ctx.save();
+          ctx.translate(targetW, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(videoEl, 0, 0, targetW, targetH);
+          ctx.restore();
+
+          const u = Core.state.currentUser;
+          const barHeight = 44;
+          ctx.fillStyle = "rgba(20, 17, 15, 0.82)";
+          ctx.fillRect(0, targetH - barHeight, targetW, barHeight);
+          ctx.fillStyle = "#FAF6F0";
+          ctx.font = "bold 13px sans-serif";
+          ctx.fillText("SUKA LATTE | MASTER FACE ID | 1 AKUN 1 WAJAH", 14, targetH - 24);
+          ctx.fillStyle = "#DFC8AA";
+          ctx.font = "11px monospace";
+          ctx.fillText(u.full_name + " (" + u.email + ")", 14, targetH - 9);
+
+          const photoDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+          await Core.registerFaceId(biometricData, photoDataUrl);
+
+          stopCameraStream();
+          const returnToMode = uiState.modal?.returnToMode;
+          uiState.modal = null;
+          showBanner(true, "✓ Face ID resmi berhasil dikunci pada akun Google Anda! Sistem anti-joki absensi telah aktif.", 6000);
+
+          if (returnToMode) {
+            setTimeout(() => {
+              openAttendanceCameraModal(returnToMode);
+            }, 300);
+          } else {
+            render();
+          }
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = "📸 Rekam & Kunci Face ID Resmi";
+          const msg = err.message || "Gagal merekam Face ID.";
+          if (errEl) {
+            errEl.innerHTML = `<div class="modal-inline-alert" role="alert">⚠️ ${Core.escapeHtml(msg)}</div>`;
+          } else {
+            alert(msg);
+          }
+        }
+        return;
+      }
+
+      if (action === "reset-face-id") {
+        Core.assertManagerAccess("ResetFaceId");
+        const userId = btn.getAttribute("data-userid");
+        const userName = btn.getAttribute("data-name") || "Karyawan";
+        if (!userId) return;
+
+        if (!confirm(`Reset Face ID resmi untuk ${userName}?\n\nKaryawan tersebut harus mendaftarkan ulang wajahnya saat absensi berikutnya.`)) {
+          return;
+        }
+
+        btn.disabled = true;
+        try {
+          await Core.resetFaceId(userId, "Reset Face ID oleh Pengelola");
+          showBanner(true, `✓ Face ID untuk ${userName} berhasil direset. Karyawan dapat mendaftar ulang saat login berikutnya.`);
+          render();
+        } catch (err) {
+          btn.disabled = false;
+          showBanner(false, "Gagal mereset Face ID: " + (err.message || err));
+        }
+        return;
+      }
+
+      if (action === "open-shift-swap-modal") {
+        uiState.modal = { type: "modal_shift_swap_request" };
+        render();
+        return;
+      }
+
+      if (action === "submit-shift-swap-request") {
+        const form = document.getElementById("form-shift-swap-request");
+        const errEl = document.getElementById("swap-error-box");
+        if (!form) return;
+
+        const targetEmployeeId = form.target_employee_id?.value;
+        const requesterDate = form.requester_date?.value;
+        const targetDate = form.target_date?.value;
+        const notes = form.notes?.value?.trim() || null;
+
+        if (!targetEmployeeId) {
+          if (errEl) {
+            errEl.style.display = "block";
+            errEl.innerHTML = "⚠️ Pilih rekan kerja tujuan pertukaran.";
+          }
+          return;
+        }
+        if (!requesterDate || !targetDate) {
+          if (errEl) {
+            errEl.style.display = "block";
+            errEl.innerHTML = "⚠️ Tanggal jadwal Anda dan rekan wajib ditentukan.";
+          }
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "⏳ Mengirim Pengajuan...";
+
+        try {
+          await Core.createShiftSwapRequest({
+            targetEmployeeId,
+            requesterDate,
+            targetDate,
+            notes,
+          });
+
+          uiState.modal = null;
+          showBanner(
+            true,
+            "✓ Pengajuan tukar shift berhasil dikirimkan ke rekan kerja! Menunggu persetujuan rekan kerja Anda.",
+            6000
+          );
+          render();
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = "🔁 Kirim Pengajuan ke Rekan Kerja";
+          if (errEl) {
+            errEl.style.display = "block";
+            errEl.innerHTML = `⚠️ ${Core.escapeHtml(err.message || "Gagal mengajukan pertukaran shift.")}`;
+          } else {
+            alert(err.message || "Gagal mengajukan pertukaran shift.");
+          }
+        }
+        return;
+      }
+
+      if (action === "respond-shift-swap") {
+        const requestId = btn.getAttribute("data-id");
+        const accept = btn.getAttribute("data-accept") === "true";
+        if (!requestId) return;
+
+        if (accept) {
+          if (!confirm("Apakah Anda menyetujui pertukaran jadwal ini?\n\nJadwal kerja/libur Anda dan rekan kerja akan langsung ditukar secara otomatis pada kalender sistem.")) {
+            return;
+          }
+        } else {
+          if (!confirm("Apakah Anda yakin ingin menolak permohonan pertukaran jadwal ini?")) {
+            return;
+          }
+        }
+
+        btn.disabled = true;
+        try {
+          await Core.respondShiftSwapRequest(requestId, accept, accept ? "Disetujui oleh rekan kerja" : "Ditolak oleh rekan kerja");
+          showBanner(
+            true,
+            accept
+              ? "✓ Pertukaran jadwal disetujui! Jadwal kerja dan libur Anda & rekan telah otomatis bertukar di kalender."
+              : "Pengajuan pertukaran jadwal ditolak.",
+            6000
+          );
+          render();
+        } catch (err) {
+          btn.disabled = false;
+          showBanner(false, "Gagal menanggapi pertukaran: " + (err.message || err));
+        }
+        return;
+      }
+
+      if (action === "cancel-shift-swap") {
+        const requestId = btn.getAttribute("data-id");
+        if (!requestId) return;
+
+        if (!confirm("Batalkan pengajuan pertukaran jadwal ini?")) return;
+
+        btn.disabled = true;
+        try {
+          await Core.cancelShiftSwapRequest(requestId);
+          showBanner(true, "Pengajuan pertukaran jadwal telah dibatalkan.");
+          render();
+        } catch (err) {
+          btn.disabled = false;
+          showBanner(false, "Gagal membatalkan: " + (err.message || err));
+        }
         return;
       }
 

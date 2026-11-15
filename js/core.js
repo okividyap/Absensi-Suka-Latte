@@ -210,6 +210,7 @@
     corrections: [],
     holidaysAndLeaves: [],
     workSchedules: [],
+    shiftSwaps: [],
     auditLogs: [],
 
     signedUrls: {}, // path -> { url, exp }
@@ -555,6 +556,10 @@ window.SUKA_LATTE_CONFIG = {
         .from("work_schedules")
         .select("*")
         .order("schedule_date", { ascending: true }),
+      state.supabase
+        .from("shift_swap_requests")
+        .select("*")
+        .order("created_at", { ascending: false }),
     ]);
 
     state.outlets = outRes.data || [];
@@ -566,9 +571,9 @@ window.SUKA_LATTE_CONFIG = {
     state.corrections = corrRes.data || [];
     state.holidaysAndLeaves = hlRes.data || [];
     state.workSchedules = schedRes.data || [];
+    state.shiftSwaps = swapRes?.data || [];
 
-    // DATA MENDALAM: Hanya dimuat jika pengguna adalah SUPER ADMIN atau ADMIN!
-    // Anggota TIDAK BOLEH dan TIDAK BISA memuat daftar karyawan lain, daftar pra-setuju, atau Audit Log!
+    // DATA MENDALAM: Manager memuat seluruh profil + audit logs; Anggota memuat direktori rekan aktif
     if (isManager()) {
       const [profRes, preRes, audRes] = await Promise.all([
         state.supabase.from("profiles").select("*").order("created_at", { ascending: true }),
@@ -587,7 +592,8 @@ window.SUKA_LATTE_CONFIG = {
       state.preapprovedEmails = preRes.data || [];
       state.auditLogs = audRes.data || [];
     } else {
-      state.profiles = [state.currentUser];
+      const { data: cowRes } = await state.supabase.rpc("get_active_coworkers");
+      state.profiles = cowRes && cowRes.length ? cowRes : [state.currentUser];
       state.preapprovedEmails = [];
       state.auditLogs = [];
     }
@@ -1129,6 +1135,165 @@ window.SUKA_LATTE_CONFIG = {
     return true;
   }
 
+  // ==========================================================================
+  // 7. BIOMETRIC FACE ID RESMI (1 WAJAH PER 1 AKUN GOOGLE ANTI-JOKI)
+  // ==========================================================================
+  async function registerFaceId(biometricData, photoDataUrl) {
+    if (!state.supabase || !isApprovedUser()) {
+      throw new Error("Sesi Anda tidak aktif atau belum disetujui Admin.");
+    }
+    if (!biometricData) {
+      throw new Error("Data biometrik Face ID tidak valid.");
+    }
+    const uid = state.currentUser.id;
+    let photoPath = "";
+    if (photoDataUrl) {
+      photoPath = `SUKA-LATTE-ATTENDANCE/face-id-references/${uid}/face-id-reference.jpg`;
+      const blob = dataUrlToBlob(photoDataUrl);
+      const { error: upErr } = await state.supabase.storage
+        .from(state.storageBucket)
+        .upload(photoPath, blob, {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+      if (upErr) {
+        console.warn("Storage upload face id reference non-fatal:", upErr);
+      }
+    }
+
+    const res = await withTimeout(
+      state.supabase.rpc("register_face_id", {
+        p_biometric_data: biometricData,
+        p_photo_path: photoPath || null,
+      }),
+      15000,
+      "Pendaftaran Face ID timeout. Periksa internet Anda lalu coba lagi."
+    );
+    if (res.error) throw res.error;
+
+    if (state.currentUser) {
+      state.currentUser.face_id_enrolled = true;
+      state.currentUser.face_id_enrolled_at = new Date().toISOString();
+      state.currentUser.face_id_biometric_data = biometricData;
+      state.currentUser.face_id_photo_path = photoPath;
+    }
+    const myProf = state.profiles.find((p) => p.id === uid);
+    if (myProf) {
+      myProf.face_id_enrolled = true;
+      myProf.face_id_biometric_data = biometricData;
+    }
+
+    setTimeout(() => {
+      refreshProfilesAndAuditInBackground();
+    }, 50);
+
+    return res.data;
+  }
+
+  async function resetFaceId(employeeId, reason) {
+    assertManagerAccess("ResetFaceId");
+    if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
+    if (!employeeId) throw new Error("Pilih karyawan terlebih dahulu.");
+
+    const res = await withTimeout(
+      state.supabase.rpc("reset_face_id", {
+        p_employee_id: employeeId,
+        p_reason: reason || "Reset Face ID resmi oleh Pengelola",
+      }),
+      15000,
+      "Reset Face ID timeout setelah 15 detik."
+    );
+    if (res.error) throw res.error;
+
+    const emp = state.profiles.find((p) => p.id === employeeId);
+    if (emp) {
+      emp.face_id_enrolled = false;
+      emp.face_id_biometric_data = null;
+    }
+    if (state.currentUser && state.currentUser.id === employeeId) {
+      state.currentUser.face_id_enrolled = false;
+      state.currentUser.face_id_biometric_data = null;
+    }
+
+    setTimeout(() => {
+      refreshProfilesAndAuditInBackground();
+    }, 50);
+
+    return res.data;
+  }
+
+  // ==========================================================================
+  // 8. PERTUKARAN SHIFT / LIBUR (MUTUAL SHIFT & DAY-OFF SWAP)
+  // ==========================================================================
+  async function createShiftSwapRequest(payload) {
+    if (!state.supabase || !isApprovedUser()) {
+      throw new Error("Sesi Anda tidak aktif atau belum disetujui.");
+    }
+    if (!payload.targetEmployeeId) {
+      throw new Error("Pilih rekan kerja yang ingin diajak bertukar jadwal.");
+    }
+    if (!payload.requesterDate || !payload.targetDate) {
+      throw new Error("Tanggal jadwal kerja wajib ditentukan.");
+    }
+
+    const res = await withTimeout(
+      state.supabase.rpc("create_shift_swap_request", {
+        p_target_employee_id: payload.targetEmployeeId,
+        p_requester_date: payload.requesterDate,
+        p_target_date: payload.targetDate,
+        p_notes: payload.notes || null,
+      }),
+      15000,
+      "Pengajuan tukar shift timeout setelah 15 detik."
+    );
+    if (res.error) throw res.error;
+
+    const swap = res.data?.swap_request;
+    if (swap) {
+      state.shiftSwaps.unshift(swap);
+    }
+    await refreshAllData();
+    return swap;
+  }
+
+  async function respondShiftSwapRequest(requestId, accept, notes) {
+    if (!state.supabase || !isApprovedUser()) {
+      throw new Error("Sesi Anda tidak aktif atau belum disetujui.");
+    }
+    if (!requestId) throw new Error("ID permohonan tidak valid.");
+
+    const res = await withTimeout(
+      state.supabase.rpc("respond_shift_swap_request", {
+        p_request_id: requestId,
+        p_accept: Boolean(accept),
+        p_notes: notes || null,
+      }),
+      20000,
+      "Tanggapan pertukaran shift timeout setelah 20 detik."
+    );
+    if (res.error) throw res.error;
+
+    await refreshAllData();
+    return res.data;
+  }
+
+  async function cancelShiftSwapRequest(requestId) {
+    if (!state.supabase || !isApprovedUser()) {
+      throw new Error("Sesi Anda tidak aktif atau belum disetujui.");
+    }
+    const res = await withTimeout(
+      state.supabase.rpc("cancel_shift_swap_request", {
+        p_request_id: requestId,
+      }),
+      15000,
+      "Pembatalan permohonan timeout."
+    );
+    if (res.error) throw res.error;
+
+    await refreshAllData();
+    return res.data;
+  }
+
   window.SukaCore = {
     state,
     DEFAULT_SETTINGS,
@@ -1169,5 +1334,10 @@ window.SUKA_LATTE_CONFIG = {
     deleteWorkSchedule,
     bulkSaveWeeklySchedule,
     uploadPrivateSelfieAndSubmit,
+    registerFaceId,
+    resetFaceId,
+    createShiftSwapRequest,
+    respondShiftSwapRequest,
+    cancelShiftSwapRequest,
   };
 })();
