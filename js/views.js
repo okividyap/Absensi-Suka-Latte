@@ -2375,15 +2375,15 @@
                   <div style="display:flex;flex-direction:column;gap:10px;">
                     <!-- JADWAL TIM BAR -->
                     ${
-                      barScheds.length > 0
+                      barDayScheds.length > 0
                         ? `
                       <div style="background:#f0fdf4;border-left:3px solid #10b981;border-radius:8px;padding:8px 10px;">
                         <div style="font-size:11.5px;font-weight:800;color:#065f46;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
                           <span>🍹 JADWAL TIM BAR</span>
-                          <span class="badge" style="background:#d1fae5;color:#065f46;font-size:10px;">${barScheds.length} Staf</span>
+                          <span class="badge" style="background:#d1fae5;color:#065f46;font-size:10px;">${barDayScheds.length} Staf</span>
                         </div>
                         <div style="display:flex;flex-direction:column;gap:5px;">
-                          ${barScheds.map(renderScheduleRow).join("")}
+                          ${barDayScheds.map(renderScheduleRow).join("")}
                         </div>
                       </div>
                     `
