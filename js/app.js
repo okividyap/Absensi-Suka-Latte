@@ -1326,7 +1326,7 @@
               </div>
               <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
                 <div class="card-subtle" style="border-color:#fda4af;background:var(--rose-50);font-size:12.5px;color:var(--rose-800);line-height:1.55;">
-                  <strong>PERINGATAN SUPER ADMIN:</strong><br/>
+                  <strong>PERINGATAN PENGELOLA (ADMIN &amp; SUPER ADMIN):</strong><br/>
                   Tindakan ini akan <strong>menghapus seluruh (${s.attendance.length}) catatan absensi</strong> beserta seluruh arsip foto selfie uji coba dari database.<br/>
                   Gunakan fitur ini setelah masa uji coba selesai untuk memulai operasional normal yang bersih.
                 </div>

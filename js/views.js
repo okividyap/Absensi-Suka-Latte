@@ -1439,7 +1439,7 @@
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;" class="no-print">
           ${
-            Core.isSuperAdmin() && s.attendance.length > 0
+            Core.isManager() && s.attendance.length > 0
               ? `<button class="btn btn-outline" style="color:var(--rose-700);border-color:#fca5a5;" data-action="clear-all-trial-attendance" title="Bersihkan seluruh catatan absensi uji coba sebelum operasional normal">🗑️ Bersihkan Data Uji Coba</button>`
               : ""
           }
@@ -2548,7 +2548,7 @@
         </div>
 
         ${
-          isSuper
+          (isSuper || s.currentUser?.role === "admin")
             ? `
         <div class="card" style="border:1px solid #fca5a5;background:linear-gradient(180deg,#fff,#fff1f2);grid-column:1 / -1;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">

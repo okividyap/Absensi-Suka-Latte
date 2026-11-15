@@ -922,13 +922,6 @@ window.SUKA_LATTE_CONFIG = {
 
   function canDeleteAttendance(rec) {
     if (!rec || !isManager()) return false;
-    if (isSuperAdmin()) return true;
-    const actorId = state.currentUser?.id;
-    const targetEmp = state.profiles.find((p) => p.id === rec.employee_id);
-    if (!targetEmp) return true;
-    if (targetEmp.role === "super_admin" && targetEmp.id !== actorId) {
-      return false;
-    }
     return true;
   }
 
@@ -977,7 +970,7 @@ window.SUKA_LATTE_CONFIG = {
   }
 
   async function clearAllTrialAttendance(confirmationKeyword, reason) {
-    assertSuperAdminAccess("ClearAllTrialAttendance");
+    assertManagerAccess("ClearAllTrialAttendance");
     if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
 
     const cleanKeyword = String(confirmationKeyword || "").trim().toUpperCase();

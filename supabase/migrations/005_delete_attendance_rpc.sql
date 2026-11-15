@@ -1,11 +1,11 @@
 -- ============================================================================
--- SUKA LATTE ATTENDANCE SYSTEM — MIGRASI 005
+-- SUKA LATTE ATTENDANCE SYSTEM — MIGRASI 005 (REVISI FIX ENUM & AKSES PENGELOLA)
 -- RPC Penghapusan Catatan Absensi (Uji Coba & Koreksi Data Operasional)
 -- Memungkinkan Super Admin & Admin menghapus absensi uji coba secara aman,
 -- mencatat rekam jejak audit log, dan membersihkan arsip foto.
 -- ============================================================================
 
--- 1. HAPUS SATU CATATAN ABSENSI (PER-ID) OLEH PENGELOLA
+-- 1. HAPUS SATU CATATAN ABSENSI (PER-ID) OLEH PENGELOLA (SUPER ADMIN & ADMIN)
 CREATE OR REPLACE FUNCTION public.delete_attendance_by_manager(
     p_attendance_id UUID,
     p_reason TEXT DEFAULT NULL
@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION public.delete_attendance_by_manager(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public, auth, pg_temp
 AS $$
 DECLARE
     v_actor public.profiles%ROWTYPE;
@@ -23,7 +23,7 @@ DECLARE
     v_reason TEXT;
     v_del_cmd TEXT := 'DE' || 'LETE';
 BEGIN
-    -- Validasi akun pengelola pemanggil
+    -- Validasi akun pengelola pemanggil: Super Admin atau Admin
     SELECT * INTO v_actor FROM public.profiles WHERE id = auth.uid();
     IF NOT FOUND OR v_actor.status <> 'active' OR v_actor.first_login_approved <> TRUE THEN
         RAISE EXCEPTION 'AKSES_DITOLAK: Akun pengelola tidak aktif.';
@@ -43,11 +43,6 @@ BEGIN
     END IF;
 
     SELECT * INTO v_target_emp FROM public.profiles WHERE id = v_att.employee_id;
-
-    -- Batasan peran: Admin hanya boleh menghapus absensi member / akunnya sendiri, tidak boleh menghapus absensi Super Admin
-    IF v_actor.role = 'admin' AND v_target_emp.role = 'super_admin' AND v_actor.id <> v_att.employee_id THEN
-        RAISE EXCEPTION 'AKSES_DITOLAK: Admin tidak dapat menghapus catatan absensi milik Super Admin.';
-    END IF;
 
     -- Kumpulkan path foto selfie untuk dibersihkan dari storage
     IF v_att.check_in_photo_path IS NOT NULL AND v_att.check_in_photo_path <> '' THEN
@@ -78,7 +73,7 @@ BEGIN
     VALUES (
         auth.uid(),
         v_actor.full_name,
-        v_actor.role,
+        v_actor.role::TEXT,
         'ATTENDANCE_RECORD_DELETED',
         'attendance',
         p_attendance_id::TEXT,
@@ -87,7 +82,7 @@ BEGIN
             v_att.work_date,
             COALESCE(v_target_emp.full_name, 'Karyawan ID ' || v_att.employee_id::TEXT),
             COALESCE(v_target_emp.employee_code, '-'),
-            COALESCE(v_target_emp.role, '-'),
+            COALESCE(v_target_emp.role::TEXT, '-'),
             v_reason
         )
     );
@@ -107,7 +102,7 @@ REVOKE ALL ON FUNCTION public.delete_attendance_by_manager(UUID, TEXT) FROM PUBL
 GRANT EXECUTE ON FUNCTION public.delete_attendance_by_manager(UUID, TEXT) TO authenticated;
 
 
--- 2. BERSIHKAN SELURUH DATA ABSENSI UJI COBA (BULK RESET OLEH SUPER ADMIN)
+-- 2. BERSIHKAN DATA ABSENSI UJI COBA (BULK RESET OLEH PENGELOLA DENGAN KONFIRMASI)
 CREATE OR REPLACE FUNCTION public.clear_all_trial_attendance(
     p_confirmation_keyword TEXT,
     p_reason TEXT DEFAULT NULL
@@ -115,7 +110,7 @@ CREATE OR REPLACE FUNCTION public.clear_all_trial_attendance(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public, auth, pg_temp
 AS $$
 DECLARE
     v_actor public.profiles%ROWTYPE;
@@ -124,13 +119,13 @@ DECLARE
     v_reason TEXT;
     v_del_cmd TEXT := 'DE' || 'LETE';
 BEGIN
-    -- Validasi akun pemanggil WAJIB Super Admin
+    -- Validasi akun pemanggil: Super Admin atau Admin
     SELECT * INTO v_actor FROM public.profiles WHERE id = auth.uid();
     IF NOT FOUND OR v_actor.status <> 'active' OR v_actor.first_login_approved <> TRUE THEN
         RAISE EXCEPTION 'AKSES_DITOLAK: Akun pengelola tidak aktif.';
     END IF;
-    IF v_actor.role <> 'super_admin' THEN
-        RAISE EXCEPTION 'AKSES_DITOLAK: Hanya Super Admin utama yang dapat membersihkan seluruh data absensi uji coba.';
+    IF v_actor.role NOT IN ('super_admin', 'admin') THEN
+        RAISE EXCEPTION 'AKSES_DITOLAK: Hanya Super Admin atau Admin yang dapat membersihkan data absensi uji coba.';
     END IF;
 
     -- Validasi kata kunci konfirmasi demi keamanan
@@ -168,7 +163,7 @@ BEGIN
     VALUES (
         auth.uid(),
         v_actor.full_name,
-        v_actor.role,
+        v_actor.role::TEXT,
         'TRIAL_ATTENDANCE_CLEARED',
         'attendance',
         'ALL',
