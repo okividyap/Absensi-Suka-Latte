@@ -528,13 +528,13 @@ window.SUKA_LATTE_CONFIG = {
       isMemberOnly()
         ? state.supabase
             .from("attendance")
-            .select("*")
+            .select("*, employee:employee_id(id, full_name, employee_code, role, department, avatar_url), outlet:outlet_id(id, name), shift:shift_id(id, name, start_time, end_time)")
             .eq("employee_id", state.currentUser.id)
             .order("work_date", { ascending: false })
             .order("created_at", { ascending: false })
         : state.supabase
             .from("attendance")
-            .select("*")
+            .select("*, employee:employee_id(id, full_name, employee_code, role, department, avatar_url), outlet:outlet_id(id, name), shift:shift_id(id, name, start_time, end_time)")
             .order("work_date", { ascending: false })
             .order("created_at", { ascending: false })
             .limit(300),
@@ -588,7 +588,14 @@ window.SUKA_LATTE_CONFIG = {
           .order("created_at", { ascending: false })
           .limit(200),
       ]);
-      state.profiles = profRes.data || [];
+      let profs = profRes.data || [];
+      if (profs.length === 0) {
+        try {
+          const { data: teamDir } = await state.supabase.rpc("get_active_team_directory");
+          if (teamDir && teamDir.length) profs = teamDir;
+        } catch {}
+      }
+      state.profiles = profs;
       state.preapprovedEmails = preRes.data || [];
       state.auditLogs = audRes.data || [];
     } else {
@@ -606,7 +613,7 @@ window.SUKA_LATTE_CONFIG = {
     }
 
     // Buat Signed URL berumur pendek (5 menit) untuk foto bukti yang tampil
-    ensureSignedUrlsForAttendance(state.attendance.slice(0, 30));
+    await ensureSignedUrlsForAttendance(state.attendance.slice(0, 30));
   }
 
   async function refreshAllData() {
@@ -651,22 +658,26 @@ window.SUKA_LATTE_CONFIG = {
     if (pathsToSign.length === 0) return;
 
     const uniquePaths = Array.from(new Set(pathsToSign));
-    const { data, error } = await state.supabase.storage
-      .from(state.storageBucket)
-      .createSignedUrls(uniquePaths, 300); // Berlaku 300 detik (5 menit) sesuai PRD Bab 8 & 27.5
+    try {
+      const { data, error } = await state.supabase.storage
+        .from(state.storageBucket)
+        .createSignedUrls(uniquePaths, 300); // Berlaku 300 detik (5 menit) sesuai PRD Bab 8 & 27.5
 
-    if (!error && Array.isArray(data)) {
-      let updated = false;
-      data.forEach((item) => {
-        if (item.path && item.signedUrl) {
-          state.signedUrls[item.path] = {
-            url: item.signedUrl,
-            exp: nowMs + 260 * 1000,
-          };
-          updated = true;
-        }
-      });
-      if (updated && uiNotifyCallback) uiNotifyCallback();
+      if (!error && Array.isArray(data)) {
+        let updated = false;
+        data.forEach((item) => {
+          if (item.path && item.signedUrl) {
+            state.signedUrls[item.path] = {
+              url: item.signedUrl,
+              exp: nowMs + 260 * 1000,
+            };
+            updated = true;
+          }
+        });
+        if (updated && uiNotifyCallback) uiNotifyCallback();
+      }
+    } catch (signErr) {
+      console.warn("ensureSignedUrls error:", signErr);
     }
   }
 

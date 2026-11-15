@@ -434,20 +434,27 @@
     const s = Core.state;
     const emp =
       s.profiles.find((p) => p.id === rec.employee_id) ||
+      rec.employee ||
       (s.currentUser?.id === rec.employee_id ? s.currentUser : null);
-    const out = s.outlets.find((o) => o.id === rec.outlet_id);
-    const sh = s.shifts.find((x) => x.id === rec.shift_id);
+    const out = s.outlets.find((o) => o.id === rec.outlet_id) || rec.outlet;
+    const sh = s.shifts.find((x) => x.id === rec.shift_id) || rec.shift;
 
     const inUrl = Core.getSignedPhotoUrl(rec.check_in_photo_path);
     const outUrl = Core.getSignedPhotoUrl(rec.check_out_photo_path);
+
+    // Otomatis minta signed URL jika belum ada di cache
+    if ((rec.check_in_photo_path && !inUrl) || (rec.check_out_photo_path && !outUrl)) {
+      setTimeout(() => Core.ensureSignedUrlsForAttendance([rec]), 30);
+    }
 
     return `
       <div class="card-subtle" style="display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
           <div>
-            <div style="font-size:13.5px;font-weight:800;">
-              ${esc(emp ? emp.full_name : "Karyawan")}
+            <div style="font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span>${esc(emp ? emp.full_name : "Karyawan")}</span>
               <span class="mono" style="font-size:11px;color:var(--coffee-700);">(${esc(emp ? emp.employee_code : "-")})</span>
+              ${emp?.department ? getDepartmentBadge(emp.department) : ""}
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;">
               <span style="font-size:11px;color:var(--stone-600);">Tanggal Kerja: <strong>${esc(rec.work_date)}</strong> • ${esc(out ? out.name : "-")}</span>
@@ -2448,6 +2455,9 @@
     } = getHolidayAndLeaveSummary(parts.dateString, u.id);
     const holidaysToShow = upcomingOrActiveHolidays.length > 0 ? upcomingOrActiveHolidays : outletHolidays;
     const recentEmployeeLeaves = (s.holidaysAndLeaves || []).filter((h) => Boolean(h.employee_id));
+
+    // Pastikan Signed URL foto selfie 8 transaksi terbaru termuat
+    Core.ensureSignedUrlsForAttendance(s.attendance.slice(0, 8));
 
     return `
       ${
