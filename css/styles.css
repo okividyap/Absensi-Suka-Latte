@@ -508,17 +508,40 @@ p {
   align-items: flex-start;
   gap: 12px;
   background: var(--white);
-  border: 1px solid var(--border-soft);
+  border: 1.5px solid var(--border-soft);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 12px 14px;
   box-shadow: var(--shadow-xs);
-  transition: transform 0.16s ease, box-shadow 0.16s ease;
+  transition: all 0.16s ease;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  outline: none;
+}
+
+.staff-step-card:hover {
+  border-color: var(--gold-400);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(140, 90, 50, 0.14);
+}
+
+.staff-step-card:active {
+  transform: scale(0.97);
+  background: var(--coffee-50);
 }
 
 .staff-step-card.active {
-  border-color: rgba(5, 150, 105, 0.34);
-  background: linear-gradient(180deg, #ffffff 0%, #f1fcf7 100%);
-  box-shadow: var(--shadow-sm);
+  border-color: rgba(5, 150, 105, 0.45);
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.12);
+}
+
+.staff-step-card.active:hover {
+  border-color: #059669;
 }
 
 .staff-step-num {
@@ -1745,19 +1768,27 @@ p {
     margin-bottom: 12px;
   }
   .staff-step-card {
-    padding: 7px 5px;
+    padding: 8px 4px;
     gap: 4px;
-    border-radius: 11px;
+    border-radius: 12px;
     flex-direction: column;
     text-align: center;
     align-items: center;
+    justify-content: center;
+    min-height: 58px;
+    touch-action: manipulation;
+    border-width: 1.5px;
+  }
+  .staff-step-card:active {
+    transform: scale(0.95);
+    background: var(--coffee-100);
   }
   .staff-step-num {
-    width: 20px;
-    height: 20px;
-    font-size: 10.5px;
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
     margin-bottom: 1px;
-    border-radius: 7px;
+    border-radius: 8px;
   }
   .staff-step-title {
     font-size: 11px;
@@ -1767,11 +1798,13 @@ p {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+    color: var(--coffee-950);
   }
   .staff-step-desc {
     display: block !important;
     font-size: 9.5px !important;
-    color: var(--stone-500);
+    color: var(--stone-600);
+    font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;

@@ -736,6 +736,41 @@
       `;
     }
 
+    // A2. MODAL PILIHAN LANGKAH 3 (SELESAI KERJA / IZIN)
+    if (uiState.modal.type === "step_selesai_choice") {
+      const u = s.currentUser;
+      const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+      const myToday = s.attendance.find((a) => a.employee_id === u?.id && a.work_date === parts.dateString);
+      const myShift = s.shifts.find((sh) => sh.id === (myToday?.shift_id || u?.shift_id)) || s.shifts[0];
+
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm">
+            <div class="modal-header">
+              <div>
+                <div style="font-size:11px;color:var(--coffee-300);font-weight:700;text-transform:uppercase;">
+                  Langkah 3 • Selesai / Izin
+                </div>
+                <h3 style="font-size:16px;font-weight:800;">Pilihan Aksi Operasional Anda</h3>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
+              <div class="card-subtle" style="font-size:12px;color:var(--stone-700);line-height:1.55;">
+                Saat ini Anda <strong>sedang bertugas (${esc(myShift ? myShift.name : "Shift")})</strong>. Silakan pilih salah satu opsi di bawah ini:
+              </div>
+              <button type="button" class="btn btn-amber hero-cta-btn" data-action="open-camera" data-mode="check_out" style="width:100%;min-height:48px;justify-content:center;">
+                📷 Selesai Bertugas — Check Out Pulang Sekarang
+              </button>
+              <button type="button" class="btn btn-gold hero-sub-btn" data-action="open-member-leave" style="width:100%;min-height:42px;justify-content:center;">
+                📅 Ajukan Izin / Sakit / Cuti
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     // B. MODAL INSPEKSI DETAIL BUKTI ABSENSI
     if (uiState.modal.type === "inspect_record") {
       const rec = s.attendance.find((a) => a.id === uiState.modal.recordId);
@@ -2921,6 +2956,102 @@
           btn.disabled = false;
           showBanner(false, "Gagal mengubah shift: " + (err.message || err));
         }
+        return;
+      }
+
+      // TOMBOL LANGKAH 1 PADA ANGGOTA: GANTI SHIFT SECARA INSTAN / SCROLL KE PILIHAN SHIFT
+      if (action === "step-click-shift") {
+        const s = Core.state;
+        const u = s.currentUser;
+        const tz = s.settings.operational_timezone || "Asia/Makassar";
+        const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+        const myToday = s.attendance.find((a) => a.employee_id === u?.id && a.work_date === parts.dateString);
+        const canCheckIn = !myToday || (!myToday.check_in_at && myToday.attendance_status !== "cuti_libur");
+
+        if (!canCheckIn) {
+          const sh = s.shifts.find((x) => x.id === (myToday?.shift_id || u?.shift_id));
+          showBanner(
+            true,
+            `Shift bertugas hari ini terkunci pada ${sh ? sh.name : "jadwal Anda"} sesuai waktu Check In.`,
+            4500
+          );
+          return;
+        }
+
+        const activeShifts = s.shifts.filter((sh) => sh.status === "active");
+        if (activeShifts.length === 0) return;
+
+        const currentShiftId = u?.shift_id || activeShifts[0].id;
+        const currentIndex = activeShifts.findIndex((sh) => sh.id === currentShiftId);
+        const nextIndex = (currentIndex + 1) % activeShifts.length;
+        const nextShift = activeShifts[nextIndex];
+
+        try {
+          await Core.selectMyActiveShift(nextShift.id);
+          render();
+          showBanner(
+            true,
+            `✓ Shift aktif diganti ke: ${nextShift.name} (${String(nextShift.start_time).slice(0, 5)}–${String(nextShift.end_time).slice(0, 5)} WITA).`,
+            5000
+          );
+          const shiftEl = document.getElementById("shift-selector-wrap");
+          if (shiftEl && typeof shiftEl.scrollIntoView === "function") {
+            shiftEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        } catch (err) {
+          showBanner(false, "Gagal mengganti shift: " + (err.message || err));
+        }
+        return;
+      }
+
+      // TOMBOL LANGKAH 2 PADA ANGGOTA: LANGSUNG BUKA KAMERA CHECK IN / CHECK OUT
+      if (action === "step-click-attendance") {
+        const s = Core.state;
+        const u = s.currentUser;
+        const tz = s.settings.operational_timezone || "Asia/Makassar";
+        const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+        const myToday = s.attendance.find((a) => a.employee_id === u?.id && a.work_date === parts.dateString);
+        const canCheckIn = !myToday || (!myToday.check_in_at && myToday.attendance_status !== "cuti_libur");
+        const canCheckOut = Boolean(myToday?.check_in_at && !myToday?.check_out_at);
+
+        if (canCheckIn) {
+          await openAttendanceCameraModal("check_in");
+          return;
+        }
+        if (canCheckOut) {
+          await openAttendanceCameraModal("check_out");
+          return;
+        }
+
+        showBanner(true, "✓ Presensi kehadiran hari ini sudah lengkap & selesai. Terima kasih!", 5000);
+        const todayCard = document.getElementById("today-attendance-card");
+        if (todayCard && typeof todayCard.scrollIntoView === "function") {
+          todayCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        return;
+      }
+
+      // TOMBOL LANGKAH 3 PADA ANGGOTA: SELESAI TUGAS ATAU AJUKAN IZIN / CUTI
+      if (action === "step-click-leave") {
+        const s = Core.state;
+        const u = s.currentUser;
+        const tz = s.settings.operational_timezone || "Asia/Makassar";
+        const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+        const myToday = s.attendance.find((a) => a.employee_id === u?.id && a.work_date === parts.dateString);
+        const canCheckOut = Boolean(myToday?.check_in_at && !myToday?.check_out_at);
+
+        if (canCheckOut) {
+          uiState.modal = { type: "step_selesai_choice" };
+          render();
+          return;
+        }
+
+        if (!Core.isManager() && !Core.state.settings.allow_member_request_leaves) {
+          showBanner(false, "Pengajuan izin sedang dinonaktifkan oleh pengelola.");
+          return;
+        }
+        uiState.modal = { type: "member_leave" };
+        render();
         return;
       }
 

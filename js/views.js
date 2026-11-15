@@ -541,7 +541,7 @@
     const activeShifts = (shifts || []).filter((sh) => sh.status === "active");
     if (activeShifts.length === 0) return "";
     return `
-      <div style="margin-bottom:12px;">
+      <div id="shift-selector-wrap" style="margin-bottom:12px;">
         <div style="font-size:11px;font-weight:700;color:var(--coffee-300);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">
           Pilih Shift Bertugas ${locked ? "(Terkunci Sesuai Jam Masuk)" : ""}:
         </div>
@@ -758,29 +758,46 @@
           : ""
       }
 
-      <!-- 3 LANGKAH MUDAH UNTUK KARYAWAN -->
+      <!-- 3 LANGKAH MUDAH UNTUK KARYAWAN (TOMBOL AKTIF DAPAT DIKLIK) -->
       <div class="staff-steps-grid">
-        <div class="staff-step-card ${selectedShiftId ? "active" : ""}">
+        <button
+          type="button"
+          class="staff-step-card ${selectedShiftId ? "active" : ""}"
+          data-action="step-click-shift"
+          title="Ketuk untuk memilih / mengganti shift kerja"
+        >
           <div class="staff-step-num">${canCheckIn ? "1" : "✓"}</div>
           <div class="staff-step-content">
             <div class="staff-step-title">1. Shift Kerja</div>
-            <div class="staff-step-desc">${esc(myShift ? myShift.name : "Pilih Shift")}</div>
+            <div class="staff-step-desc">${esc(myShift ? myShift.name : "Pilih Shift")} ▾</div>
           </div>
-        </div>
-        <div class="staff-step-card ${myToday?.check_in_at ? "active" : ""}">
+        </button>
+
+        <button
+          type="button"
+          class="staff-step-card ${myToday?.check_in_at ? "active" : ""}"
+          data-action="step-click-attendance"
+          title="${canCheckIn ? "Ketuk untuk Check In Masuk Sekarang" : canCheckOut ? "Ketuk untuk Check Out Pulang Sekarang" : "Presensi kehadiran hari ini sudah selesai"}"
+        >
           <div class="staff-step-num">${myToday?.check_in_at ? "✓" : "2"}</div>
           <div class="staff-step-content">
             <div class="staff-step-title">2. Absen Hadir</div>
-            <div class="staff-step-desc">${myToday?.check_in_at ? "Sudah Check In" : "Selfie &amp; Lokasi"}</div>
+            <div class="staff-step-desc">${canCheckIn ? "📷 Klik Check In" : canCheckOut ? "📷 Klik Check Out" : "✓ Sudah Hadir"}</div>
           </div>
-        </div>
-        <div class="staff-step-card ${myToday?.check_out_at ? "active" : ""}">
+        </button>
+
+        <button
+          type="button"
+          class="staff-step-card ${myToday?.check_out_at ? "active" : ""}"
+          data-action="step-click-leave"
+          title="Ketuk untuk selesai kerja atau mengajukan izin/cuti"
+        >
           <div class="staff-step-num">${myToday?.check_out_at ? "✓" : "3"}</div>
           <div class="staff-step-content">
             <div class="staff-step-title">3. Selesai / Izin</div>
-            <div class="staff-step-desc">${myToday?.check_out_at ? "Sudah Check Out" : "Izin Dari Rumah"}</div>
+            <div class="staff-step-desc">${canCheckOut ? "Selesai / Izin" : myToday?.check_out_at ? "✓ Sudah Selesai" : "📅 Ajukan Izin"}</div>
           </div>
-        </div>
+        </button>
       </div>
 
       <div class="hero-banner">
@@ -877,7 +894,7 @@
 
       ${
         myToday
-          ? `<div class="card">
+          ? `<div id="today-attendance-card" class="card">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
                 <div>
                   <h2 style="font-size:16px;font-weight:800;">Output Absensi Anda Hari Ini</h2>
