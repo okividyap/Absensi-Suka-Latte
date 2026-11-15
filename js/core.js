@@ -519,7 +519,7 @@ window.SUKA_LATTE_CONFIG = {
     if (!state.supabase || !isApprovedUser()) return;
 
     // Data dasar yang diizinkan dibaca oleh pengguna aktif (Outlets, Shifts, Settings, Schedules)
-    const [outRes, shRes, setRes, attRes, corrRes, hlRes, schedRes] = await Promise.all([
+    const [outRes, shRes, setRes, attRes, corrRes, hlRes, schedRes, swapRes] = await Promise.all([
       state.supabase.from("outlets").select("*").order("created_at", { ascending: true }),
       state.supabase.from("work_shifts").select("*").order("start_time", { ascending: true }),
       state.supabase.from("system_settings").select("*").eq("key", "operational_config").maybeSingle(),
@@ -528,13 +528,13 @@ window.SUKA_LATTE_CONFIG = {
       isMemberOnly()
         ? state.supabase
             .from("attendance")
-            .select("*, employee:employee_id(id, full_name, employee_code, role, department, avatar_url), outlet:outlet_id(id, name), shift:shift_id(id, name, start_time, end_time)")
+            .select("*")
             .eq("employee_id", state.currentUser.id)
             .order("work_date", { ascending: false })
             .order("created_at", { ascending: false })
         : state.supabase
             .from("attendance")
-            .select("*, employee:employee_id(id, full_name, employee_code, role, department, avatar_url), outlet:outlet_id(id, name), shift:shift_id(id, name, start_time, end_time)")
+            .select("*")
             .order("work_date", { ascending: false })
             .order("created_at", { ascending: false })
             .limit(300),
@@ -666,10 +666,17 @@ window.SUKA_LATTE_CONFIG = {
       if (!error && Array.isArray(data)) {
         let updated = false;
         data.forEach((item) => {
-          if (item.path && item.signedUrl) {
+          const sUrl = item.signedUrl || item.signedURL;
+          if (item.path && sUrl) {
             state.signedUrls[item.path] = {
-              url: item.signedUrl,
+              url: sUrl,
               exp: nowMs + 260 * 1000,
+            };
+            updated = true;
+          } else if (item.path && item.error) {
+            state.signedUrls[item.path] = {
+              error: item.error,
+              exp: nowMs + 60 * 1000,
             };
             updated = true;
           }
@@ -684,7 +691,31 @@ window.SUKA_LATTE_CONFIG = {
   function getSignedPhotoUrl(path) {
     if (!path) return null;
     const item = state.signedUrls[path];
-    return item ? item.url : null;
+    if (!item) return null;
+    if (item.error) return "FAILED";
+    return item.url || null;
+  }
+
+  const _pendingProfileFetches = new Set();
+  async function fetchMissingProfile(id) {
+    if (!id || !state.supabase || _pendingProfileFetches.has(id)) return;
+    if (state.profiles.some((p) => p.id === id)) return;
+    _pendingProfileFetches.add(id);
+    try {
+      const { data, error } = await state.supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (!error && data) {
+        state.profiles.push(data);
+        if (uiNotifyCallback) uiNotifyCallback();
+      }
+    } catch (err) {
+      console.warn("fetchMissingProfile error:", err);
+    } finally {
+      _pendingProfileFetches.delete(id);
+    }
   }
 
   // ==========================================================================
@@ -1356,6 +1387,7 @@ window.SUKA_LATTE_CONFIG = {
     refreshAllData,
     ensureSignedUrlsForAttendance,
     getSignedPhotoUrl,
+    fetchMissingProfile,
     signInWithGoogle,
     signOut,
     selectMyActiveShift,

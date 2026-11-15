@@ -439,22 +439,45 @@
     const out = s.outlets.find((o) => o.id === rec.outlet_id) || rec.outlet;
     const sh = s.shifts.find((x) => x.id === rec.shift_id) || rec.shift;
 
+    if (!emp && rec.employee_id && Core.fetchMissingProfile) {
+      setTimeout(() => Core.fetchMissingProfile(rec.employee_id), 20);
+    }
+
     const inUrl = Core.getSignedPhotoUrl(rec.check_in_photo_path);
     const outUrl = Core.getSignedPhotoUrl(rec.check_out_photo_path);
 
-    // Otomatis minta signed URL jika belum ada di cache
-    if ((rec.check_in_photo_path && !inUrl) || (rec.check_out_photo_path && !outUrl)) {
+    // Otomatis minta signed URL jika belum ada di cache (dan bukan status FAILED)
+    const needIn = rec.check_in_photo_path && inUrl === null;
+    const needOut = rec.check_out_photo_path && outUrl === null;
+    if (needIn || needOut) {
       setTimeout(() => Core.ensureSignedUrlsForAttendance([rec]), 30);
     }
+
+    const renderThumb = (url, path, label, isCheckIn) => {
+      if (url && url !== "FAILED") {
+        return `<img src="${esc(url)}" alt="${esc(label)}" loading="lazy" />`;
+      }
+      if (url === "FAILED") {
+        return `<div style="padding:10px;text-align:center;font-size:11px;color:var(--coffee-700);"><div style="font-size:16px;margin-bottom:2px;">🔒</div>Foto Privat Tersimpan</div>`;
+      }
+      if (path) {
+        return `<div style="padding:10px;text-align:center;font-size:11px;color:var(--stone-500);"><div style="font-size:14px;margin-bottom:2px;">⏳</div>Memuat Foto...</div>`;
+      }
+      return `<span style="font-size:11px;color:var(--stone-400);padding:8px;text-align:center;">${isCheckIn ? "Tidak Ada Foto" : "Menunggu Check Out"}</span>`;
+    };
+
+    const empName = emp ? emp.full_name : (rec.employee?.full_name || "Karyawan");
+    const empCode = emp?.employee_code ? emp.employee_code : (rec.employee?.employee_code || (rec.employee_id ? String(rec.employee_id).slice(0, 8) : "-"));
+    const empDept = emp?.department || rec.employee?.department || "";
 
     return `
       <div class="card-subtle" style="display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
           <div>
             <div style="font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <span>${esc(emp ? emp.full_name : "Karyawan")}</span>
-              <span class="mono" style="font-size:11px;color:var(--coffee-700);">(${esc(emp ? emp.employee_code : "-")})</span>
-              ${emp?.department ? getDepartmentBadge(emp.department) : ""}
+              <span>${esc(empName)}</span>
+              <span class="mono" style="font-size:11px;color:var(--coffee-700);">(${esc(empCode)})</span>
+              ${empDept ? getDepartmentBadge(empDept) : ""}
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;">
               <span style="font-size:11px;color:var(--stone-600);">Tanggal Kerja: <strong>${esc(rec.work_date)}</strong> • ${esc(out ? out.name : "-")}</span>
@@ -484,13 +507,7 @@
                 <span class="mono">${rec.check_in_at ? Core.formatOperationalDateTime(rec.check_in_at, tz, false) : "-"}</span>
               </div>
               <div class="evidence-thumb">
-                ${
-                  inUrl
-                    ? `<img src="${esc(inUrl)}" alt="Foto Check In" />`
-                    : rec.check_in_photo_path
-                    ? `<span style="font-size:11px;color:var(--stone-500);">Memuat Signed URL...</span>`
-                    : `<span style="font-size:11px;color:var(--stone-400);">Tidak Ada Foto</span>`
-                }
+                ${renderThumb(inUrl, rec.check_in_photo_path, "Foto Check In", true)}
               </div>
             </div>
             <div style="padding:8px;font-size:10.5px;color:var(--stone-600);border-top:1px solid var(--coffee-100);">
@@ -505,15 +522,13 @@
                 <span class="mono">${rec.check_out_at ? Core.formatOperationalDateTime(rec.check_out_at, tz, false) : "Belum"}</span>
               </div>
               <div class="evidence-thumb">
-                ${
-                  outUrl
-                    ? `<img src="${esc(outUrl)}" alt="Foto Check Out" />`
-                    : rec.check_out_photo_path
-                    ? `<span style="font-size:11px;color:var(--stone-500);">Memuat Signed URL...</span>`
-                    : `<span style="font-size:11px;color:var(--stone-400);padding:8px;text-align:center;">Menunggu Check Out</span>`
-                }
+                ${renderThumb(outUrl, rec.check_out_photo_path, "Foto Check Out", false)}
               </div>
             </div>
+            <div style="padding:8px;font-size:10.5px;color:var(--stone-600);border-top:1px solid var(--coffee-100);">
+              Durasi: <strong>${Core.formatDurationMinutes(rec.work_duration_minutes)}</strong>
+            </div>
+          </div>
             <div style="padding:8px;font-size:10.5px;color:var(--stone-600);border-top:1px solid var(--coffee-100);">
               Durasi: <strong>${Core.formatDurationMinutes(rec.work_duration_minutes)}</strong>
             </div>
@@ -2036,7 +2051,7 @@
     const deptFilter = uiState.scheduleDeptFilter || "all";
 
     const activeEmployees = s.profiles.filter(
-      (p) => p.status === "active" && p.first_login_approved
+      (p) => p.status !== "rejected" && p.status !== "inactive"
     );
 
     // Filter jadwal untuk bulan aktif
