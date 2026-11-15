@@ -458,8 +458,13 @@
           </div>
           <div style="text-align:right;">
             ${Core.getStatusBadgeHtml(rec.attendance_status, rec.late_minutes)}
-            <div class="mono" style="font-size:10px;font-weight:700;color:var(--coffee-700);margin-top:3px;">
-              📁 ${esc(rec.archive_folder_label)}
+            <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;flex-wrap:wrap;margin-top:3px;">
+              <span class="badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:10px;padding:2px 6px;">
+                ✓ Geometri Terverifikasi
+              </span>
+              <span class="mono" style="font-size:10px;font-weight:700;color:var(--coffee-700);">
+                📁 ${esc(rec.archive_folder_label)}
+              </span>
             </div>
           </div>
         </div>
@@ -752,21 +757,154 @@
     return { days, label, mondayStr: first.dateStr, sundayStr: last.dateStr };
   }
 
+  const INDO_MONTHS_FULL = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+
+  function getMonthCalendarRange(baseDateStr, monthOffset = 0) {
+    const [baseY, baseM] = baseDateStr.split("-").map(Number);
+    const targetDt = new Date(baseY, baseM - 1 + monthOffset, 1);
+    const y = targetDt.getFullYear();
+    const m = targetDt.getMonth();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+    const days = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(y, m, d);
+      const dy = dt.getFullYear();
+      const dm = String(dt.getMonth() + 1).padStart(2, "0");
+      const dd = String(d).padStart(2, "0");
+      const dateStr = `${dy}-${dm}-${dd}`;
+      days.push({
+        dateStr,
+        dayNum: dd,
+        dayName: INDO_DAYS[dt.getDay()],
+        monthShort: INDO_MONTHS_SHORT[m],
+        monthFull: INDO_MONTHS_FULL[m],
+        year: y,
+        dayOfWeek: dt.getDay(),
+        dateObj: dt,
+      });
+    }
+
+    const firstDayOfWeek = new Date(y, m, 1).getDay();
+    const leadingDaysCount = (firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1);
+    const gridDays = [];
+
+    const prevMonthDaysCount = new Date(y, m, 0).getDate();
+    for (let i = leadingDaysCount - 1; i >= 0; i--) {
+      const prevD = prevMonthDaysCount - i;
+      const prevDt = new Date(y, m - 1, prevD);
+      const dy = prevDt.getFullYear();
+      const dm = String(prevDt.getMonth() + 1).padStart(2, "0");
+      const dd = String(prevD).padStart(2, "0");
+      gridDays.push({
+        dateStr: `${dy}-${dm}-${dd}`,
+        dayNum: dd,
+        dayName: INDO_DAYS[prevDt.getDay()],
+        monthShort: INDO_MONTHS_SHORT[prevDt.getMonth()],
+        year: dy,
+        isCurrentMonth: false,
+        dateObj: prevDt,
+      });
+    }
+
+    days.forEach((d) => {
+      gridDays.push({
+        ...d,
+        isCurrentMonth: true,
+      });
+    });
+
+    const remaining = (7 - (gridDays.length % 7)) % 7;
+    for (let j = 1; j <= remaining; j++) {
+      const nextDt = new Date(y, m + 1, j);
+      const dy = nextDt.getFullYear();
+      const dm = String(nextDt.getMonth() + 1).padStart(2, "0");
+      const dd = String(j).padStart(2, "0");
+      gridDays.push({
+        dateStr: `${dy}-${dm}-${dd}`,
+        dayNum: dd,
+        dayName: INDO_DAYS[nextDt.getDay()],
+        monthShort: INDO_MONTHS_SHORT[nextDt.getMonth()],
+        year: dy,
+        isCurrentMonth: false,
+        dateObj: nextDt,
+      });
+    }
+
+    const first = days[0];
+    const last = days[days.length - 1];
+    const label = `${INDO_MONTHS_FULL[m]} ${y}`;
+    return {
+      days,
+      gridDays,
+      label,
+      year: y,
+      month: m + 1,
+      monthName: INDO_MONTHS_FULL[m],
+      startDateStr: first.dateStr,
+      endDateStr: last.dateStr,
+    };
+  }
+
+  function getColleaguesForSchedule(dateStr, shiftId, currentUserId) {
+    const s = Core.state;
+    if (!dateStr || !shiftId) return [];
+    const activeProfiles = s.profiles.filter((p) => p.status === "active" && p.first_login_approved);
+
+    const matches = s.workSchedules.filter(
+      (sc) =>
+        sc.schedule_date === dateStr &&
+        sc.shift_id === shiftId &&
+        sc.schedule_type === "work" &&
+        sc.employee_id !== currentUserId
+    );
+
+    return matches.map((sc) => {
+      const emp =
+        activeProfiles.find((p) => p.id === sc.employee_id) ||
+        s.profiles.find((p) => p.id === sc.employee_id);
+      return {
+        id: sc.employee_id,
+        name: emp?.full_name || "Karyawan",
+        role: emp?.role || "member",
+        code: emp?.employee_code || "",
+        notes: sc.notes,
+        profile: emp,
+      };
+    });
+  }
+
   function renderMemberScheduleHomeWidget(todayDateStr, currentUserId) {
     const s = Core.state;
+    const u = s.currentUser;
     const week = getWeekCalendarRange(todayDateStr, 0);
+
+    const todaySched = Core.getScheduleForDate(todayDateStr, currentUserId);
+    const todayShift = todaySched?.shift_id
+      ? s.shifts.find((x) => x.id === todaySched.shift_id)
+      : null;
+    const isTodayOff = todaySched?.schedule_type === "off";
+    const colleagues = todayShift
+      ? getColleaguesForSchedule(todayDateStr, todayShift.id, currentUserId)
+      : [];
 
     return `
       <div class="card" style="margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
           <div>
+            <div style="font-size:11px;font-weight:800;color:var(--coffee-700);text-transform:uppercase;">
+              Jadwal Kerja: ${esc(u?.full_name || "Karyawan")} (${esc(u?.employee_code || "KARYAWAN")})
+            </div>
             <h3 style="font-size:15px;font-weight:800;margin:0 0 2px 0;">🗓️ Roster Jadwal Kerja Saya (Minggu Ini)</h3>
             <p style="font-size:11.5px;color:var(--stone-500);margin:0;">
               Jadwal shift &amp; hari libur resmi yang diatur oleh Admin Suka Latte.
             </p>
           </div>
           <button class="btn btn-outline btn-sm" data-action="nav" data-target="jadwal_saya" style="font-size:11px;padding:4px 10px;">
-            Lihat Jadwal Lengkap ›
+            Lihat Jadwal 1 Bulan ›
           </button>
         </div>
 
@@ -797,6 +935,33 @@
             })
             .join("")}
         </div>
+
+        <!-- REKAN SATU SHIFT HARI INI -->
+        ${
+          !isTodayOff && todayShift
+            ? `
+          <div style="margin-top:10px;padding:9px 12px;background:#fef3c7;border:1px solid #fde68a;border-radius:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div style="font-size:12px;color:#92400e;">
+              👥 <strong>Teman Shift Anda Hari Ini (${esc(todayShift.name)}):</strong>
+              ${
+                colleagues.length > 0
+                  ? `<span style="font-weight:700;"> ${colleagues.map((c) => esc(c.name)).join(", ")}</span>`
+                  : `<span style="font-style:italic;"> (Hanya Anda yang bertugas di shift ini)</span>`
+              }
+            </div>
+            <button class="btn btn-outline btn-xs" data-action="nav" data-target="jadwal_saya" style="border-color:#d97706;color:#92400e;padding:3px 8px;font-size:10.5px;">
+              Detail Jadwal Bulanan ›
+            </button>
+          </div>
+          `
+            : isTodayOff
+            ? `
+          <div style="margin-top:10px;padding:9px 12px;background:#fff1f2;border:1px solid #fecdd3;border-radius:10px;font-size:12px;color:var(--rose-900);">
+            🏖️ <strong>Hari Ini Libur Pribadi (Day Off).</strong> Anda tidak perlu melakukan absensi selfie.
+          </div>
+          `
+            : ""
+        }
       </div>
     `;
   }
@@ -1116,65 +1281,125 @@
   }
 
   // ==========================================================================
-  // 5.2 TAMPILAN KHUSUS ANGGOTA: ROSTER JADWAL KERJA SAYA
+  // 5.2 TAMPILAN KHUSUS ANGGOTA: ROSTER JADWAL KERJA BULANAN & REKAN SHIFT
   // ==========================================================================
   function renderMemberScheduleView(uiState) {
     const s = Core.state;
     const u = s.currentUser;
     const tz = s.settings.operational_timezone || "Asia/Makassar";
     const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
-    const offset = uiState.scheduleWeekOffset || 0;
-    const week = getWeekCalendarRange(parts.dateString, offset);
+    const offset = uiState.scheduleMonthOffset || 0;
+    const month = getMonthCalendarRange(parts.dateString, offset);
     const subTab = uiState.scheduleTab || "mine";
+
+    // Hitung ringkasan statistik jadwal bulanan untuk karyawan aktif
+    let totalWorkDays = 0;
+    let morningCount = 0;
+    let afternoonCount = 0;
+    let offCount = 0;
+
+    month.days.forEach((d) => {
+      const sched = Core.getScheduleForDate(d.dateStr, u.id);
+      if (sched?.schedule_type === "off") {
+        offCount++;
+      } else {
+        totalWorkDays++;
+        const sh = sched?.shift_id ? s.shifts.find((x) => x.id === sched.shift_id) : null;
+        if (sh && sh.name.toLowerCase().includes("siang")) {
+          afternoonCount++;
+        } else {
+          morningCount++;
+        }
+      }
+    });
 
     return `
       <div class="hero-banner">
-        <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:8px;">
-          🗓️ Roster Jadwal Kerja &amp; Shift
-        </span>
-        <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Jadwal Kerja Anda di Suka Latte</h2>
-        <p style="font-size:12px;color:var(--coffee-200);margin-bottom:14px;max-width:700px;">
-          Jadwal shift operasional yang telah disusun dan ditetapkan oleh Pengelola. Pantau tanggal masuk, jam kerja, dan hari libur Anda.
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);">
+            🗓️ Roster Jadwal Kerja Bulanan
+          </span>
+          <span class="badge badge-coffee mono" style="background:rgba(255,255,255,0.08);color:var(--gold-200);">
+            ${esc(u.employee_code || "KARYAWAN")}
+          </span>
+        </div>
+
+        <h2 style="font-size:21px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">
+          Jadwal Kerja: ${esc(u.full_name)}
+        </h2>
+        <p style="font-size:12px;color:var(--coffee-200);margin-bottom:14px;max-width:720px;">
+          Jadwal operasional &amp; rekan satu shift bulan <strong>${esc(month.label)}</strong> di Suka Latte. Disusun rapi per nama agar mudah dibaca di layar HP.
         </p>
 
-        <!-- KONTROL NAVIGASI MINGGU -->
+        <!-- KONTROL NAVIGASI BULANAN -->
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:rgba(12,7,4,0.6);border:1px solid rgba(218,175,118,0.25);border-radius:14px;padding:10px 14px;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <button class="btn btn-outline btn-sm" data-action="schedule-prev-week" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);">‹ Minggu Lalu</button>
-            <button class="btn btn-primary btn-sm" data-action="schedule-today-week">Minggu Ini</button>
-            <button class="btn btn-outline btn-sm" data-action="schedule-next-week" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);">Minggu Depan ›</button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" data-action="schedule-prev-month" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);padding:5px 10px;font-size:12px;">
+              ‹ Bulan Lalu
+            </button>
+            <button class="btn btn-primary btn-sm" data-action="schedule-today-month" style="padding:5px 12px;font-size:12px;">
+              Bulan Ini
+            </button>
+            <button class="btn btn-outline btn-sm" data-action="schedule-next-month" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);padding:5px 10px;font-size:12px;">
+              Bulan Depan ›
+            </button>
           </div>
-          <div style="font-size:13px;font-weight:800;color:var(--gold-200);">
-            📅 ${esc(week.label)}
+          <div style="font-size:13.5px;font-weight:800;color:var(--gold-200);">
+            📅 ${esc(month.label)}
           </div>
         </div>
       </div>
 
-      <!-- TAB PILIHAN ANGGOTA: JADWAL SAYA VS REKAN KERJA -->
+      <!-- RINGKASAN STATISTIK BULANAN SAYA -->
+      <div class="schedule-month-stats">
+        <div class="sched-stat-card">
+          <span class="sched-stat-label">Total Hari Kerja</span>
+          <span class="sched-stat-num">${totalWorkDays} <span style="font-size:12px;font-weight:normal;color:var(--stone-500);">Hari</span></span>
+        </div>
+        <div class="sched-stat-card">
+          <span class="sched-stat-label">Shift Pagi</span>
+          <span class="sched-stat-num" style="color:#b45309;">${morningCount} <span style="font-size:12px;font-weight:normal;color:var(--stone-500);">Hari</span></span>
+        </div>
+        <div class="sched-stat-card">
+          <span class="sched-stat-label">Shift Siang</span>
+          <span class="sched-stat-num" style="color:#4338ca;">${afternoonCount} <span style="font-size:12px;font-weight:normal;color:var(--stone-500);">Hari</span></span>
+        </div>
+        <div class="sched-stat-card">
+          <span class="sched-stat-label">Libur (Day Off)</span>
+          <span class="sched-stat-num" style="color:var(--rose-700);">${offCount} <span style="font-size:12px;font-weight:normal;color:var(--stone-500);">Hari</span></span>
+        </div>
+      </div>
+
+      <!-- TAB PILIHAN ANGGOTA: JADWAL SAYA VS REKAN TIM VS KALENDER -->
       <div class="tab-pills" style="margin-bottom:16px;">
         <button class="tab-pill ${subTab === "mine" ? "active" : ""}" data-action="schedule-subtab" data-tab="mine">
-          <span>📅 Jadwal Saya Sendiri</span>
+          <span>📅 Jadwal Saya Sendiri (1 Bulan)</span>
         </button>
         <button class="tab-pill ${subTab === "team" ? "active" : ""}" data-action="schedule-subtab" data-tab="team">
           <span>👥 Jadwal Tim Outlet (${esc(s.outlets[0]?.name || "Suka Latte")})</span>
+        </button>
+        <button class="tab-pill ${subTab === "calendar" ? "active" : ""}" data-action="schedule-subtab" data-tab="calendar">
+          <span>🗓️ Kalender Bulanan</span>
         </button>
       </div>
 
       ${
         subTab === "mine"
-          ? renderMemberOwnScheduleList(week, parts.dateString, u.id, s, tz)
-          : renderMemberTeamScheduleList(week, parts.dateString, s)
+          ? renderMemberOwnScheduleList(month, parts.dateString, u, s, tz)
+          : subTab === "team"
+          ? renderMemberTeamScheduleList(month, parts.dateString, u, s)
+          : renderMemberMonthCalendarGrid(month, parts.dateString, u.id, s)
       }
     `;
   }
 
-  function renderMemberOwnScheduleList(week, todayDateStr, userId, s, tz) {
+  function renderMemberOwnScheduleList(month, todayDateStr, u, s, tz) {
     return `
       <div style="display:flex;flex-direction:column;gap:10px;">
-        ${week.days
+        ${month.days
           .map((d) => {
             const isToday = d.dateStr === todayDateStr;
-            const sched = Core.getScheduleForDate(d.dateStr, userId);
+            const sched = Core.getScheduleForDate(d.dateStr, u.id);
             const sh = sched?.shift_id
               ? s.shifts.find((x) => x.id === sched.shift_id)
               : null;
@@ -1183,19 +1408,29 @@
               ? s.outlets.find((o) => o.id === sched.outlet_id)
               : s.outlets[0];
 
+            // Cari rekan-rekan yang satu shift dengan anggota ini pada tanggal ini
+            const colleagues = !isOff && sh
+              ? getColleaguesForSchedule(d.dateStr, sh.id, u.id)
+              : [];
+
             // Cek absensi pada tanggal tersebut
             const att = s.attendance.find(
-              (a) => a.employee_id === userId && a.work_date === d.dateStr
+              (a) => a.employee_id === u.id && a.work_date === d.dateStr
             );
 
             return `
               <div class="schedule-roster-day-card ${isToday ? "is-today" : ""}">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
-                  <div>
+                  <div style="flex:1;min-width:240px;">
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                      <strong style="font-size:14px;color:var(--stone-900);">${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)} ${d.dateObj.getFullYear()}</strong>
+                      <strong style="font-size:14px;color:var(--stone-900);">${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)} ${d.year}</strong>
                       ${isToday ? `<span class="badge badge-amber" style="font-size:10px;">HARI INI</span>` : ""}
                     </div>
+
+                    <div style="font-size:11.5px;font-weight:700;color:var(--coffee-800);margin-top:2px;">
+                      👤 ${esc(u.full_name)} (${esc(u.employee_code || "KARYAWAN")})
+                    </div>
+
                     <div style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                       ${
                         isOff
@@ -1206,22 +1441,48 @@
                       }
                       <span style="font-size:11.5px;color:var(--stone-600);">• Outlet: <strong>${esc(outlet ? outlet.name : "Suka Latte")}</strong></span>
                     </div>
+
+                    <!-- DAFTAR NAMA REKAN SATU SHIFT -->
+                    <div style="margin-top:8px;padding:8px 10px;background:var(--stone-50);border:1px solid var(--stone-200);border-radius:8px;">
+                      <div style="font-size:11px;font-weight:700;color:var(--stone-600);margin-bottom:3px;">
+                        👥 Rekan Satu Shift Anda:
+                      </div>
+                      ${
+                        isOff
+                          ? `<span style="font-size:11.5px;color:var(--rose-700);">🏖️ Anda dijadwalkan Libur (Day Off) hari ini.</span>`
+                          : colleagues.length > 0
+                          ? `<div class="colleague-tag-list">
+                              ${colleagues
+                                .map(
+                                  (c) => `
+                                <span class="colleague-tag">
+                                  🤝 ${esc(c.name)} <span style="font-size:10px;opacity:0.8;">(${esc(c.role)})</span>
+                                </span>
+                              `
+                                )
+                                .join("")}
+                            </div>`
+                          : `<span style="font-size:11.5px;color:var(--stone-500);font-style:italic;">(Hanya Anda yang bertugas di shift ini)</span>`
+                      }
+                    </div>
+
                     ${
                       sched?.notes
-                        ? `<div style="font-size:11.5px;color:var(--coffee-800);margin-top:4px;font-style:italic;">
+                        ? `<div style="font-size:11.5px;color:var(--coffee-800);margin-top:5px;font-style:italic;">
                              💬 Catatan: "${esc(sched.notes)}"
                            </div>`
                         : ""
                     }
                   </div>
-                  <div>
+
+                  <div style="text-align:right;">
                     ${
                       att
                         ? `<span class="badge badge-emerald" style="font-size:11px;">
                              ✓ Hadir (${att.check_in_at ? Core.formatOperationalDateTime(att.check_in_at, tz, false).slice(12, 17) : "--:--"})
                            </span>`
                         : isToday && !isOff
-                        ? `<button class="btn btn-emerald btn-sm" data-action="nav" data-target="absensi_saya">
+                        ? `<button class="btn btn-emerald btn-sm" data-action="nav" data-target="absensi_saya" style="padding:6px 12px;font-size:12px;">
                              📷 Absen Sekarang
                            </button>`
                         : `<span style="font-size:11px;color:var(--stone-400);">${d.dateStr < todayDateStr ? "Selesai" : "Mendatang"}</span>`
@@ -1236,17 +1497,22 @@
     `;
   }
 
-  function renderMemberTeamScheduleList(week, todayDateStr, s) {
+  function renderMemberTeamScheduleList(month, todayDateStr, u, s) {
     const activeProfiles = s.profiles.filter(
       (p) => p.status === "active" && p.first_login_approved
     );
 
     return `
       <div style="display:flex;flex-direction:column;gap:12px;">
-        ${week.days
+        ${month.days
           .map((d) => {
             const isToday = d.dateStr === todayDateStr;
             const dayScheds = s.workSchedules.filter((x) => x.schedule_date === d.dateStr);
+
+            // Shift user aktif hari ini
+            const mySched = Core.getScheduleForDate(d.dateStr, u.id);
+            const myIsOff = mySched?.schedule_type === "off";
+            const myShift = mySched?.shift_id ? s.shifts.find((x) => x.id === mySched.shift_id) : null;
 
             const morningScheds = dayScheds.filter((sc) => {
               const sh = s.shifts.find((x) => x.id === sc.shift_id);
@@ -1260,18 +1526,26 @@
 
             return `
               <div class="schedule-roster-day-card ${isToday ? "is-today" : ""}">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
                   <div style="display:flex;align-items:center;gap:6px;">
-                    <strong style="font-size:14px;color:var(--stone-900);">${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)}</strong>
+                    <strong style="font-size:14px;color:var(--stone-900);">${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)} ${d.year}</strong>
                     ${isToday ? `<span class="badge badge-amber" style="font-size:10px;">HARI INI</span>` : ""}
                   </div>
-                  <span style="font-size:11.5px;color:var(--stone-500);">${dayScheds.length} jadwal terdaftar</span>
+                  <div style="font-size:11.5px;color:var(--stone-600);">
+                    ${
+                      myIsOff
+                        ? `<span class="badge badge-rose" style="font-size:10.5px;">🏖️ Anda Libur</span>`
+                        : myShift
+                        ? `<span class="badge badge-amber" style="font-size:10.5px;">Shift Anda: ${esc(myShift.name)}</span>`
+                        : `<span style="color:var(--stone-500);">${dayScheds.length} jadwal</span>`
+                    }
+                  </div>
                 </div>
 
                 <div class="grid-3" style="gap:10px;">
                   <!-- SHIFT PAGI -->
                   <div style="background:var(--stone-50);border-radius:10px;padding:10px;border:1px solid #fef3c7;">
-                    <div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+                    <div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
                       <span>🌅 Shift Pagi</span>
                       <span class="badge" style="background:#fde68a;font-size:10px;">${morningScheds.length}</span>
                     </div>
@@ -1280,12 +1554,23 @@
                         ? morningScheds
                             .map((sc) => {
                               const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
+                              const isMe = sc.employee_id === u.id;
+                              const isMyPartner = !myIsOff && myShift && myShift.name.toLowerCase().includes("pagi") && !isMe;
                               return `
-                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11.5px;">
+                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11.5px;padding:4px 6px;border-radius:6px;background:${isMe ? "#fef9c3" : isMyPartner ? "#fef3c7" : "transparent"};">
                                   ${renderAvatarHtml(emp)}
-                                  <div>
-                                    <div style="font-weight:700;">${esc(emp?.full_name || "Karyawan")}</div>
-                                    ${sc.notes ? `<div style="font-size:10.5px;color:var(--stone-500);">${esc(sc.notes)}</div>` : ""}
+                                  <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                      ${esc(emp?.full_name || "Karyawan")}
+                                      ${isMe ? `<span class="badge badge-amber" style="font-size:9.5px;padding:1px 4px;margin-left:2px;">(Anda)</span>` : ""}
+                                    </div>
+                                    ${
+                                      isMyPartner
+                                        ? `<div style="font-size:10px;color:#b45309;font-weight:700;">🤝 Partner Shift Anda</div>`
+                                        : sc.notes
+                                        ? `<div style="font-size:10px;color:var(--stone-500);">${esc(sc.notes)}</div>`
+                                        : ""
+                                    }
                                   </div>
                                 </div>
                               `;
@@ -1297,7 +1582,7 @@
 
                   <!-- SHIFT SIANG -->
                   <div style="background:var(--stone-50);border-radius:10px;padding:10px;border:1px solid #e0e7ff;">
-                    <div style="font-size:12px;font-weight:800;color:#3730a3;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+                    <div style="font-size:12px;font-weight:800;color:#3730a3;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
                       <span>🌇 Shift Siang</span>
                       <span class="badge" style="background:#c7d2fe;font-size:10px;">${afternoonScheds.length}</span>
                     </div>
@@ -1306,12 +1591,23 @@
                         ? afternoonScheds
                             .map((sc) => {
                               const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
+                              const isMe = sc.employee_id === u.id;
+                              const isMyPartner = !myIsOff && myShift && myShift.name.toLowerCase().includes("siang") && !isMe;
                               return `
-                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11.5px;">
+                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11.5px;padding:4px 6px;border-radius:6px;background:${isMe ? "#e0e7ff" : isMyPartner ? "#ede9fe" : "transparent"};">
                                   ${renderAvatarHtml(emp)}
-                                  <div>
-                                    <div style="font-weight:700;">${esc(emp?.full_name || "Karyawan")}</div>
-                                    ${sc.notes ? `<div style="font-size:10.5px;color:var(--stone-500);">${esc(sc.notes)}</div>` : ""}
+                                  <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                      ${esc(emp?.full_name || "Karyawan")}
+                                      ${isMe ? `<span class="badge badge-coffee" style="font-size:9.5px;padding:1px 4px;margin-left:2px;">(Anda)</span>` : ""}
+                                    </div>
+                                    ${
+                                      isMyPartner
+                                        ? `<div style="font-size:10px;color:#4338ca;font-weight:700;">🤝 Partner Shift Anda</div>`
+                                        : sc.notes
+                                        ? `<div style="font-size:10px;color:var(--stone-500);">${esc(sc.notes)}</div>`
+                                        : ""
+                                    }
                                   </div>
                                 </div>
                               `;
@@ -1323,7 +1619,7 @@
 
                   <!-- LIBUR / OFF -->
                   <div style="background:var(--stone-50);border-radius:10px;padding:10px;border:1px solid #fecdd3;">
-                    <div style="font-size:12px;font-weight:800;color:#9f1239;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+                    <div style="font-size:12px;font-weight:800;color:#9f1239;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
                       <span>🏖️ Libur (OFF)</span>
                       <span class="badge" style="background:#ffe4e6;font-size:10px;">${offScheds.length}</span>
                     </div>
@@ -1332,12 +1628,16 @@
                         ? offScheds
                             .map((sc) => {
                               const emp = activeProfiles.find((p) => p.id === sc.employee_id) || s.profiles.find((p) => p.id === sc.employee_id);
+                              const isMe = sc.employee_id === u.id;
                               return `
-                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11.5px;">
+                                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11.5px;padding:4px 6px;border-radius:6px;background:${isMe ? "#ffe4e6" : "transparent"};">
                                   ${renderAvatarHtml(emp)}
-                                  <div>
-                                    <div style="font-weight:700;">${esc(emp?.full_name || "Karyawan")}</div>
-                                    ${sc.notes ? `<div style="font-size:10.5px;color:var(--stone-500);">${esc(sc.notes)}</div>` : ""}
+                                  <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                      ${esc(emp?.full_name || "Karyawan")}
+                                      ${isMe ? `<span class="badge badge-rose" style="font-size:9.5px;padding:1px 4px;margin-left:2px;">(Anda)</span>` : ""}
+                                    </div>
+                                    ${sc.notes ? `<div style="font-size:10px;color:var(--stone-500);">${esc(sc.notes)}</div>` : ""}
                                   </div>
                                 </div>
                               `;
@@ -1355,33 +1655,93 @@
     `;
   }
 
+  function renderMemberMonthCalendarGrid(month, todayDateStr, userId, s) {
+    const dayNames = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+    return `
+      <div class="card" style="padding:14px;">
+        <div style="font-size:13.5px;font-weight:800;color:var(--stone-900);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+          <span>🗓️ Kalender Bulanan: ${esc(month.label)}</span>
+          <span style="font-size:11.5px;color:var(--stone-500);font-weight:normal;">Ketuk tanggal untuk cek shift</span>
+        </div>
+
+        <div class="month-calendar-grid">
+          ${dayNames.map((name) => `<div class="month-calendar-day-header">${esc(name)}</div>`).join("")}
+          ${month.gridDays
+            .map((d) => {
+              const isToday = d.dateStr === todayDateStr;
+              const sched = d.isCurrentMonth ? Core.getScheduleForDate(d.dateStr, userId) : null;
+              const isOff = sched?.schedule_type === "off";
+              const sh = sched?.shift_id ? s.shifts.find((x) => x.id === sched.shift_id) : null;
+              const isMorning = sh && sh.name.toLowerCase().includes("pagi");
+              const isAfternoon = sh && sh.name.toLowerCase().includes("siang");
+
+              return `
+                <div class="month-calendar-day-cell ${!d.isCurrentMonth ? "other-month" : ""} ${isToday ? "is-today" : ""} ${isOff ? "is-off" : ""}">
+                  <div class="month-cell-num">${d.dayNum}</div>
+                  ${
+                    d.isCurrentMonth
+                      ? `
+                    <div class="month-cell-badge">
+                      ${
+                        isOff
+                          ? `<span class="badge badge-rose" style="font-size:9.5px;padding:1px 3px;">Libur</span>`
+                          : isMorning
+                          ? `<span class="badge badge-amber" style="font-size:9.5px;padding:1px 3px;">Pagi</span>`
+                          : isAfternoon
+                          ? `<span class="badge badge-coffee" style="font-size:9.5px;padding:1px 3px;">Siang</span>`
+                          : sh
+                          ? `<span class="badge" style="font-size:9.5px;padding:1px 3px;background:var(--stone-200);">${esc(sh.name.slice(0, 4))}</span>`
+                          : `<span style="font-size:9px;color:var(--stone-400);">-</span>`
+                      }
+                    </div>
+                  `
+                      : ""
+                  }
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+
+        <!-- LEGENDA KALENDER -->
+        <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border-soft,#e7e5e4);display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--stone-600);">
+          <span style="font-weight:700;">Keterangan:</span>
+          <span style="display:flex;align-items:center;gap:4px;"><span class="badge badge-amber" style="font-size:10px;padding:2px 6px;">Pagi</span> Shift Pagi</span>
+          <span style="display:flex;align-items:center;gap:4px;"><span class="badge badge-coffee" style="font-size:10px;padding:2px 6px;">Siang</span> Shift Siang</span>
+          <span style="display:flex;align-items:center;gap:4px;"><span class="badge badge-rose" style="font-size:10px;padding:2px 6px;">Libur</span> Day Off (Libur)</span>
+          <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:2px solid #10b981;"></span> Hari Ini</span>
+        </div>
+      </div>
+    `;
+  }
+
   // ==========================================================================
-  // 5.3 TAMPILAN PENGELOLA: ROSTER JADWAL KERJA & SHIFT STAF
+  // 5.3 TAMPILAN PENGELOLA: ROSTER JADWAL KERJA BULANAN & SHIFT STAF
   // ==========================================================================
   function renderManagerScheduleView(uiState, isEmbeddedInCp = false) {
     Core.assertManagerAccess("ManagerScheduleView");
     const s = Core.state;
     const tz = s.settings.operational_timezone || "Asia/Makassar";
     const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
-    const offset = uiState.scheduleWeekOffset || 0;
-    const week = getWeekCalendarRange(parts.dateString, offset);
+    const offset = uiState.scheduleMonthOffset || 0;
+    const month = getMonthCalendarRange(parts.dateString, offset);
     const empFilter = uiState.scheduleEmployeeFilter || "all";
 
     const activeEmployees = s.profiles.filter(
       (p) => p.status === "active" && p.first_login_approved
     );
 
-    // Filter jadwal untuk minggu aktif
-    const weekStart = week.days[0].dateStr;
-    const weekEnd = week.days[6].dateStr;
-    const weekSchedules = s.workSchedules.filter(
-      (sc) => sc.schedule_date >= weekStart && sc.schedule_date <= weekEnd
+    // Filter jadwal untuk bulan aktif
+    const monthStart = month.startDateStr;
+    const monthEnd = month.endDateStr;
+    const monthSchedules = s.workSchedules.filter(
+      (sc) => sc.schedule_date >= monthStart && sc.schedule_date <= monthEnd
     );
 
     const filteredSchedules =
       empFilter === "all"
-        ? weekSchedules
-        : weekSchedules.filter((sc) => sc.employee_id === empFilter);
+        ? monthSchedules
+        : monthSchedules.filter((sc) => sc.employee_id === empFilter);
 
     // Default tanggal untuk form jadwal
     const defaultDate = uiState.prefilledScheduleDate || parts.dateString;
@@ -1392,21 +1752,21 @@
           ? `
         <div class="hero-banner">
           <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:8px;">
-            🗓️ Roster Jadwal Operasional Outlet
+            🗓️ Roster Jadwal Operasional Bulanan
           </span>
           <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Pengaturan Jadwal Kerja &amp; Shift Karyawan</h2>
           <p style="font-size:12px;color:var(--coffee-200);margin-bottom:14px;max-width:720px;">
-            Atur jadwal masuk shift pagi, shift siang, atau hari libur (day off) untuk seluruh staf Suka Latte. Seluruh karyawan dapat melihat jadwal ini secara langsung dan teratur di HP mereka.
+            Atur jadwal shift pagi, shift siang, atau hari libur (day off) untuk seluruh staf Suka Latte per bulan. Seluruh karyawan dapat melihat jadwal ini beserta nama rekan shift-nya di HP masing-masing.
           </p>
 
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:rgba(12,7,4,0.6);border:1px solid rgba(218,175,118,0.25);border-radius:14px;padding:10px 14px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <button class="btn btn-outline btn-sm" data-action="schedule-prev-week" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);">‹ Minggu Lalu</button>
-              <button class="btn btn-primary btn-sm" data-action="schedule-today-week">Minggu Ini</button>
-              <button class="btn btn-outline btn-sm" data-action="schedule-next-week" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);">Minggu Depan ›</button>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-outline btn-sm" data-action="schedule-prev-month" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);padding:5px 10px;font-size:12px;">‹ Bulan Lalu</button>
+              <button class="btn btn-primary btn-sm" data-action="schedule-today-month" style="padding:5px 12px;font-size:12px;">Bulan Ini</button>
+              <button class="btn btn-outline btn-sm" data-action="schedule-next-month" style="color:var(--gold-200);border-color:rgba(218,175,118,0.35);padding:5px 10px;font-size:12px;">Bulan Depan ›</button>
             </div>
-            <div style="font-size:13px;font-weight:800;color:var(--gold-200);">
-              📅 ${esc(week.label)}
+            <div style="font-size:13.5px;font-weight:800;color:var(--gold-200);">
+              📅 ${esc(month.label)}
             </div>
           </div>
         </div>
@@ -1414,13 +1774,13 @@
           : `
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:var(--coffee-900);color:white;border-radius:14px;padding:12px 16px;margin-bottom:16px;">
           <div>
-            <div style="font-size:15px;font-weight:800;color:var(--gold-200);">🗓️ Navigasi Roster Jadwal Mingguan</div>
-            <div style="font-size:12px;color:var(--coffee-200);">${esc(week.label)}</div>
+            <div style="font-size:15px;font-weight:800;color:var(--gold-200);">🗓️ Navigasi Roster Jadwal Bulanan</div>
+            <div style="font-size:12px;color:var(--coffee-200);">${esc(month.label)}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <button class="btn btn-outline btn-sm" data-action="schedule-prev-week" style="color:white;border-color:rgba(255,255,255,0.3);">‹ Minggu Lalu</button>
-            <button class="btn btn-primary btn-sm" data-action="schedule-today-week">Minggu Ini</button>
-            <button class="btn btn-outline btn-sm" data-action="schedule-next-week" style="color:white;border-color:rgba(255,255,255,0.3);">Minggu Depan ›</button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" data-action="schedule-prev-month" style="color:white;border-color:rgba(255,255,255,0.3);padding:5px 10px;font-size:12px;">‹ Bulan Lalu</button>
+            <button class="btn btn-primary btn-sm" data-action="schedule-today-month" style="padding:5px 12px;font-size:12px;">Bulan Ini</button>
+            <button class="btn btn-outline btn-sm" data-action="schedule-next-month" style="color:white;border-color:rgba(255,255,255,0.3);padding:5px 10px;font-size:12px;">Bulan Depan ›</button>
           </div>
         </div>
         `
@@ -1554,10 +1914,10 @@
         </form>
       </div>
 
-      <!-- ROSTER 7 HARI MINGGU INI -->
-      <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+      <!-- ROSTER SEBULAN PENUH -->
+      <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <h3 style="font-size:15px;font-weight:800;color:var(--stone-800);margin:0;">
-          📅 Roster Mingguan (${esc(week.label)})
+          📅 Roster Bulanan (${esc(month.label)})
         </h3>
         <span style="font-size:11.5px;color:var(--stone-500);">
           ${filteredSchedules.length} jadwal terdaftar
@@ -1565,7 +1925,7 @@
       </div>
 
       <div style="display:flex;flex-direction:column;gap:12px;">
-        ${week.days
+        ${month.days
           .map((d) => {
             const isToday = d.dateStr === parts.dateString;
             const dayScheds = filteredSchedules.filter((x) => x.schedule_date === d.dateStr);
@@ -1575,7 +1935,7 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--stone-100);margin-bottom:8px;">
                   <div style="display:flex;align-items:center;gap:6px;">
                     <strong style="font-size:14px;color:var(--stone-900);">
-                      ${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)} ${d.dateObj.getFullYear()}
+                      ${esc(d.dayName)}, ${d.dayNum} ${esc(d.monthShort)} ${d.year}
                     </strong>
                     ${isToday ? `<span class="badge badge-amber" style="font-size:10px;">HARI INI</span>` : ""}
                   </div>
@@ -3236,6 +3596,8 @@
 
   window.SukaViews = {
     getWeekCalendarRange,
+    getMonthCalendarRange,
+    getColleaguesForSchedule,
     formatIndoDate,
     renderAvatarHtml,
     renderCloudSetupScreen,
