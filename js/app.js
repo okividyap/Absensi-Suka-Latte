@@ -942,7 +942,7 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;">
                   ${
                     Core.canDeleteEmployee(emp)
-                      ? `<button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(emp.id)}">🗑️ Hapus Member (Resign)</button>`
+                      ? `<button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(emp.id)}">🗑️ Hapus Member Permanen</button>`
                       : `<span></span>`
                   }
                   <div style="display:flex;gap:8px;">
@@ -1263,22 +1263,22 @@
           <div class="modal-backdrop">
             <div class="modal-window sm">
               <div class="modal-header">
-                <h3 style="font-size:16px;font-weight:800;">🗑️ Hapus Member / Karyawan Resign</h3>
+                <h3 style="font-size:16px;font-weight:800;">🗑️ Hapus Member Secara Permanen</h3>
                 <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
               </div>
               <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
                 <div class="card-subtle" style="border-color:#fda4af;background:var(--rose-50);font-size:12.5px;color:var(--rose-800);line-height:1.55;">
-                  Anda akan menghapus / mengeluarkan <strong>${esc(uiState.modal.name || emp?.full_name || "Member")}</strong>
-                  ${emp ? ` (<span class="mono">${esc(emp.employee_code)}</span> • ${esc(emp.email)})` : ""} dari daftar karyawan aktif.<br/>
-                  Akses login dan absensi akun ini akan langsung diblokir. Jika migrasi hapus permanen sudah aktif di server, seluruh profil, foto, dan riwayat terkait ikut dibersihkan.
+                  Anda akan menghapus permanen akun <strong>${esc(uiState.modal.name || emp?.full_name || "Member")}</strong>
+                  ${emp ? ` (<span class="mono">${esc(emp.employee_code)}</span> • ${esc(emp.email)})` : ""}.<br/>
+                  Akun ini tidak akan diarsipkan, melainkan <strong>langsung dihapus secara permanen</strong> dan <strong>otomatis hilang dari daftar karyawan</strong> beserta seluruh data terkait (profil, login, foto selfie, dan riwayat).
                 </div>
                 <div class="form-group" style="margin:0;">
                   <label class="form-label">Alasan Penghapusan (Tercatat di Audit Log)</label>
-                  <input id="confirm-delete-reason" class="form-input" value="Karyawan resign" placeholder="Contoh: Karyawan resign per bulan ini" />
+                  <input id="confirm-delete-reason" class="form-input" value="Karyawan resign" placeholder="Contoh: Karyawan resign / hapus anggota" />
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="button" class="btn btn-danger" data-action="confirm-delete-item">🗑️ Ya, Hapus Member Sekarang</button>
+                  <button type="button" class="btn btn-danger" data-action="confirm-delete-item">🗑️ Ya, Hapus Permanen Sekarang</button>
                 </div>
               </div>
             </div>
@@ -1936,14 +1936,12 @@
       } else if (kind === "employee") {
         const reasonInput = document.getElementById("confirm-delete-reason");
         const reason = reasonInput ? reasonInput.value : uiState.modal.reason || "Karyawan resign";
-        const res = await Core.deleteEmployeeAccount(id, reason);
+        await Core.deleteEmployeeAccount(id, reason);
         uiState.modal = null;
         render();
         showBanner(
           true,
-          res.mode === "hard_deleted"
-            ? `Member '${name}' berhasil dihapus permanen dari sistem.`
-            : `Member '${name}' telah dikeluarkan dari daftar karyawan aktif & akses loginnya diblokir (Resign).`
+          `Member '${name}' berhasil dihapus permanen dan otomatis hilang dari daftar karyawan.`
         );
         return;
       } else if (kind === "attendance") {

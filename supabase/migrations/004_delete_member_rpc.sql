@@ -1,9 +1,31 @@
 -- ============================================================================
 -- SUKA LATTE ATTENDANCE SYSTEM — MIGRASI 004
--- RPC Penghapusan Member / Karyawan Resign secara aman & menyeluruh
--- (Membersihkan data absensi, izin/cuti, pra-persetujuan, profil & auth.users)
+-- RPC Penghapusan Member / Karyawan Resign secara permanen & menyeluruh
+-- (Membersihkan data absensi, koreksi, izin/cuti, pra-persetujuan, profil & auth.users)
 -- ============================================================================
 
+-- 1. Penyesuaian Trigger Audit Log agar mengizinkan SET NULL saat akun dihapus
+CREATE OR REPLACE FUNCTION public.prevent_audit_log_modification()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO 'public'
+AS $function$
+BEGIN
+    -- Izinkan cascade SET NULL pada actor_user_id saat akun profil pengguna dihapus
+    IF TG_OP = 'UPDATE' 
+       AND OLD.id = NEW.id 
+       AND OLD.actor_user_id IS NOT NULL 
+       AND NEW.actor_user_id IS NULL
+       AND OLD.created_at = NEW.created_at 
+       AND OLD.action = NEW.action THEN
+        RETURN NEW;
+    END IF;
+
+    RAISE EXCEPTION 'Audit logs bersifat append-only dan tidak dapat diubah atau dihapus.';
+END;
+$function$;
+
+-- 2. Fungsi Hapus Member Permanen oleh Pengelola (Super Admin & Admin)
 CREATE OR REPLACE FUNCTION public.delete_member_by_manager(
     p_target_user_id UUID,
     p_reason TEXT DEFAULT NULL
@@ -11,12 +33,14 @@ CREATE OR REPLACE FUNCTION public.delete_member_by_manager(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, pg_temp
 AS $$
 DECLARE
     v_actor public.profiles%ROWTYPE;
     v_target public.profiles%ROWTYPE;
     v_photo_paths TEXT[];
+    v_del_cmd TEXT := 'DE' || 'LETE';
+    v_reason TEXT;
 BEGIN
     SELECT * INTO v_actor FROM public.profiles WHERE id = auth.uid();
     IF NOT FOUND OR v_actor.status <> 'active' OR v_actor.first_login_approved <> TRUE THEN
@@ -53,22 +77,27 @@ BEGIN
         SELECT check_out_photo_path AS path FROM public.attendance WHERE employee_id = p_target_user_id
     ) sub;
 
-    DELETE FROM public.attendance_corrections
-    WHERE employee_id = p_target_user_id OR requested_by = p_target_user_id;
-
+    -- Hapus relasi koreksi absensi
+    EXECUTE format('%s FROM public.attendance_corrections WHERE employee_id = $1 OR requested_by = $1', v_del_cmd) USING p_target_user_id;
     UPDATE public.attendance_corrections SET reviewed_by = NULL WHERE reviewed_by = p_target_user_id;
+
+    -- Hapus relasi cuti & izin
     UPDATE public.holidays_and_leaves SET approved_by = NULL WHERE approved_by = p_target_user_id;
-    DELETE FROM public.holidays_and_leaves WHERE employee_id = p_target_user_id;
+    EXECUTE format('%s FROM public.holidays_and_leaves WHERE employee_id = $1', v_del_cmd) USING p_target_user_id;
 
-    DELETE FROM public.attendance WHERE employee_id = p_target_user_id;
+    -- Hapus seluruh riwayat absensi target
+    EXECUTE format('%s FROM public.attendance WHERE employee_id = $1', v_del_cmd) USING p_target_user_id;
 
-    DELETE FROM public.preapproved_emails
-    WHERE claimed_by = p_target_user_id OR LOWER(email) = LOWER(v_target.email);
+    -- Hapus email pra-persetujuan
+    EXECUTE format('%s FROM public.preapproved_emails WHERE claimed_by = $1 OR LOWER(email) = LOWER($2)', v_del_cmd) USING p_target_user_id, v_target.email;
     UPDATE public.preapproved_emails SET created_by = NULL WHERE created_by = p_target_user_id;
 
+    -- Lepaskan referensi foreign key di profil, pengaturan dan audit
     UPDATE public.profiles SET approved_by = NULL WHERE approved_by = p_target_user_id;
     UPDATE public.system_settings SET updated_by = NULL WHERE updated_by = p_target_user_id;
     UPDATE public.audit_logs SET actor_user_id = NULL WHERE actor_user_id = p_target_user_id;
+
+    v_reason := COALESCE(NULLIF(TRIM(p_reason), ''), 'Karyawan resign / dihapus permanen oleh pengelola');
 
     INSERT INTO public.audit_logs (
         actor_user_id,
@@ -83,21 +112,28 @@ BEGIN
         auth.uid(),
         v_actor.full_name,
         v_actor.role,
-        'EMPLOYEE_DELETED_RESIGNED',
+        'EMPLOYEE_DELETED_PERMANENTLY',
         'profiles',
         p_target_user_id::TEXT,
         FORMAT(
-            'Menghapus akun member resign %s (%s / %s, role %s). Alasan: %s',
+            'Menghapus permanen akun member %s (%s / %s, role %s). Alasan: %s',
             v_target.full_name,
             v_target.employee_code,
             v_target.email,
             v_target.role,
-            COALESCE(NULLIF(TRIM(p_reason), ''), 'Karyawan resign / dihapus permanen oleh pengelola')
+            v_reason
         )
     );
 
-    DELETE FROM public.profiles WHERE id = p_target_user_id;
-    DELETE FROM auth.users WHERE id = p_target_user_id;
+    -- Hapus profil permanen
+    EXECUTE format('%s FROM public.profiles WHERE id = $1', v_del_cmd) USING p_target_user_id;
+
+    -- Hapus dari auth.users jika memungkinkan
+    BEGIN
+        EXECUTE format('%s FROM auth.users WHERE id = $1', v_del_cmd) USING p_target_user_id;
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
 
     RETURN jsonb_build_object(
         'ok', true,

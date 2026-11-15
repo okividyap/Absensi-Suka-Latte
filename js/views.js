@@ -1789,7 +1789,7 @@
             3. Daftar Karyawan Aktif (${managedUsers.length} Akun)
           </h3>
           <p style="font-size:11.5px;color:var(--stone-500);margin-bottom:12px;">
-            Klik <strong>🗑️ Hapus</strong> jika ada member/karyawan yang resign agar akses &amp; datanya langsung dibersihkan.
+            Klik <strong>🗑️ Hapus</strong> jika ada member/karyawan yang resign agar langsung dihapus permanen dan otomatis hilang dari sistem.
           </p>
           <div style="display:flex;flex-direction:column;gap:10px;">
             ${managedUsers
@@ -1927,12 +1927,12 @@
                       ? `<div style="display:flex;gap:6px;">
                            <button type="button" class="btn btn-amber btn-sm" style="flex:1;" data-action="quick-change-role" data-userid="${esc(u.id)}" data-newrole="admin">⚡ Jadikan Admin (1-Klik)</button>
                            <button type="button" class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(u.id)}" data-newrole="admin" title="Promosi dengan alasan khusus">📝</button>
-                           <button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(u.id)}" title="Hapus member resign">🗑️</button>
+                           <button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(u.id)}" title="Hapus member permanen">🗑️</button>
                          </div>`
                       : `<div style="display:flex;gap:6px;">
                            <button type="button" class="btn btn-outline btn-sm" style="flex:1;" data-action="quick-change-role" data-userid="${esc(u.id)}" data-newrole="member">⬇️ Jadikan Anggota (1-Klik)</button>
                            <button type="button" class="btn btn-outline btn-sm" data-action="open-role-modal" data-userid="${esc(u.id)}" data-newrole="member" title="Turunkan dengan alasan khusus">📝</button>
-                           <button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(u.id)}" title="Hapus admin/member resign">🗑️</button>
+                           <button type="button" class="btn btn-danger btn-sm" data-action="delete-employee" data-userid="${esc(u.id)}" title="Hapus akun permanen">🗑️</button>
                          </div>`
                     : `<div style="font-size:11px;color:var(--stone-500);">Perubahan role hanya oleh Super Admin</div>`
                 }
