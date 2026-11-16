@@ -528,13 +528,13 @@ window.SUKA_LATTE_CONFIG = {
       isMemberOnly()
         ? state.supabase
             .from("attendance")
-            .select("*")
+            .select("*, employee:profiles(id, full_name, employee_code, department, role, email), outlet:outlets(id, name), shift:work_shifts(id, name, start_time, end_time)")
             .eq("employee_id", state.currentUser.id)
             .order("work_date", { ascending: false })
             .order("created_at", { ascending: false })
         : state.supabase
             .from("attendance")
-            .select("*")
+            .select("*, employee:profiles(id, full_name, employee_code, department, role, email), outlet:outlets(id, name), shift:work_shifts(id, name, start_time, end_time)")
             .order("work_date", { ascending: false })
             .order("created_at", { ascending: false })
             .limit(300),
@@ -554,7 +554,7 @@ window.SUKA_LATTE_CONFIG = {
         .order("date_start", { ascending: false }),
       state.supabase
         .from("work_schedules")
-        .select("*")
+        .select("*, employee:profiles(id, full_name, employee_code, department, role, email), shift:work_shifts(id, name, start_time, end_time), outlet:outlets(id, name)")
         .order("schedule_date", { ascending: true }),
       state.supabase
         .from("shift_swap_requests")

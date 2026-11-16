@@ -2288,10 +2288,10 @@
             const dayScheds = filteredSchedules.filter((x) => x.schedule_date === d.dateStr);
 
             const renderScheduleRow = (sc) => {
-              const emp = s.profiles.find((p) => p.id === sc.employee_id);
-              const sh = sc.shift_id ? s.shifts.find((x) => x.id === sc.shift_id) : null;
+              const emp = s.profiles.find((p) => p.id === sc.employee_id) || sc.employee;
+              const sh = sc.shift_id ? (s.shifts.find((x) => x.id === sc.shift_id) || sc.shift) : null;
               const isOff = sc.schedule_type === "off";
-              const outl = sc.outlet_id ? s.outlets.find((o) => o.id === sc.outlet_id) : s.outlets[0];
+              const outl = sc.outlet_id ? (s.outlets.find((o) => o.id === sc.outlet_id) || sc.outlet) : s.outlets[0];
 
               return `
                 <div class="schedule-emp-row" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--stone-50);border-radius:8px;border:1px solid var(--stone-200);flex-wrap:wrap;gap:8px;">
@@ -2334,16 +2334,16 @@
             };
 
             const barDayScheds = dayScheds.filter((sc) => {
-              const emp = s.profiles.find((p) => p.id === sc.employee_id);
-              return (emp?.department || "bar") === "bar";
+              const emp = s.profiles.find((p) => p.id === sc.employee_id) || sc.employee;
+              return (sc.department || emp?.department || "bar") === "bar";
             });
             const kitchenDayScheds = dayScheds.filter((sc) => {
-              const emp = s.profiles.find((p) => p.id === sc.employee_id);
-              return emp?.department === "kitchen";
+              const emp = s.profiles.find((p) => p.id === sc.employee_id) || sc.employee;
+              return (sc.department || emp?.department) === "kitchen";
             });
             const managerDayScheds = dayScheds.filter((sc) => {
-              const emp = s.profiles.find((p) => p.id === sc.employee_id);
-              return emp?.department === "manager";
+              const emp = s.profiles.find((p) => p.id === sc.employee_id) || sc.employee;
+              return (sc.department || emp?.department) === "manager";
             });
 
             return `

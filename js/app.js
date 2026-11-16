@@ -277,16 +277,34 @@
       return 0;
     }
 
-    // 1. Korelasi 16-zona kontur wajah (skala toleransi adaptif sudut selfie HP)
+    // 1. Korelasi 16-zona intensitas kontur wajah: Cosine Similarity + Euclidean RMS
+    let dot = 0;
+    let normLive = 0;
+    let normEnrolled = 0;
     let zoneDistSum = 0;
+
     for (let i = 0; i < 16; i++) {
-      const d = (live.zones[i] || 0) - (enrolled.zones[i] || 0);
+      const l = live.zones[i] || 0;
+      const e = enrolled.zones[i] || 0;
+      dot += l * e;
+      normLive += l * l;
+      normEnrolled += e * e;
+
+      const d = l - e;
       zoneDistSum += d * d;
     }
-    const zoneRms = Math.sqrt(zoneDistSum / 16);
-    const zoneSim = Math.max(0, Math.min(100, (1 - zoneRms / 0.55) * 100));
 
-    // 2. Korelasi proporsi vertikal wajah (dahi, mata-hidung, rahang)
+    const cosSim = Math.max(0, dot / (Math.sqrt(normLive) * Math.sqrt(normEnrolled) || 1));
+    const zoneRms = Math.sqrt(zoneDistSum / 16);
+
+    // RMS kontur wajah: orang yang SAMA (< 0.22), orang BERBEDA (> 0.32)
+    // Dengan pembagi 0.30, orang berbeda langsung bernilai rendah (< 35%)
+    const zoneSim = Math.max(0, Math.min(100, (1 - zoneRms / 0.30) * 100));
+
+    // Skor Cosine: Orang sama (> 0.95), orang berbeda (< 0.90)
+    const cosScore = Math.max(0, Math.min(100, ((cosSim - 0.85) / 0.15) * 100));
+
+    // 2. Korelasi proporsi vertikal sepertiga wajah (dahi-alis vs mata-hidung vs mulut-dagu)
     let thirdsDistSum = 0;
     const lThirds = live.thirds || [0.33, 0.34, 0.33];
     const eThirds = enrolled.thirds || [0.33, 0.34, 0.33];
@@ -295,9 +313,9 @@
       thirdsDistSum += d * d;
     }
     const thirdsRms = Math.sqrt(thirdsDistSum / 3);
-    const thirdsSim = Math.max(0, Math.min(100, (1 - thirdsRms / 0.28) * 100));
+    const thirdsSim = Math.max(0, Math.min(100, (1 - thirdsRms / 0.14) * 100));
 
-    // 3. Korelasi pigmen kulit / undertone (adaptif pencahayaan kafe)
+    // 3. Korelasi pigmen kulit / undertone
     let chromaDistSum = 0;
     const lChroma = live.chroma || [0.33, 0.33, 0.33];
     const eChroma = enrolled.chroma || [0.33, 0.33, 0.33];
@@ -306,22 +324,12 @@
       chromaDistSum += d * d;
     }
     const chromaRms = Math.sqrt(chromaDistSum / 3);
-    const chromaSim = Math.max(0, Math.min(100, (1 - chromaRms / 0.22) * 100));
+    const chromaSim = Math.max(0, Math.min(100, (1 - chromaRms / 0.10) * 100));
 
-    // Bobot: Kontur Zona Wajah (50%) + Proporsi Vertikal (30%) + Pigmen Undertone (20%)
-    const rawScore = 0.50 * zoneSim + 0.30 * thirdsSim + 0.20 * chromaSim;
+    // Bobot ketat pemisah wajah: Kontur Zona (45%) + Sudut Cosine (25%) + Proporsi Wajah (15%) + Pigmen (15%)
+    const score = 0.45 * zoneSim + 0.25 * cosScore + 0.15 * thirdsSim + 0.15 * chromaSim;
 
-    // Normalisasi adaptif: jika wajah memiliki kecocokan dasar di atas 35%,
-    // skala ke 72%–98% agar variasi pencahayaan kafe / sudut selfie tidak menggagalkan karyawan asli,
-    // namun jika dicoba oleh orang lain yang berbeda fitur wajah (rawScore < 30%), skor tetap rendah (<55%)
-    let finalScore = rawScore;
-    if (rawScore >= 35) {
-      finalScore = 72 + (rawScore - 35) * 0.4;
-    } else {
-      finalScore = rawScore * 1.2;
-    }
-
-    return Number(Math.max(0, Math.min(99.4, finalScore)).toFixed(1));
+    return Number(Math.max(0, Math.min(99.4, score)).toFixed(1));
   }
 
   function stopCameraStream() {
@@ -574,7 +582,7 @@
       captureBtn.style.cursor = "not-allowed";
       captureBtn.style.background = "#be123c"; // Crimson red
       captureBtn.style.borderColor = "#f43f5e";
-      captureBtn.innerHTML = "❌ Scan Wajah Tidak Valid (Bukan Pemilik)";
+      captureBtn.innerHTML = "❌ Wajah Tidak Terdeteksi (Bukan Pemilik)";
     } else {
       captureBtn.disabled = false;
       captureBtn.style.opacity = "1";
@@ -698,7 +706,7 @@
           const liveFeatures = extractBiometricFeatures(videoEl);
           const matchScore = compareBiometricFeatures(liveFeatures, currentUser.face_id_biometric_data);
           liveCamera.faceIdScore = matchScore;
-          liveCamera.faceIdMatched = matchScore >= 60;
+          liveCamera.faceIdMatched = matchScore >= 65;
 
           if (liveCamera.faceIdMatched) {
             // Pemilik Asli Terverifikasi
@@ -714,15 +722,15 @@
             }
             if (dotEl) dotEl.style.background = "#10b981";
           } else {
-            // Bukan Pemilik / Wajah Tidak Sesuai (Joki)
+            // Bukan Pemilik / Wajah Berbeda (Joki)
             frameEl.classList.remove("is-misaligned", "is-detected");
             frameEl.classList.add("is-mismatch");
             if (statusTextEl) {
-              statusTextEl.textContent = `❌ Scan Wajah Tidak Valid — Bukan Pemilik Akun!`;
+              statusTextEl.textContent = `❌ Wajah Tidak Terdeteksi Sebagai Pemilik Akun!`;
               statusTextEl.style.color = "#fb7185";
             }
             if (scoreBadgeEl) {
-              scoreBadgeEl.textContent = "TIDAK VALID";
+              scoreBadgeEl.textContent = "TIDAK TERDETEKSI";
               scoreBadgeEl.style.color = "#fb7185";
             }
             if (dotEl) dotEl.style.background = "#f43f5e";
@@ -1141,10 +1149,10 @@
       const liveFeatures = extractBiometricFeatures(videoEl);
       const matchScore = compareBiometricFeatures(liveFeatures, u.face_id_biometric_data);
       liveCamera.faceIdScore = matchScore;
-      liveCamera.faceIdMatched = matchScore >= 60;
+      liveCamera.faceIdMatched = matchScore >= 65;
 
       if (!liveCamera.faceIdMatched) {
-        liveCamera.submitError = `🚫 SCAN WAJAH TIDAK VALID (${matchScore.toFixed(1)}% Cocok, minimal 60%):\nWajah yang terdeteksi TIDAK SESUAI dengan Face ID resmi yang terdaftar pada akun Google ini (${u.email}). Sistem mendeteksi potensi joki absensi! Harap lakukan absensi sendiri.`;
+        liveCamera.submitError = `🚫 WAJAH TIDAK TERDETEKSI SEBAGAI PEMILIK (${matchScore.toFixed(1)}% Cocok, minimal 65%):\nWajah di depan kamera BUKAN wajah yang terdaftar pada akun Google ini (${u.email}). 1 Akun Google hanya menerima 1 wajah terdaftar resmi. Potensi joki absensi ditolak!`;
         if (!updateCameraModalPanelsInPlace()) {
           renderModalContainerOnly();
         }
