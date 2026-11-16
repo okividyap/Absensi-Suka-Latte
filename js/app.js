@@ -1240,6 +1240,51 @@
     await startLiveFrontCamera();
   }
 
+  function getSmartRecommendedShiftId(activeShifts) {
+    if (!activeShifts || activeShifts.length === 0) return null;
+    const s = Core.state;
+    const tz = s.settings.operational_timezone || "Asia/Makassar";
+    const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+
+    // 1. Cek apakah admin sudah menetapkan jadwal spesifik di work_schedules untuk hari ini
+    const todaySched = s.workSchedules.find(
+      (sc) => sc.employee_id === s.currentUser?.id && sc.schedule_date === parts.dateString
+    );
+    if (todaySched && todaySched.shift_id && todaySched.schedule_type === "work") {
+      const match = activeShifts.find((sh) => sh.id === todaySched.shift_id);
+      if (match) return match.id;
+    }
+
+    // 2. Hitung menit saat ini di WITA (Asia/Makassar)
+    const currentMins = parts.hours * 60 + parts.minutes;
+
+    // Rekomendasi pintar jam operasional Kafe Suka Latte:
+    // 05:00 - 11:15 WITA (< 675 m) -> Shift Pagi (07:00 - 15:00)
+    // 11:15 - 13:45 WITA (675 - 825 m) -> Shift Middle (12:00 - 20:00)
+    // 13:45 ke atas WITA (>= 825 m) -> Shift Siang (14:30 - 22:30)
+    let bestShift = null;
+    if (currentMins >= 675 && currentMins < 825) {
+      bestShift =
+        activeShifts.find((sh) => sh.name.toLowerCase().includes("middle")) ||
+        activeShifts.find((sh) => String(sh.start_time).startsWith("12:"));
+    } else if (currentMins >= 825) {
+      bestShift =
+        activeShifts.find((sh) => sh.name.toLowerCase().includes("siang")) ||
+        activeShifts.find((sh) => String(sh.start_time).startsWith("14:"));
+    } else {
+      bestShift =
+        activeShifts.find((sh) => sh.name.toLowerCase().includes("pagi")) ||
+        activeShifts.find((sh) => String(sh.start_time).startsWith("07:"));
+    }
+
+    if (bestShift) return bestShift.id;
+
+    if (s.currentUser?.shift_id && activeShifts.some((sh) => sh.id === s.currentUser.shift_id)) {
+      return s.currentUser.shift_id;
+    }
+    return activeShifts[0].id;
+  }
+
   async function openAttendanceCameraModal(mode) {
     if (!Core.isApprovedUser()) {
       showBanner(false, "Akun Anda belum aktif atau belum disetujui Admin.");
@@ -1263,10 +1308,7 @@
     const defaultShiftId =
       mode === "check_out" && openAtt?.shift_id
         ? openAtt.shift_id
-        : activeShifts.find((sh) => sh.id === s.currentUser?.shift_id)?.id ||
-          activeShifts[0]?.id ||
-          s.currentUser?.shift_id ||
-          null;
+        : getSmartRecommendedShiftId(activeShifts);
 
     stopCameraStream();
     stopGpsWatcher();
@@ -1322,6 +1364,30 @@
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
+              ${
+                isCheckIn
+                  ? `<div style="background:rgba(20,13,8,0.78);border:1px solid var(--coffee-700);border-radius:12px;padding:10px 14px;margin-bottom:12px;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
+                        <span style="font-size:11px;font-weight:700;color:var(--gold-300);text-transform:uppercase;">Shift Absensi Anda:</span>
+                        <span class="badge" style="background:#065f46;color:#6ee7b7;font-size:10px;">⏰ Rekomendasi Jam Otomatis</span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:6px;">
+                        ${(activeShifts.length ? activeShifts : s.shifts).map(sh => {
+                          const isSel = sh.id === liveCamera.shiftId;
+                          return `
+                            <button type="button" class="btn ${isSel ? "btn-emerald" : "btn-outline"}" data-action="set-camera-shift" data-id="${sh.id}" style="padding:6px 10px;font-size:11.5px;text-align:left;display:flex;flex-direction:column;gap:2px;${isSel ? "font-weight:800;" : "background:rgba(255,255,255,0.06);color:var(--coffee-200);border-color:var(--coffee-700);"}">
+                              <span>${isSel ? "✓ " : ""}${esc(sh.name)}</span>
+                              <span style="font-size:10px;opacity:0.85;">${String(sh.start_time).slice(0, 5)} - ${String(sh.end_time).slice(0, 5)}</span>
+                            </button>
+                          `;
+                        }).join("")}
+                      </div>
+                    </div>`
+                  : `<div style="background:rgba(20,13,8,0.78);border:1px solid var(--coffee-700);border-radius:12px;padding:8px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+                      <span style="font-size:11.5px;color:var(--coffee-300);">Shift Check Out:</span>
+                      <strong style="color:var(--gold-200);font-size:12.5px;">${esc(selectedShift ? `${selectedShift.name} (${String(selectedShift.start_time).slice(0, 5)}–${String(selectedShift.end_time).slice(0, 5)})` : "-")}</strong>
+                    </div>`
+              }
               <div class="grid-12">
                 <div class="col-7">
                   <div class="camera-stage">
@@ -1639,6 +1705,79 @@
               <button type="button" class="btn btn-gold hero-sub-btn" data-action="open-member-leave" style="width:100%;min-height:42px;justify-content:center;">
                 📅 Ajukan Izin / Sakit / Cuti
               </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // A5. MODAL ALIKHAN / GANTI SHIFT KERJA HARI INI SECARA AMAN & FLEKSIBEL
+    if (uiState.modal.type === "switch_today_shift") {
+      const u = s.currentUser;
+      const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+      const myToday = s.attendance.find((a) => a.employee_id === u?.id && a.work_date === parts.dateString);
+      const currentShiftId = myToday?.shift_id || u?.shift_id;
+      const activeShifts = getActiveShiftsList();
+      const currentShift = activeShifts.find((sh) => sh.id === currentShiftId) || s.shifts[0];
+
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm" style="max-width:500px;">
+            <div class="modal-header">
+              <div>
+                <div style="font-size:11px;color:var(--coffee-300);font-weight:700;text-transform:uppercase;">
+                  Penyesuaian Jadwal &amp; Shift Hari Ini
+                </div>
+                <h3 style="font-size:17px;font-weight:800;">🔄 Alihkan / Ganti Shift Bertugas</h3>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body">
+              <div style="background:var(--coffee-50);border:1px solid var(--coffee-200);border-radius:12px;padding:12px;margin-bottom:14px;">
+                <div style="font-size:11.5px;color:var(--coffee-800);line-height:1.55;">
+                  Shift aktif Anda saat ini: <strong>${esc(currentShift ? currentShift.name : "-")}</strong>
+                  (${esc(String(currentShift?.start_time).slice(0, 5))}–${esc(String(currentShift?.end_time).slice(0, 5))} WITA).<br/>
+                  ${
+                    myToday && myToday.check_in_at
+                      ? `<span style="color:#059669;font-weight:700;">✓ Anda sudah Check In pada ${Core.formatOperationalDateTime(myToday.check_in_at, tz, false)}. Mengalihkan shift akan otomatis menghitung ulang keterlambatan Anda sesuai jam masuk asli.</span>`
+                      : `<span>Pilih shift bertugas Anda sebelum melakukan Check In.</span>`
+                  }
+                </div>
+              </div>
+
+              <form id="form-switch-today-shift">
+                <div style="font-size:12px;font-weight:800;color:var(--coffee-950);margin-bottom:8px;">Pilih Shift Tujuan:</div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+                  ${activeShifts
+                    .map((sh) => {
+                      const isCurr = sh.id === currentShiftId;
+                      const grace = Number(sh.grace_period_minutes ?? 15);
+                      return `
+                        <label style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:2px solid ${isCurr ? "var(--coffee-600)" : "var(--coffee-200)"};background:${isCurr ? "var(--coffee-100)" : "var(--white)"};border-radius:12px;cursor:pointer;">
+                          <input type="radio" name="target_shift_id" value="${esc(sh.id)}" ${isCurr ? "checked" : ""} style="width:18px;height:18px;accent-color:var(--coffee-700);" />
+                          <div style="flex:1;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                              <strong style="font-size:13px;color:var(--coffee-950);">${esc(sh.name)}</strong>
+                              <span class="mono" style="font-size:11.5px;font-weight:700;color:var(--coffee-800);">${esc(String(sh.start_time).slice(0, 5))} – ${esc(String(sh.end_time).slice(0, 5))} WITA</span>
+                            </div>
+                            <div style="font-size:10.5px;color:var(--stone-600);margin-top:2px;">
+                              Toleransi keterlambatan: <strong>${grace} menit</strong>
+                              ${isCurr ? `<span class="badge" style="background:var(--coffee-200);color:var(--coffee-900);font-size:9.5px;margin-left:6px;">Shift Saat Ini</span>` : ""}
+                            </div>
+                          </div>
+                        </label>
+                      `;
+                    })
+                    .join("")}
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:10px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="submit" class="btn btn-primary" id="btn-submit-switch-shift">
+                    🔄 Terapkan Pengalihan Shift
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -3197,7 +3336,7 @@
     try {
       await Core.bulkSaveMonthlySchedule(employeeId, daysData);
       uiState.modal = null;
-      render();
+      try { render(); } catch (rendErr) { console.warn("Post-schedule render non-fatal:", rendErr); }
       const emp = Core.state.profiles.find((p) => p.id === employeeId);
       showBanner(
         true,
@@ -4156,6 +4295,17 @@
   // 6. PENANGANAN KLIK TOMBOL (EVENT DELEGATION DENGAN PROTEKSI HAK AKSES)
   // ==========================================================================
   document.addEventListener("click", async (ev) => {
+    // Tutup modal jika pengguna mengetuk area luar modal (backdrop gelap)
+    if (ev.target && ev.target.classList && ev.target.classList.contains("modal-backdrop")) {
+      if (liveCamera.submitting || faceEnrollState.submitting) return;
+      stopCameraStream();
+      stopGpsWatcher();
+      stopFaceEnrollCamera();
+      uiState.modal = null;
+      render();
+      return;
+    }
+
     const btn = ev.target.closest("[data-action]");
     if (!btn) return;
 
@@ -4270,16 +4420,54 @@
         return;
       }
 
+      if (action === "open-switch-shift-modal") {
+        uiState.modal = { type: "switch_today_shift" };
+        render();
+        return;
+      }
+
+      if (action === "set-camera-shift") {
+        const sid = btn.getAttribute("data-id");
+        if (sid) {
+          liveCamera.shiftId = sid;
+          render();
+        }
+        return;
+      }
+
       if (action === "select-my-shift") {
         const shiftId = btn.getAttribute("data-shift-id");
         if (!shiftId) return;
         const shiftObj = Core.state.shifts.find((sh) => sh.id === shiftId);
+
+        const s = Core.state;
+        const u = s.currentUser;
+        const tz = s.settings.operational_timezone || "Asia/Makassar";
+        const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+        const myToday = s.attendance.find((a) => a.employee_id === u?.id && a.work_date === parts.dateString);
+
+        if (myToday && myToday.check_in_at) {
+          btn.disabled = true;
+          try {
+            const res = await Core.switchMyTodayShift(shiftId);
+            showBanner(
+              true,
+              `✓ Shift absensi hari ini berhasil dialihkan ke ${shiftObj ? shiftObj.name : "Shift Pilihan"}! Keterlambatan disesuaikan menjadi ${res.late_minutes} menit (${res.status}).`,
+              6500
+            );
+          } catch (err) {
+            btn.disabled = false;
+            showBanner(false, "Gagal mengalihkan shift hari ini: " + (err.message || err));
+          }
+          return;
+        }
+
         btn.disabled = true;
         try {
           await Core.selectMyActiveShift(shiftId);
           showBanner(
             true,
-            `Shift aktif Anda diatur ke ${shiftObj ? shiftObj.name : "Shift Pilihan"} (Terlambat otomatis > ${Number(shiftObj?.grace_period_minutes ?? 15)} menit).`,
+            `Shift aktif Anda diatur ke ${shiftObj ? shiftObj.name : "Shift Pilihan"} (Toleransi telat > ${Number(shiftObj?.grace_period_minutes ?? 15)} menit).`,
             5000
           );
         } catch (err) {
@@ -4299,12 +4487,8 @@
         const canCheckIn = !myToday || (!myToday.check_in_at && myToday.attendance_status !== "cuti_libur");
 
         if (!canCheckIn) {
-          const sh = s.shifts.find((x) => x.id === (myToday?.shift_id || u?.shift_id));
-          showBanner(
-            true,
-            `Shift bertugas hari ini terkunci pada ${sh ? sh.name : "jadwal Anda"} sesuai waktu Check In.`,
-            4500
-          );
+          uiState.modal = { type: "switch_today_shift" };
+          render();
           return;
         }
 
@@ -5393,6 +5577,49 @@
     }
   });
 
+  async function handleSwitchTodayShift(btn) {
+    const form = document.getElementById("form-switch-today-shift");
+    if (!form) return;
+    const fd = new FormData(form);
+    const targetShiftId = fd.get("target_shift_id");
+    if (!targetShiftId) {
+      showBanner(false, "Pilih shift tujuan terlebih dahulu.");
+      return;
+    }
+
+    const shiftObj = Core.state.shifts.find((sh) => sh.id === targetShiftId);
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Mengalihkan Shift...";
+    }
+
+    try {
+      const res = await Core.switchMyTodayShift(targetShiftId);
+      uiState.modal = null;
+      render();
+      if (res && res.has_attendance) {
+        showBanner(
+          true,
+          `✓ Shift absensi hari ini berhasil dialihkan ke ${shiftObj ? shiftObj.name : "Shift Baru"}! Keterlambatan disesuaikan menjadi ${res.late_minutes} menit (${res.status}).`,
+          7000
+        );
+      } else {
+        showBanner(
+          true,
+          `✓ Shift aktif hari ini berhasil diatur ke ${shiftObj ? shiftObj.name : "Shift Baru"}. Silakan Check In saat tiba di outlet.`,
+          6000
+        );
+      }
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "🔄 Terapkan Pengalihan Shift";
+      }
+      showBanner(false, "Gagal mengalihkan shift: " + (err.message || err));
+    }
+  }
+
   // ==========================================================================
   // 7. PENANGANAN SUBMIT FORMULIR (DELEGASI KE HANDLER RESMI)
   // ==========================================================================
@@ -5408,6 +5635,7 @@
     ev.preventDefault();
 
     try {
+      if (form.id === "form-switch-today-shift") return await handleSwitchTodayShift(form.querySelector('button[type="submit"]'));
       if (form.id === "form-work-schedule") return await handleSaveWorkSchedule(form.querySelector("#btn-submit-schedule") || form.querySelector('button[type="submit"]'));
       if (form.id === "form-modal-edit-schedule") return await handleSaveModalWorkSchedule(form.querySelector('button[type="submit"]'));
       if (form.id === "form-quick-weekly") return await handleSaveQuickWeeklySchedule(form.querySelector('button[type="submit"]'));

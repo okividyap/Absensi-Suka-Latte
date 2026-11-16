@@ -612,6 +612,26 @@ window.SUKA_LATTE_CONFIG = {
       state.auditLogs = [];
     }
 
+    // Pastikan seluruh karyawan yang memiliki transaksi absensi terdaftar di state.profiles
+    const missingEmpIds = Array.from(
+      new Set(
+        state.attendance
+          .map((a) => a.employee_id)
+          .filter((id) => id && !state.profiles.some((p) => p.id === id))
+      )
+    );
+    if (missingEmpIds.length > 0) {
+      try {
+        const { data: missingProfs } = await state.supabase
+          .from("profiles")
+          .select("*")
+          .in("id", missingEmpIds);
+        if (missingProfs && missingProfs.length) {
+          state.profiles.push(...missingProfs);
+        }
+      } catch {}
+    }
+
     // Buat Signed URL berumur pendek (5 menit) untuk foto bukti yang tampil
     await ensureSignedUrlsForAttendance(state.attendance.slice(0, 30));
   }
@@ -779,6 +799,24 @@ window.SUKA_LATTE_CONFIG = {
     if (error) throw new Error(error.message);
     if (state.currentUser) {
       state.currentUser.shift_id = shiftId;
+    }
+    await refreshAllData();
+    return data;
+  }
+
+  async function switchMyTodayShift(newShiftId) {
+    if (!state.supabase || !isApprovedUser()) {
+      throw new Error("Sesi login Anda tidak aktif atau belum disetujui.");
+    }
+    if (!newShiftId) throw new Error("Pilih shift tujuan terlebih dahulu.");
+    const { data, error } = await withTimeout(
+      state.supabase.rpc("switch_my_today_attendance_shift", { p_new_shift_id: newShiftId }),
+      15000,
+      "Pengalihan shift timeout setelah 15 detik."
+    );
+    if (error) throw new Error(error.message);
+    if (state.currentUser) {
+      state.currentUser.shift_id = newShiftId;
     }
     await refreshAllData();
     return data;
@@ -1391,6 +1429,7 @@ window.SUKA_LATTE_CONFIG = {
     signInWithGoogle,
     signOut,
     selectMyActiveShift,
+    switchMyTodayShift,
     changeEmployeeRoleFast,
     canDeleteEmployee,
     deleteEmployeeAccount,

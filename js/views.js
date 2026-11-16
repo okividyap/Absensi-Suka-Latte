@@ -466,9 +466,10 @@
       return `<span style="font-size:11px;color:var(--stone-400);padding:8px;text-align:center;">${isCheckIn ? "Tidak Ada Foto" : "Menunggu Check Out"}</span>`;
     };
 
-    const empName = emp ? emp.full_name : (rec.employee?.full_name || "Karyawan");
+    const empName = emp ? emp.full_name : (rec.employee?.full_name || (rec.employee_id ? `Karyawan (${String(rec.employee_id).slice(0, 8)})` : "Karyawan"));
     const empCode = emp?.employee_code ? emp.employee_code : (rec.employee?.employee_code || (rec.employee_id ? String(rec.employee_id).slice(0, 8) : "-"));
     const empDept = emp?.department || rec.employee?.department || "";
+    const isMyRecord = s.currentUser?.id === rec.employee_id;
 
     return `
       <div class="card-subtle" style="display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
@@ -484,6 +485,7 @@
               <span class="badge badge-coffee" style="background:var(--coffee-100);color:var(--coffee-900);border:1px solid var(--coffee-300);">
                 ⏱ ${esc(sh ? `${sh.name} (${String(sh.start_time).slice(0, 5)}–${String(sh.end_time).slice(0, 5)})` : "-")}
               </span>
+              ${isMyRecord ? `<button type="button" class="btn btn-outline btn-xs" data-action="open-switch-shift-modal" style="font-size:10px;padding:1px 6px;border-color:var(--coffee-300);color:var(--coffee-800);">🔄 Ganti Shift</button>` : ""}
             </div>
           </div>
           <div style="text-align:right;">
@@ -567,10 +569,17 @@
   function renderShiftSelectorHtml(shifts, selectedShiftId, locked) {
     const activeShifts = (shifts || []).filter((sh) => sh.status === "active");
     if (activeShifts.length === 0) return "";
+    const currShift = activeShifts.find((sh) => sh.id === selectedShiftId);
     return `
       <div id="shift-selector-wrap" style="margin-bottom:12px;">
-        <div style="font-size:11px;font-weight:700;color:var(--coffee-300);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">
-          Pilih Shift Bertugas ${locked ? "(Terkunci Sesuai Jam Masuk)" : ""}:
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
+          <div style="font-size:11px;font-weight:700;color:var(--coffee-300);text-transform:uppercase;letter-spacing:0.04em;">
+            Shift Bertugas: <strong style="color:var(--gold-200);">${esc(currShift ? currShift.name : "Belum Dipilih")}</strong>
+            ${locked ? `<span class="badge" style="background:rgba(218,175,118,0.22);color:var(--gold-200);font-size:9.5px;margin-left:6px;border:1px solid rgba(218,175,118,0.35);">✓ Aktif Hari Ini</span>` : ""}
+          </div>
+          <button type="button" class="btn btn-outline btn-xs" data-action="open-switch-shift-modal" style="font-size:10.5px;padding:3px 9px;border-color:rgba(218,175,118,0.4);color:var(--gold-200);background:rgba(0,0,0,0.25);">
+            🔄 Alihkan / Ganti Shift Hari Ini
+          </button>
         </div>
         <div class="shift-selector-grid">
           ${activeShifts
@@ -583,7 +592,7 @@
                   class="shift-choice-btn ${active ? "active" : ""}"
                   data-action="select-my-shift"
                   data-shift-id="${esc(sh.id)}"
-                  ${locked ? "disabled" : ""}
+                  title="${locked ? "Ketuk untuk mengalihkan shift hari ini ke " + sh.name : "Pilih " + sh.name}"
                 >
                   <span style="font-weight:800;font-size:12.5px;">${active ? "✓ " : ""}${esc(sh.name)}</span>
                   <span class="mono" style="font-size:10.5px;opacity:0.88;">${esc(String(sh.start_time).slice(0, 5))}–${esc(String(sh.end_time).slice(0, 5))} (Telat &gt;${grace}m)</span>
@@ -591,6 +600,13 @@
             })
             .join("")}
         </div>
+        ${
+          locked
+            ? `<div style="font-size:10.5px;color:var(--coffee-300);margin-top:5px;display:flex;align-items:center;gap:4px;">
+                <span>💡 Ingin ganti shift? Ketuk tombol shift di atas atau gunakan tombol <strong>Alihkan Shift</strong>. Jam keterlambatan akan dihitung ulang otomatis.</span>
+               </div>`
+            : ""
+        }
       </div>
     `;
   }
@@ -1201,6 +1217,9 @@
                   : ""
               }
               <div class="hero-secondary-btns">
+                <button class="btn btn-outline hero-sub-btn" style="background:rgba(255,255,255,0.12);color:var(--gold-200);border-color:rgba(218,175,118,0.4);" data-action="open-switch-shift-modal" title="Alihkan shift bertugas hari ini">
+                  🔄 Alihkan Shift
+                </button>
                 <button class="btn btn-gold hero-sub-btn" data-action="open-member-leave" title="Ajukan izin tidak masuk kerja atau cuti">
                   📅 Ajukan Izin / Cuti
                 </button>
@@ -1248,7 +1267,12 @@
                   <h2 style="font-size:16px;font-weight:800;">Output Absensi Anda Hari Ini</h2>
                   <p style="font-size:11.5px;color:var(--stone-600);">Tercatat langsung di server WITA beserta bukti selfie kamera &amp; jarak GPS outlet.</p>
                 </div>
-                ${Core.getStatusBadgeHtml(myToday.attendance_status, myToday.late_minutes)}
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <button class="btn btn-outline btn-xs" data-action="open-switch-shift-modal" style="border-color:var(--coffee-400);color:var(--coffee-900);padding:4px 10px;font-weight:700;">
+                    🔄 Alihkan / Ganti Shift
+                  </button>
+                  ${Core.getStatusBadgeHtml(myToday.attendance_status, myToday.late_minutes)}
+                </div>
               </div>
               ${renderAttendanceRecordCard(myToday, tz, false)}
             </div>`
@@ -2531,6 +2555,9 @@
                   ? `<button class="btn btn-amber" data-action="open-camera" data-mode="check_out">📷 Check Out Pribadi</button>`
                   : ""
               }
+              <button class="btn btn-outline" style="background:rgba(255,255,255,0.12);color:var(--gold-200);border-color:rgba(218,175,118,0.4);" data-action="open-switch-shift-modal">
+                🔄 Alihkan Shift
+              </button>
               <button class="btn btn-gold" data-action="nav" data-target="control_panel">
                 ⚙️ Control Panel &amp; Edit
               </button>
