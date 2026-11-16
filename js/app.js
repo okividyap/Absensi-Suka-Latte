@@ -1242,45 +1242,10 @@
 
   function getSmartRecommendedShiftId(activeShifts) {
     if (!activeShifts || activeShifts.length === 0) return null;
-    const s = Core.state;
-    const tz = s.settings.operational_timezone || "Asia/Makassar";
-    const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
-
-    // 1. Cek apakah admin sudah menetapkan jadwal spesifik di work_schedules untuk hari ini
-    const todaySched = s.workSchedules.find(
-      (sc) => sc.employee_id === s.currentUser?.id && sc.schedule_date === parts.dateString
-    );
-    if (todaySched && todaySched.shift_id && todaySched.schedule_type === "work") {
-      const match = activeShifts.find((sh) => sh.id === todaySched.shift_id);
-      if (match) return match.id;
-    }
-
-    // 2. Hitung menit saat ini di WITA (Asia/Makassar)
-    const currentMins = parts.hours * 60 + parts.minutes;
-
-    // Rekomendasi pintar jam operasional Kafe Suka Latte:
-    // 05:00 - 11:15 WITA (< 675 m) -> Shift Pagi (07:00 - 15:00)
-    // 11:15 - 13:45 WITA (675 - 825 m) -> Shift Middle (12:00 - 20:00)
-    // 13:45 ke atas WITA (>= 825 m) -> Shift Siang (14:30 - 22:30)
-    let bestShift = null;
-    if (currentMins >= 675 && currentMins < 825) {
-      bestShift =
-        activeShifts.find((sh) => sh.name.toLowerCase().includes("middle")) ||
-        activeShifts.find((sh) => String(sh.start_time).startsWith("12:"));
-    } else if (currentMins >= 825) {
-      bestShift =
-        activeShifts.find((sh) => sh.name.toLowerCase().includes("siang")) ||
-        activeShifts.find((sh) => String(sh.start_time).startsWith("14:"));
-    } else {
-      bestShift =
-        activeShifts.find((sh) => sh.name.toLowerCase().includes("pagi")) ||
-        activeShifts.find((sh) => String(sh.start_time).startsWith("07:"));
-    }
-
-    if (bestShift) return bestShift.id;
-
-    if (s.currentUser?.shift_id && activeShifts.some((sh) => sh.id === s.currentUser.shift_id)) {
-      return s.currentUser.shift_id;
+    const autoShift = Core.getAutoRecommendedShift(activeShifts);
+    if (autoShift) return autoShift.id;
+    if (Core.state.currentUser?.shift_id && activeShifts.some((sh) => sh.id === Core.state.currentUser.shift_id)) {
+      return Core.state.currentUser.shift_id;
     }
     return activeShifts[0].id;
   }
@@ -1369,7 +1334,7 @@
                   ? `<div style="background:rgba(20,13,8,0.78);border:1px solid var(--coffee-700);border-radius:12px;padding:10px 14px;margin-bottom:12px;">
                       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
                         <span style="font-size:11px;font-weight:700;color:var(--gold-300);text-transform:uppercase;">Shift Absensi Anda:</span>
-                        <span class="badge" style="background:#065f46;color:#6ee7b7;font-size:10px;">⏰ Rekomendasi Jam Otomatis</span>
+                        <span class="badge" style="background:#065f46;color:#6ee7b7;font-size:10px;">⚡ Alih Otomatis H-30m Jam WITA</span>
                       </div>
                       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:6px;">
                         ${(activeShifts.length ? activeShifts : s.shifts).map(sh => {

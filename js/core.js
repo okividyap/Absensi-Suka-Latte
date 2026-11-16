@@ -787,6 +787,61 @@ window.SUKA_LATTE_CONFIG = {
     });
   }
 
+  // ==========================================================================
+  // ALIH SHIFT OTOMATIS BERDASARKAN JAM SERVER (30 MENIT SEBELUM SHIFT MULAI)
+  // Khusus untuk CHECK IN:
+  // - Shift Pagi (07:00 - 15:00)   -> Jendela Buka: 06:30 WITA
+  // - Shift Middle (12:00 - 20:00) -> Jendela Buka: 11:30 WITA
+  // - Shift Siang (14:30 - 22:30)  -> Jendela Buka: 14:00 WITA
+  // ==========================================================================
+  function getAutoRecommendedShift(shifts, targetDateOrParts) {
+    const list = (shifts || state.shifts || []).filter((s) => s.status === "active");
+    if (list.length === 0) return null;
+
+    const tz = state.settings.operational_timezone || "Asia/Makassar";
+    let parts;
+    if (targetDateOrParts && typeof targetDateOrParts === "object" && typeof targetDateOrParts.hours === "number") {
+      parts = targetDateOrParts;
+    } else {
+      const now = targetDateOrParts instanceof Date ? targetDateOrParts : getServerNow();
+      parts = getTimePartsInTimezone(now, tz);
+    }
+
+    const currentMins = parts.hours * 60 + parts.minutes;
+
+    // Prioritaskan shift reguler (Pagi, Middle, Siang) - hindari Full Day sebagai default otomatis
+    const regularShifts = list.filter((s) => !String(s.name).toLowerCase().includes("full"));
+    const candidateShifts = regularShifts.length > 0 ? regularShifts : list;
+
+    // Hitung jendela buka absensi (30 menit sebelum start_time shift)
+    const mapped = candidateShifts.map((sh) => {
+      const timeParts = String(sh.start_time).split(":");
+      const h = parseInt(timeParts[0], 10) || 0;
+      const m = parseInt(timeParts[1], 10) || 0;
+      const startMins = h * 60 + m;
+      const windowOpenMins = startMins - 30; // 30 menit sebelum jam mulai shift
+      return { shift: sh, startMins, windowOpenMins };
+    });
+
+    // Urutkan berdasarkan jendela buka absensi terawal ke terakhir
+    mapped.sort((a, b) => a.windowOpenMins - b.windowOpenMins);
+
+    // Cari shift terakhir yang jendela 30-menitnya telah dibuka pada jam saat ini
+    let selected = null;
+    for (const item of mapped) {
+      if (currentMins >= item.windowOpenMins) {
+        selected = item.shift;
+      }
+    }
+
+    // Jika waktu masih sebelum jendela shift pertama (misal subuh sebelum 06:30), gunakan shift pertama (Shift Pagi)
+    if (!selected && mapped.length > 0) {
+      selected = mapped[0].shift;
+    }
+
+    return selected;
+  }
+
   async function selectMyActiveShift(shiftId) {
     if (!state.supabase || !isApprovedUser()) {
       throw new Error("Sesi Anda tidak aktif atau belum disetujui Admin.");
@@ -872,7 +927,8 @@ window.SUKA_LATTE_CONFIG = {
 
     if (mode === "check_in") {
       const idemKey = `idem-in-${uid}-${Date.now()}`;
-      const chosenShiftId = shiftId || state.currentUser?.shift_id || null;
+      const autoShift = getAutoRecommendedShift(state.shifts);
+      const chosenShiftId = shiftId || autoShift?.id || state.currentUser?.shift_id || null;
       const rpcRes = await withTimeout(
         state.supabase.rpc("submit_server_check_in_with_shift", {
           p_idempotency_key: idemKey,
@@ -1428,6 +1484,7 @@ window.SUKA_LATTE_CONFIG = {
     fetchMissingProfile,
     signInWithGoogle,
     signOut,
+    getAutoRecommendedShift,
     selectMyActiveShift,
     switchMyTodayShift,
     changeEmployeeRoleFast,

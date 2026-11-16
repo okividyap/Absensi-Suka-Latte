@@ -571,7 +571,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
           <div style="font-size:11px;font-weight:700;color:var(--coffee-300);text-transform:uppercase;letter-spacing:0.04em;">
             Shift Bertugas: <strong style="color:var(--gold-200);">${esc(currShift ? currShift.name : "Belum Dipilih")}</strong>
-            ${locked ? `<span class="badge" style="background:rgba(218,175,118,0.22);color:var(--gold-200);font-size:9.5px;margin-left:6px;border:1px solid rgba(218,175,118,0.35);">✓ Aktif Hari Ini</span>` : ""}
+            ${locked ? `<span class="badge" style="background:rgba(218,175,118,0.22);color:var(--gold-200);font-size:9.5px;margin-left:6px;border:1px solid rgba(218,175,118,0.35);">✓ Aktif Hari Ini</span>` : `<span class="badge" style="background:rgba(16,185,129,0.2);color:#6ee7b7;font-size:9.5px;margin-left:6px;border:1px solid rgba(16,185,129,0.35);">⚡ Otomatis H-30m</span>`}
           </div>
           <button type="button" class="btn btn-outline btn-xs" data-action="open-switch-shift-modal" style="font-size:10.5px;padding:3px 9px;border-color:rgba(218,175,118,0.4);color:var(--gold-200);background:rgba(0,0,0,0.25);">
             🔄 Alihkan / Ganti Shift Hari Ini
@@ -601,7 +601,9 @@
             ? `<div style="font-size:10.5px;color:var(--coffee-300);margin-top:5px;display:flex;align-items:center;gap:4px;">
                 <span>💡 Ingin ganti shift? Ketuk tombol shift di atas atau gunakan tombol <strong>Alihkan Shift</strong>. Jam keterlambatan akan dihitung ulang otomatis.</span>
                </div>`
-            : ""
+            : `<div style="font-size:10.5px;color:var(--coffee-300);margin-top:5px;display:flex;align-items:center;gap:4px;">
+                <span>⚡ <strong>Alih Otomatis Aktif:</strong> Shift berganti otomatis 30 menit sebelum shift mulai (Pagi: 06:30, Middle: 11:30, Siang: 14:00). Anda juga dapat memilih manual.</span>
+               </div>`
         }
       </div>
     `;
@@ -1037,11 +1039,18 @@
       : null;
     const isTodayScheduledOff = myTodaySchedule?.schedule_type === "off";
 
+    // Alih Shift Otomatis 30 Menit Sebelum Shift Mulai (Khusus Check In):
+    // - Jika sudah check in hari ini, kunci ke shift transaksi check in (myToday.shift_id)
+    // - Jika belum check in, otomatis beralih ke shift rekomendasi jam WITA (H-30m)
+    const autoShift = Core.getAutoRecommendedShift ? Core.getAutoRecommendedShift(activeShifts) : null;
     const myShift =
-      scheduledShift ||
-      s.shifts.find((sh) => sh.id === (myToday?.shift_id || u.shift_id)) ||
-      activeShifts[0] ||
-      s.shifts[0];
+      myToday?.shift_id
+        ? s.shifts.find((sh) => sh.id === myToday.shift_id)
+        : autoShift ||
+          scheduledShift ||
+          s.shifts.find((sh) => sh.id === u.shift_id) ||
+          activeShifts[0] ||
+          s.shifts[0];
     const selectedShiftId = myShift ? myShift.id : u.shift_id;
     const { todayHolidays, myTodayApprovedLeave } = getHolidayAndLeaveSummary(parts.dateString, u.id);
 
@@ -2472,7 +2481,15 @@
     const u = s.currentUser;
     const tz = s.settings.operational_timezone || "Asia/Makassar";
     const myOutlet = s.outlets.find((o) => o.id === u.outlet_id) || s.outlets[0];
-    const myShift = s.shifts.find((sh) => sh.id === u.shift_id) || s.shifts[0];
+    const activeShifts = s.shifts.filter((sh) => sh.status === "active");
+    const autoShift = Core.getAutoRecommendedShift ? Core.getAutoRecommendedShift(activeShifts) : null;
+    const myShift =
+      myToday?.shift_id
+        ? s.shifts.find((sh) => sh.id === myToday.shift_id)
+        : autoShift ||
+          s.shifts.find((sh) => sh.id === u.shift_id) ||
+          activeShifts[0] ||
+          s.shifts[0];
 
     const pendingUsers = s.profiles.filter(
       (p) => p.status === "pending_approval" || (!p.first_login_approved && p.status !== "rejected")
@@ -2542,7 +2559,7 @@
               Outlet Aktif: <strong style="color:var(--white);">${esc(myOutlet ? myOutlet.name : "-")}</strong> •
               Shift: <strong style="color:var(--white);">${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
             </p>
-            ${renderShiftSelectorHtml(s.shifts, myToday?.shift_id || u.shift_id || myShift?.id, !canCheckIn)}
+            ${renderShiftSelectorHtml(s.shifts, myToday?.shift_id || autoShift?.id || u.shift_id || myShift?.id, !canCheckIn)}
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
               ${
                 canCheckIn
