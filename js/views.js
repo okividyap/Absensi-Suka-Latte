@@ -531,10 +531,6 @@
               Durasi: <strong>${Core.formatDurationMinutes(rec.work_duration_minutes)}</strong>
             </div>
           </div>
-            <div style="padding:8px;font-size:10.5px;color:var(--stone-600);border-top:1px solid var(--coffee-100);">
-              Durasi: <strong>${Core.formatDurationMinutes(rec.work_duration_minutes)}</strong>
-            </div>
-          </div>
         </div>
 
         ${
