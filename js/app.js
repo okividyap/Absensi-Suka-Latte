@@ -182,11 +182,12 @@
       sampleCanvas.height = 32;
       const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
 
-      // Potong area oval wajah di tengah frame (lebar 50%, tinggi 60%)
-      const cropX = Math.round(w * 0.25);
-      const cropY = Math.round(h * 0.15);
-      const cropW = Math.round(w * 0.50);
-      const cropH = Math.round(h * 0.60);
+      // Potong area oval wajah vertikal di tengah frame (proporsi portrait ~ 1 : 1.36)
+      const isPortrait = h >= w;
+      const cropH = Math.round(isPortrait ? h * 0.65 : h * 0.72);
+      const cropW = Math.round(cropH / 1.36);
+      const cropX = Math.max(0, Math.round((w - cropW) / 2));
+      const cropY = Math.max(0, Math.round((h - cropH) / 2));
 
       sampleCtx.drawImage(source, cropX, cropY, cropW, cropH, 0, 0, 32, 32);
       const imgData = sampleCtx.getImageData(0, 0, 32, 32);
@@ -360,17 +361,17 @@
     const imgData = sampleCtx.getImageData(0, 0, 120, 90);
     const data = imgData.data;
 
-    // Dimensi bingkai geometrik oval di canvas (120x90):
-    // Lebar 58% ~ 70px (cx: 60, rx: 34 -> x: 26..94)
-    // Tinggi 74% ~ 66px (cy: 45, ry: 33 -> y: 12..78)
+    // Dimensi bingkai geometrik oval vertikal di canvas (120x90):
+    // Oval vertikal proporsional (Tinggi 78% ~ 70px, Lebar 42% ~ 50px)
+    // Rasio Tinggi : Lebar ~ 1.4 : 1 (cx: 60, cy: 45, rx: 25, ry: 35)
     const cx = 60;
     const cy = 45;
-    const rx = 34;
-    const ry = 33;
+    const rx = 25;
+    const ry = 35;
 
     // Inti area wajah (Core Face: tempat dahi, mata, hidung, mulut)
-    const coreRx = 19;
-    const coreRy = 22;
+    const coreRx = 15;
+    const coreRy = 23;
 
     let totalCorePixels = 0;
     let skinCorePixels = 0;
@@ -435,8 +436,8 @@
           totalOvalPixels++;
           if (isSkin) skinOvalPixels++;
         } else {
-          // Margin luar (area di luar oval)
-          if (y < 12 || x < 16 || x > 104) {
+          // Margin luar (area di luar oval vertikal)
+          if (y < 8 || y > 82 || x < 25 || x > 95) {
             totalOuterPixels++;
             if (isSkin) skinOuterPixels++;
           }
@@ -482,14 +483,14 @@
       };
     }
 
-    // 3. Evaluasi Posisi Wajah Pas di Geometrik Oval
+    // 3. Evaluasi Posisi Wajah Pas di Geometrik Oval Vertikal
     // a) Terlalu Jauh:
     if (coreSkinRatio < 0.26) {
       return {
         status: "TOO_FAR",
         facePresent: true,
         aligned: false,
-        message: "Dekatkan wajah ke dalam oval geometrik",
+        message: "Dekatkan wajah ke dalam oval vertikal",
         badge: "DEKATKAN",
         dotColor: "#f59e0b",
       };
@@ -501,7 +502,7 @@
         status: "TOO_CLOSE",
         facePresent: true,
         aligned: false,
-        message: "Mundurkan wajah sedikit agar pas di oval",
+        message: "Mundurkan wajah sedikit agar pas di oval vertikal",
         badge: "MUNDURKAN",
         dotColor: "#f59e0b",
       };
@@ -516,7 +517,7 @@
           status: "OFF_CENTER_LEFT",
           facePresent: true,
           aligned: false,
-          message: "Geser wajah sedikit ke kanan (tengah oval)",
+          message: "Geser wajah ke kanan (tengah oval vertikal)",
           badge: "GESER KANAN",
           dotColor: "#f59e0b",
         };
@@ -525,19 +526,19 @@
           status: "OFF_CENTER_RIGHT",
           facePresent: true,
           aligned: false,
-          message: "Geser wajah sedikit ke kiri (tengah oval)",
+          message: "Geser wajah ke kiri (tengah oval vertikal)",
           badge: "GESER KIRI",
           dotColor: "#f59e0b",
         };
       }
     }
 
-    // 4. WAJAH SUDAH PAS DI GEOMETRIK!
+    // 4. WAJAH SUDAH PAS DI GEOMETRIK OVAL VERTIKAL!
     return {
       status: "ALIGNED",
       facePresent: true,
       aligned: true,
-      message: "Posisi wajah pas di geometrik",
+      message: "Posisi wajah pas di oval vertikal",
       badge: "PAS",
       dotColor: "#10b981",
       avgLum: avgLumCore,
@@ -554,7 +555,7 @@
           enrollBtn.style.opacity = "0.65";
           enrollBtn.style.cursor = "not-allowed";
           enrollBtn.style.background = "var(--stone-600)";
-          enrollBtn.innerHTML = "🔒 Posisikan Wajah Pas di Oval Geometrik";
+          enrollBtn.innerHTML = "🔒 Posisikan Wajah Pas di Oval Vertikal";
         } else {
           enrollBtn.disabled = false;
           enrollBtn.style.opacity = "1";
@@ -575,7 +576,7 @@
       captureBtn.style.cursor = "not-allowed";
       captureBtn.style.background = "var(--stone-600)";
       captureBtn.style.borderColor = "var(--stone-500)";
-      captureBtn.innerHTML = "🔒 Posisikan Wajah Pas di Oval Geometrik";
+      captureBtn.innerHTML = "🔒 Posisikan Wajah Pas di Oval Vertikal";
     } else if (currentUser?.face_id_enrolled && !liveCamera.faceIdMatched) {
       captureBtn.disabled = true;
       captureBtn.style.opacity = "0.95";
@@ -1134,10 +1135,10 @@
     const s = Core.state;
     const u = s.currentUser;
 
-    // 1. VERIFIKASI POSISI WAJAH PAS DI GEOMETRIK
+    // 1. VERIFIKASI POSISI WAJAH PAS DI GEOMETRIK OVAL VERTIKAL
     if (!liveCamera.faceAligned) {
       liveCamera.submitError =
-        "⚠️ POSISI WAJAH BELUM PAS:\nWajah belum berada tepat di dalam bingkai oval geometrik. Silakan posisikan wajah Anda pas di dalam oval hingga indikator menyala hijau sebelum mengambil foto.";
+        "⚠️ POSISI WAJAH BELUM PAS:\nWajah belum berada tepat di dalam bingkai oval vertikal. Silakan posisikan wajah Anda pas di dalam oval vertikal hingga indikator menyala hijau sebelum mengambil foto.";
       if (!updateCameraModalPanelsInPlace()) {
         renderModalContainerOnly();
       }
@@ -1372,7 +1373,7 @@
                             🔄 Ambil Ulang Foto
                           </button>`
                         : `<button type="button" id="btn-capture-selfie" class="btn btn-primary" style="flex:1;padding:11px 16px;font-size:13.5px;font-weight:700;border-radius:11px;background:var(--stone-600);border-color:var(--stone-500);opacity:0.65;cursor:not-allowed;" data-action="capture-selfie" disabled>
-                            🔒 Posisikan Wajah Pas di Oval Geometrik
+                            🔒 Posisikan Wajah Pas di Oval Vertikal
                           </button>`
                     }
                   </div>
@@ -1510,7 +1511,7 @@
                       <strong>Petunjuk Perekaman:</strong>
                       <ul style="margin:4px 0 0 16px;padding:0;">
                         <li>Lepaskan masker atau kacamata hitam.</li>
-                        <li>Posisikan wajah tepat di tengah bingkai oval.</li>
+                        <li>Posisikan wajah tegak tepat di tengah bingkai oval vertikal.</li>
                         <li>Pastikan pencahayaan terang dan stabil.</li>
                       </ul>
                     </div>
@@ -1520,7 +1521,7 @@
 
                   <div>
                     <button type="button" id="btn-confirm-register-face-id" class="btn btn-emerald" style="width:100%;padding:12px 14px;font-size:13.5px;font-weight:700;background:var(--stone-600);opacity:0.65;cursor:not-allowed;" data-action="confirm-register-face-id" disabled>
-                      🔒 Posisikan Wajah Pas di Oval Geometrik
+                      🔒 Posisikan Wajah Pas di Oval Vertikal
                     </button>
                     <div style="font-size:10.5px;color:var(--stone-500);text-align:center;margin-top:6px;">
                       🔒 Data biometrik dienkripsi aman pada database Supabase.
@@ -4653,7 +4654,7 @@
         }
 
         if (!liveCamera.faceAligned) {
-          const msg = "Wajah belum pas di dalam area geometrik oval. Silakan arahkan wajah tepat di dalam bingkai oval hingga indikator berwarna hijau sebelum mengunci Face ID.";
+          const msg = "Wajah belum pas di dalam area geometrik oval vertikal. Silakan arahkan wajah tepat di dalam bingkai oval vertikal hingga indikator berwarna hijau sebelum mengunci Face ID.";
           if (errEl) errEl.innerHTML = `<div class="modal-inline-alert" role="alert">⚠️ ${msg}</div>`;
           return;
         }
@@ -4665,7 +4666,7 @@
           // Ekstrak geometri biometrik wajah
           const biometricData = extractBiometricFeatures(videoEl);
           if (!biometricData) {
-            throw new Error("Gagal membaca kontur wajah. Pastikan wajah tegak di dalam oval dan pencahayaan cukup.");
+            throw new Error("Gagal membaca kontur wajah. Pastikan wajah tegak di dalam oval vertikal dan pencahayaan cukup.");
           }
 
           // Buat snapshot foto master Face ID resmi

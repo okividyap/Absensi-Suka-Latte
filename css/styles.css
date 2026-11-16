@@ -1331,11 +1331,11 @@ p {
 }
 
 .face-guide-oval {
-  width: 50%;
-  height: 76%;
+  height: 80%;
+  aspect-ratio: 5 / 7;
   border: 2px dashed rgba(245, 225, 191, 0.72);
   border-radius: 50%;
-  box-shadow: 0 0 0 999px rgba(10, 6, 3, 0.28);
+  box-shadow: 0 0 0 9999px rgba(10, 6, 3, 0.35);
 }
 
 .camera-checklist {
@@ -1923,15 +1923,18 @@ p {
     padding: 12px 14px calc(16px + env(safe-area-inset-bottom));
   }
   .camera-stage {
-    max-height: 210px !important;
-    aspect-ratio: 4 / 3;
+    height: 275px !important;
+    max-height: 285px !important;
+    aspect-ratio: auto !important;
     width: 100%;
-    border-radius: 14px;
+    max-width: 320px;
+    border-radius: 16px;
     margin: 0 auto;
   }
   .camera-stage video,
   .camera-stage img {
-    max-height: 210px !important;
+    height: 100% !important;
+    max-height: 285px !important;
     object-fit: cover;
   }
   .camera-meta-grid {
@@ -2197,13 +2200,14 @@ p {
 
 .face-geometric-frame {
   position: relative;
-  width: 58%;
-  height: 74%;
-  max-width: 260px;
-  max-height: 330px;
+  height: 80%;
+  max-height: 290px;
+  aspect-ratio: 5 / 7; /* Wajib Oval Vertikal Alami (Tinggi 1.4x Lebar) */
+  width: auto;
+  max-width: 78vw;
   border-radius: 50%;
-  border: 2px dashed rgba(212, 163, 115, 0.85);
-  box-shadow: 0 0 0 9999px rgba(10, 6, 3, 0.38);
+  border: 2.5px dashed rgba(212, 163, 115, 0.85);
+  box-shadow: 0 0 0 9999px rgba(10, 6, 3, 0.44);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2259,41 +2263,41 @@ p {
 
 .face-corner-bracket {
   position: absolute;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-color: #d4a373;
   border-style: solid;
   border-width: 0;
 }
 .face-bracket-tl {
-  top: -6px;
-  left: 20%;
+  top: -4px;
+  left: 22%;
   border-top-width: 3px;
   border-left-width: 3px;
 }
 .face-bracket-tr {
-  top: -6px;
-  right: 20%;
+  top: -4px;
+  right: 22%;
   border-top-width: 3px;
   border-right-width: 3px;
 }
 .face-bracket-bl {
-  bottom: -6px;
-  left: 20%;
+  bottom: -4px;
+  left: 22%;
   border-bottom-width: 3px;
   border-left-width: 3px;
 }
 .face-bracket-br {
-  bottom: -6px;
-  right: 20%;
+  bottom: -4px;
+  right: 22%;
   border-bottom-width: 3px;
   border-right-width: 3px;
 }
 
 .face-scanline {
   position: absolute;
-  left: 8%;
-  right: 8%;
+  left: 6%;
+  right: 6%;
   height: 2px;
   background: linear-gradient(90deg, transparent, #d4a373 50%, transparent);
   box-shadow: 0 0 8px #d4a373, 0 0 16px rgba(212, 163, 115, 0.6);
@@ -2322,8 +2326,8 @@ p {
 
 .face-axis-v {
   position: absolute;
-  top: 12%;
-  bottom: 12%;
+  top: 8%;
+  bottom: 8%;
   left: 50%;
   width: 1px;
   background: rgba(212, 163, 115, 0.25);
@@ -2332,9 +2336,9 @@ p {
 
 .face-axis-h {
   position: absolute;
-  left: 15%;
-  right: 15%;
-  top: 45%;
+  left: 12%;
+  right: 12%;
+  top: 48%;
   height: 1px;
   background: rgba(212, 163, 115, 0.25);
   transform: translateY(-50%);
@@ -2357,25 +2361,25 @@ p {
   opacity: 0.9;
 }
 
-.face-dot-eye-l { top: 40%; left: 35%; }
-.face-dot-eye-r { top: 40%; left: 65%; }
+.face-dot-eye-l { top: 38%; left: 33%; }
+.face-dot-eye-r { top: 38%; left: 67%; }
 .face-dot-nose  { top: 52%; left: 50%; }
 .face-dot-mouth { top: 68%; left: 50%; }
-.face-dot-chin  { top: 86%; left: 50%; }
+.face-dot-chin  { top: 88%; left: 50%; }
 
 .face-hud-status {
   position: absolute;
-  bottom: 12px;
-  left: 12px;
-  right: 12px;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(12, 7, 4, 0.82);
+  background: rgba(12, 7, 4, 0.85);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(212, 163, 115, 0.35);
   border-radius: 10px;
-  padding: 7px 12px;
+  padding: 6px 12px;
   font-size: 11px;
   color: var(--gold-200);
 }
