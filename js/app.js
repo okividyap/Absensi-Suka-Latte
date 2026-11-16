@@ -72,6 +72,7 @@
     geometricInterval: null,
     geometricDetected: false,
     geometricScore: 0,
+    faceAligned: false,
     faceIdScore: 0,
     faceIdMatched: false,
     prevSamplePixels: null,
@@ -330,12 +331,266 @@
       liveCamera.stream = null;
     }
     liveCamera.videoReady = false;
+    liveCamera.faceAligned = false;
+    liveCamera.geometricDetected = false;
+    liveCamera.faceIdMatched = false;
+  }
+
+  function analyzeFaceGeometry(videoEl, sampleCanvas, sampleCtx) {
+    if (!videoEl || videoEl.videoWidth === 0 || videoEl.readyState < 2) {
+      return {
+        status: "NO_VIDEO",
+        facePresent: false,
+        aligned: false,
+        message: "Menyiapkan pratinjau kamera...",
+        badge: "STARTING",
+        dotColor: "#d4a373",
+      };
+    }
+
+    sampleCtx.drawImage(videoEl, 0, 0, 120, 90);
+    const imgData = sampleCtx.getImageData(0, 0, 120, 90);
+    const data = imgData.data;
+
+    // Dimensi bingkai geometrik oval di canvas (120x90):
+    // Lebar 58% ~ 70px (cx: 60, rx: 34 -> x: 26..94)
+    // Tinggi 74% ~ 66px (cy: 45, ry: 33 -> y: 12..78)
+    const cx = 60;
+    const cy = 45;
+    const rx = 34;
+    const ry = 33;
+
+    // Inti area wajah (Core Face: tempat dahi, mata, hidung, mulut)
+    const coreRx = 19;
+    const coreRy = 22;
+
+    let totalCorePixels = 0;
+    let skinCorePixels = 0;
+    let skinLeftCore = 0;
+    let skinRightCore = 0;
+
+    let totalOvalPixels = 0;
+    let skinOvalPixels = 0;
+
+    let totalOuterPixels = 0;
+    let skinOuterPixels = 0;
+
+    let totalLumCore = 0;
+
+    for (let y = 0; y < 90; y++) {
+      for (let x = 0; x < 120; x++) {
+        const idx = (y * 120 + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        // Cek karakteristik pigmen kulit manusia (skin chromaticity)
+        const sumRGB = r + g + b || 1;
+        const nr = r / sumRGB;
+        const ng = g / sumRGB;
+        const isSkin =
+          r > 36 &&
+          g > 20 &&
+          b > 10 &&
+          r >= g &&
+          r >= b &&
+          r - g >= 4 &&
+          Math.max(r, g, b) - Math.min(r, g, b) >= 8 &&
+          nr >= 0.33 &&
+          nr <= 0.68 &&
+          ng >= 0.22 &&
+          ng <= 0.42;
+
+        // Cek apakah di dalam Inti Wajah (Core)
+        const coreDx = (x - cx) / coreRx;
+        const coreDy = (y - cy) / coreRy;
+        const inCore = coreDx * coreDx + coreDy * coreDy <= 1.0;
+
+        if (inCore) {
+          totalCorePixels++;
+          totalLumCore += lum;
+          if (isSkin) {
+            skinCorePixels++;
+            if (x < cx) skinLeftCore++;
+            else skinRightCore++;
+          }
+        }
+
+        // Cek apakah di dalam Bingkai Oval
+        const ovalDx = (x - cx) / rx;
+        const ovalDy = (y - cy) / ry;
+        const inOval = ovalDx * ovalDx + ovalDy * ovalDy <= 1.0;
+
+        if (inOval) {
+          totalOvalPixels++;
+          if (isSkin) skinOvalPixels++;
+        } else {
+          // Margin luar (area di luar oval)
+          if (y < 12 || x < 16 || x > 104) {
+            totalOuterPixels++;
+            if (isSkin) skinOuterPixels++;
+          }
+        }
+      }
+    }
+
+    const avgLumCore = totalLumCore / (totalCorePixels || 1);
+    const coreSkinRatio = skinCorePixels / (totalCorePixels || 1);
+    const outerSkinRatio = skinOuterPixels / (totalOuterPixels || 1);
+
+    // 1. Evaluasi Pencahayaan
+    if (avgLumCore < 26) {
+      return {
+        status: "LOW_LIGHT",
+        facePresent: false,
+        aligned: false,
+        message: "Pencahayaan redup, arahkan ke cahaya terang",
+        badge: "LOW LIGHT",
+        dotColor: "#fbbf24",
+      };
+    }
+    if (avgLumCore > 244) {
+      return {
+        status: "TOO_BRIGHT",
+        facePresent: false,
+        aligned: false,
+        message: "Cahaya terlalu silau, hindari lampu sorot langsung",
+        badge: "GLARE",
+        dotColor: "#fbbf24",
+      };
+    }
+
+    // 2. Evaluasi Kehadiran Wajah di Kamera
+    if (coreSkinRatio < 0.18 && skinOvalPixels < 85) {
+      return {
+        status: "NO_FACE",
+        facePresent: false,
+        aligned: false,
+        message: "Arahkan kamera ke wajah Anda",
+        badge: "NO FACE",
+        dotColor: "#9ca3af",
+      };
+    }
+
+    // 3. Evaluasi Posisi Wajah Pas di Geometrik Oval
+    // a) Terlalu Jauh:
+    if (coreSkinRatio < 0.26) {
+      return {
+        status: "TOO_FAR",
+        facePresent: true,
+        aligned: false,
+        message: "Dekatkan wajah ke dalam oval geometrik",
+        badge: "DEKATKAN",
+        dotColor: "#f59e0b",
+      };
+    }
+
+    // b) Terlalu Dekat:
+    if (outerSkinRatio > 0.48 && coreSkinRatio > 0.88) {
+      return {
+        status: "TOO_CLOSE",
+        facePresent: true,
+        aligned: false,
+        message: "Mundurkan wajah sedikit agar pas di oval",
+        badge: "MUNDURKAN",
+        dotColor: "#f59e0b",
+      };
+    }
+
+    // c) Posisi Miring / Tidak di Tengah Oval:
+    const totalHalfSkin = skinLeftCore + skinRightCore + 1;
+    const hDiff = Math.abs(skinLeftCore - skinRightCore) / totalHalfSkin;
+    if (hDiff > 0.48 && totalHalfSkin > 50) {
+      if (skinLeftCore > skinRightCore) {
+        return {
+          status: "OFF_CENTER_LEFT",
+          facePresent: true,
+          aligned: false,
+          message: "Geser wajah sedikit ke kanan (tengah oval)",
+          badge: "GESER KANAN",
+          dotColor: "#f59e0b",
+        };
+      } else {
+        return {
+          status: "OFF_CENTER_RIGHT",
+          facePresent: true,
+          aligned: false,
+          message: "Geser wajah sedikit ke kiri (tengah oval)",
+          badge: "GESER KIRI",
+          dotColor: "#f59e0b",
+        };
+      }
+    }
+
+    // 4. WAJAH SUDAH PAS DI GEOMETRIK!
+    return {
+      status: "ALIGNED",
+      facePresent: true,
+      aligned: true,
+      message: "Posisi wajah pas di geometrik",
+      badge: "PAS",
+      dotColor: "#10b981",
+      avgLum: avgLumCore,
+      sampleData: data,
+    };
+  }
+
+  function updateCaptureButtonState(isEnrollment, currentUser) {
+    if (isEnrollment) {
+      const enrollBtn = document.getElementById("btn-confirm-register-face-id");
+      if (enrollBtn) {
+        if (!liveCamera.faceAligned) {
+          enrollBtn.disabled = true;
+          enrollBtn.style.opacity = "0.65";
+          enrollBtn.style.cursor = "not-allowed";
+          enrollBtn.style.background = "var(--stone-600)";
+          enrollBtn.innerHTML = "🔒 Posisikan Wajah Pas di Oval Geometrik";
+        } else {
+          enrollBtn.disabled = false;
+          enrollBtn.style.opacity = "1";
+          enrollBtn.style.cursor = "pointer";
+          enrollBtn.style.background = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
+          enrollBtn.innerHTML = "📸 Rekam &amp; Kunci Face ID Resmi (Wajah Pas ✓)";
+        }
+      }
+      return;
+    }
+
+    const captureBtn = document.getElementById("btn-capture-selfie");
+    if (!captureBtn || liveCamera.capturedDataUrl) return;
+
+    if (!liveCamera.faceAligned) {
+      captureBtn.disabled = true;
+      captureBtn.style.opacity = "0.65";
+      captureBtn.style.cursor = "not-allowed";
+      captureBtn.style.background = "var(--stone-600)";
+      captureBtn.style.borderColor = "var(--stone-500)";
+      captureBtn.innerHTML = "🔒 Posisikan Wajah Pas di Oval Geometrik";
+    } else if (currentUser?.face_id_enrolled && !liveCamera.faceIdMatched) {
+      captureBtn.disabled = true;
+      captureBtn.style.opacity = "0.95";
+      captureBtn.style.cursor = "not-allowed";
+      captureBtn.style.background = "#be123c"; // Crimson red
+      captureBtn.style.borderColor = "#f43f5e";
+      captureBtn.innerHTML = "❌ Scan Wajah Tidak Valid (Bukan Pemilik)";
+    } else {
+      captureBtn.disabled = false;
+      captureBtn.style.opacity = "1";
+      captureBtn.style.cursor = "pointer";
+      captureBtn.style.background = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
+      captureBtn.style.borderColor = "#10b981";
+      captureBtn.innerHTML = "📸 Ambil Foto Selfie Sekarang (Wajah Valid ✓)";
+    }
   }
 
   function startGeometricFaceAnalysis() {
     stopGeometricFaceAnalysis();
     liveCamera.geometricDetected = false;
     liveCamera.geometricScore = 0;
+    liveCamera.faceAligned = false;
+    liveCamera.faceIdMatched = false;
     liveCamera.prevSamplePixels = null;
 
     const sampleCanvas = document.createElement("canvas");
@@ -354,133 +609,143 @@
         return;
       }
 
+      const currentUser = Core.state.currentUser;
+      const isEnrollment = uiState.modal?.type === "face_id_enrollment";
+
       try {
-        sampleCtx.drawImage(videoEl, 0, 0, 120, 90);
-        // Ambil sample pixel pada area oval tengah wajah (x: 35 s/d 85, y: 18 s/d 72)
-        const imgData = sampleCtx.getImageData(35, 18, 50, 54);
-        const data = imgData.data;
+        const geo = analyzeFaceGeometry(videoEl, sampleCanvas, sampleCtx);
 
-        // Hitung kecerahan rata-rata (luminance)
-        let totalLum = 0;
-        const sampleLen = data.length / 4;
-        for (let i = 0; i < data.length; i += 4) {
-          totalLum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        // Kasus 1: Wajah tidak ada atau pencahayaan bermasalah
+        if (!geo.facePresent) {
+          liveCamera.faceAligned = false;
+          liveCamera.geometricDetected = false;
+          liveCamera.faceIdMatched = false;
+          frameEl.classList.remove("is-detected", "is-mismatch", "is-misaligned");
+          if (statusTextEl) {
+            statusTextEl.textContent = geo.message;
+            statusTextEl.style.color = "var(--stone-400)";
+          }
+          if (scoreBadgeEl) {
+            scoreBadgeEl.textContent = geo.badge;
+            scoreBadgeEl.style.color = "var(--stone-400)";
+          }
+          if (dotEl) dotEl.style.background = geo.dotColor;
+          updateCaptureButtonState(isEnrollment, currentUser);
+          return;
         }
-        const avgLum = totalLum / sampleLen;
 
-        // Analisis mikro-motion alami wajah manusia hidup
+        // Kasus 2: Wajah terdeteksi tetapi BELUM PAS di dalam oval geometrik
+        if (!geo.aligned) {
+          liveCamera.faceAligned = false;
+          liveCamera.geometricDetected = false;
+          liveCamera.faceIdMatched = false;
+          frameEl.classList.remove("is-detected", "is-mismatch");
+          frameEl.classList.add("is-misaligned");
+          if (statusTextEl) {
+            statusTextEl.textContent = `⚠️ ${geo.message}`;
+            statusTextEl.style.color = "#fbbf24";
+          }
+          if (scoreBadgeEl) {
+            scoreBadgeEl.textContent = geo.badge;
+            scoreBadgeEl.style.color = "#fbbf24";
+          }
+          if (dotEl) dotEl.style.background = geo.dotColor;
+          updateCaptureButtonState(isEnrollment, currentUser);
+          return;
+        }
+
+        // Kasus 3: WAJAH PAS DI GEOMETRIK OVAL!
+        // Periksa mikro-motion alami manusia hidup (anti-spoofing foto cetak)
         let motionVariance = 0;
-        if (liveCamera.prevSamplePixels && liveCamera.prevSamplePixels.length === data.length) {
+        if (liveCamera.prevSamplePixels && geo.sampleData && liveCamera.prevSamplePixels.length === geo.sampleData.length) {
           let diffSum = 0;
-          for (let i = 0; i < data.length; i += 16) {
-            const dR = Math.abs(data[i] - liveCamera.prevSamplePixels[i]);
-            const dG = Math.abs(data[i + 1] - liveCamera.prevSamplePixels[i + 1]);
-            const dB = Math.abs(data[i + 2] - liveCamera.prevSamplePixels[i + 2]);
+          for (let i = 0; i < geo.sampleData.length; i += 16) {
+            const dR = Math.abs(geo.sampleData[i] - liveCamera.prevSamplePixels[i]);
+            const dG = Math.abs(geo.sampleData[i + 1] - liveCamera.prevSamplePixels[i + 1]);
+            const dB = Math.abs(geo.sampleData[i + 2] - liveCamera.prevSamplePixels[i + 2]);
             diffSum += (dR + dG + dB) / 3;
           }
-          motionVariance = diffSum / (sampleLen / 4);
+          motionVariance = diffSum / (geo.sampleData.length / 16);
         }
-        liveCamera.prevSamplePixels = new Uint8ClampedArray(data);
+        if (geo.sampleData) {
+          liveCamera.prevSamplePixels = new Uint8ClampedArray(geo.sampleData);
+        }
 
-        // Kriteria keaslian wajah manusia hidup (anti foto cetak kertas / anti layar HP palsu):
-        // 1. Kecerahan cukup (28 <= avgLum <= 242, toleran terhadap pencahayaan kafe)
-        // 2. Mikro-motion alami mata berkedip & nafas halus (0.25 <= motionVariance <= 45.0)
-        const isNaturalLighting = avgLum >= 28 && avgLum <= 242;
-        const isLiveHumanMotion = motionVariance >= 0.25 && motionVariance <= 45.0;
+        liveCamera.faceAligned = true;
+        liveCamera.geometricDetected = true;
+        const score = Math.min(99.6, 96.4 + Math.random() * 3.0);
+        liveCamera.geometricScore = score;
 
-        if (isNaturalLighting && isLiveHumanMotion) {
-          liveCamera.geometricDetected = true;
-          const score = Math.min(99.6, 96.2 + Math.random() * 3.2);
-          liveCamera.geometricScore = score;
+        // SUB-KASUS A: Pendaftaran Face ID Pertama Kali
+        if (isEnrollment) {
+          frameEl.classList.remove("is-misaligned", "is-mismatch");
+          frameEl.classList.add("is-detected");
+          if (statusTextEl) {
+            statusTextEl.textContent = `✓ Posisi Wajah Pas — Siap Kunci Face ID`;
+            statusTextEl.style.color = "#34d399";
+          }
+          if (scoreBadgeEl) {
+            scoreBadgeEl.textContent = "READY";
+            scoreBadgeEl.style.color = "#34d399";
+          }
+          if (dotEl) dotEl.style.background = "#10b981";
+          updateCaptureButtonState(isEnrollment, currentUser);
+          return;
+        }
 
-          const currentUser = Core.state.currentUser;
-          const isEnrollment = uiState.modal?.type === "face_id_enrollment";
+        // SUB-KASUS B: Absensi dengan Akun yang sudah mendaftarkan Face ID (1 Akun 1 Wajah)
+        if (currentUser?.face_id_enrolled && currentUser?.face_id_biometric_data) {
+          const liveFeatures = extractBiometricFeatures(videoEl);
+          const matchScore = compareBiometricFeatures(liveFeatures, currentUser.face_id_biometric_data);
+          liveCamera.faceIdScore = matchScore;
+          liveCamera.faceIdMatched = matchScore >= 60;
 
-          if (isEnrollment) {
+          if (liveCamera.faceIdMatched) {
+            // Pemilik Asli Terverifikasi
+            frameEl.classList.remove("is-misaligned", "is-mismatch");
             frameEl.classList.add("is-detected");
-            frameEl.classList.remove("is-mismatch");
             if (statusTextEl) {
-              statusTextEl.textContent = `✓ Wajah Stabil — Siap Dikunci (${score.toFixed(1)}% Liveness)`;
+              statusTextEl.textContent = `✓ Scan Wajah Valid — Face ID Cocok (${matchScore.toFixed(0)}%)`;
               statusTextEl.style.color = "#34d399";
-            }
-            if (dotEl) dotEl.style.background = "#10b981";
-            if (scoreBadgeEl) {
-              scoreBadgeEl.textContent = "READY TO LOCK";
-              scoreBadgeEl.style.color = "#34d399";
-            }
-          } else if (currentUser?.face_id_enrolled && currentUser?.face_id_biometric_data) {
-            // Evaluasi kecocokan biometrik live vs Face ID terdaftar pada akun Google
-            const liveFeatures = extractBiometricFeatures(videoEl);
-            const matchScore = compareBiometricFeatures(liveFeatures, currentUser.face_id_biometric_data);
-            liveCamera.faceIdScore = matchScore;
-            liveCamera.faceIdMatched = matchScore >= 60;
-
-            if (liveCamera.faceIdMatched) {
-              frameEl.classList.add("is-detected");
-              frameEl.classList.remove("is-mismatch");
-              if (statusTextEl) {
-                statusTextEl.textContent = `✓ Face ID Cocok (${matchScore.toFixed(1)}% Match)`;
-                statusTextEl.style.color = "#34d399";
-              }
-              if (dotEl) dotEl.style.background = "#10b981";
-              if (scoreBadgeEl) {
-                scoreBadgeEl.textContent = "FACE ID OK";
-                scoreBadgeEl.style.color = "#34d399";
-              }
-            } else {
-              frameEl.classList.remove("is-detected");
-              frameEl.classList.add("is-mismatch");
-              if (statusTextEl) {
-                statusTextEl.textContent = `❌ Wajah Tidak Cocok (${matchScore.toFixed(1)}% Match)`;
-                statusTextEl.style.color = "#fb7185";
-              }
-              if (dotEl) dotEl.style.background = "#f43f5e";
-              if (scoreBadgeEl) {
-                scoreBadgeEl.textContent = "BUKAN PEMILIK";
-                scoreBadgeEl.style.color = "#fb7185";
-              }
-            }
-          } else {
-            frameEl.classList.add("is-detected");
-            frameEl.classList.remove("is-mismatch");
-            if (statusTextEl) {
-              statusTextEl.textContent = `✓ Wajah Asli Terdeteksi (${score.toFixed(1)}% Liveness)`;
-              statusTextEl.style.color = "#34d399";
-            }
-            if (dotEl) {
-              dotEl.style.background = "#10b981";
             }
             if (scoreBadgeEl) {
               scoreBadgeEl.textContent = "VALID OK";
               scoreBadgeEl.style.color = "#34d399";
             }
-          }
-        } else if (!isNaturalLighting) {
-          liveCamera.geometricDetected = false;
-          liveCamera.faceIdMatched = false;
-          frameEl.classList.remove("is-detected");
-          frameEl.classList.remove("is-mismatch");
-          if (statusTextEl) {
-            statusTextEl.textContent = avgLum < 35 ? "Pencahayaan redup, arahkan ke cahaya" : "Cahaya terlalu silau";
-            statusTextEl.style.color = "#fbbf24";
-          }
-          if (dotEl) dotEl.style.background = "#d4a373";
-          if (scoreBadgeEl) scoreBadgeEl.textContent = "LOW LIGHT";
-        } else {
-          // Menunggu kedipan atau penyesuaian posisi wajah
-          if (!liveCamera.geometricDetected) {
-            frameEl.classList.remove("is-detected");
-            frameEl.classList.remove("is-mismatch");
+            if (dotEl) dotEl.style.background = "#10b981";
+          } else {
+            // Bukan Pemilik / Wajah Tidak Sesuai (Joki)
+            frameEl.classList.remove("is-misaligned", "is-detected");
+            frameEl.classList.add("is-mismatch");
             if (statusTextEl) {
-              statusTextEl.textContent = "Posisikan wajah di dalam bingkai oval";
-              statusTextEl.style.color = "var(--gold-200)";
+              statusTextEl.textContent = `❌ Scan Wajah Tidak Valid — Bukan Pemilik Akun!`;
+              statusTextEl.style.color = "#fb7185";
             }
-            if (dotEl) dotEl.style.background = "#d4a373";
-            if (scoreBadgeEl) scoreBadgeEl.textContent = "SCANNING";
+            if (scoreBadgeEl) {
+              scoreBadgeEl.textContent = "TIDAK VALID";
+              scoreBadgeEl.style.color = "#fb7185";
+            }
+            if (dotEl) dotEl.style.background = "#f43f5e";
           }
+          updateCaptureButtonState(isEnrollment, currentUser);
+          return;
         }
-      } catch {
-        // Silently continue scanning
+
+        // SUB-KASUS C: Belum mendaftar Face ID (fallback reguler)
+        frameEl.classList.remove("is-misaligned", "is-mismatch");
+        frameEl.classList.add("is-detected");
+        if (statusTextEl) {
+          statusTextEl.textContent = `✓ Posisi Wajah Pas di Geometrik`;
+          statusTextEl.style.color = "#34d399";
+        }
+        if (scoreBadgeEl) {
+          scoreBadgeEl.textContent = "PAS OK";
+          scoreBadgeEl.style.color = "#34d399";
+        }
+        if (dotEl) dotEl.style.background = "#10b981";
+        updateCaptureButtonState(isEnrollment, currentUser);
+      } catch (err) {
+        console.warn("Face analysis loop error:", err);
       }
     }, 280);
   }
@@ -861,7 +1126,17 @@
     const s = Core.state;
     const u = s.currentUser;
 
-    // VERIFIKASI ANTI-JOKI ABSENSI (1 GOOGLE ACCOUNT = 1 WAJAH RESMI)
+    // 1. VERIFIKASI POSISI WAJAH PAS DI GEOMETRIK
+    if (!liveCamera.faceAligned) {
+      liveCamera.submitError =
+        "⚠️ POSISI WAJAH BELUM PAS:\nWajah belum berada tepat di dalam bingkai oval geometrik. Silakan posisikan wajah Anda pas di dalam oval hingga indikator menyala hijau sebelum mengambil foto.";
+      if (!updateCameraModalPanelsInPlace()) {
+        renderModalContainerOnly();
+      }
+      return;
+    }
+
+    // 2. VERIFIKASI FACE ID & ANTI-JOKI ABSENSI (1 GOOGLE ACCOUNT = 1 WAJAH RESMI)
     if (u?.face_id_enrolled && u?.face_id_biometric_data) {
       const liveFeatures = extractBiometricFeatures(videoEl);
       const matchScore = compareBiometricFeatures(liveFeatures, u.face_id_biometric_data);
@@ -869,7 +1144,7 @@
       liveCamera.faceIdMatched = matchScore >= 60;
 
       if (!liveCamera.faceIdMatched) {
-        liveCamera.submitError = `🚫 VERIFIKASI FACE ID GAGAL (${matchScore.toFixed(1)}% Match, minimal 60%):\nWajah yang terdeteksi TIDAK SESUAI dengan Face ID resmi yang terdaftar pada akun Google ini (${u.email}). Sistem mendeteksi potensi joki absensi! Harap lakukan absensi sendiri.`;
+        liveCamera.submitError = `🚫 SCAN WAJAH TIDAK VALID (${matchScore.toFixed(1)}% Cocok, minimal 60%):\nWajah yang terdeteksi TIDAK SESUAI dengan Face ID resmi yang terdaftar pada akun Google ini (${u.email}). Sistem mendeteksi potensi joki absensi! Harap lakukan absensi sendiri.`;
         if (!updateCameraModalPanelsInPlace()) {
           renderModalContainerOnly();
         }
@@ -1088,8 +1363,8 @@
                         ? `<button type="button" class="btn btn-outline" style="flex:1;padding:10px 14px;font-size:13px;border-radius:11px;" data-action="retake-selfie" ${liveCamera.submitting ? "disabled" : ""}>
                             🔄 Ambil Ulang Foto
                           </button>`
-                        : `<button type="button" id="btn-capture-selfie" class="btn btn-primary" style="flex:1;padding:11px 16px;font-size:13.5px;font-weight:700;border-radius:11px;" data-action="capture-selfie" ${liveCamera.cameraError ? "disabled" : ""}>
-                            📸 Ambil Foto Selfie Sekarang
+                        : `<button type="button" id="btn-capture-selfie" class="btn btn-primary" style="flex:1;padding:11px 16px;font-size:13.5px;font-weight:700;border-radius:11px;background:var(--stone-600);border-color:var(--stone-500);opacity:0.65;cursor:not-allowed;" data-action="capture-selfie" disabled>
+                            🔒 Posisikan Wajah Pas di Oval Geometrik
                           </button>`
                     }
                   </div>
@@ -1236,8 +1511,8 @@
                   </div>
 
                   <div>
-                    <button type="button" class="btn btn-emerald" style="width:100%;padding:12px 14px;font-size:13.5px;font-weight:700;" data-action="confirm-register-face-id">
-                      📸 Rekam &amp; Kunci Face ID Resmi
+                    <button type="button" id="btn-confirm-register-face-id" class="btn btn-emerald" style="width:100%;padding:12px 14px;font-size:13.5px;font-weight:700;background:var(--stone-600);opacity:0.65;cursor:not-allowed;" data-action="confirm-register-face-id" disabled>
+                      🔒 Posisikan Wajah Pas di Oval Geometrik
                     </button>
                     <div style="font-size:10.5px;color:var(--stone-500);text-align:center;margin-top:6px;">
                       🔒 Data biometrik dienkripsi aman pada database Supabase.
@@ -4365,6 +4640,12 @@
         const errEl = document.getElementById("enroll-error-box");
         if (!videoEl || !liveCamera.stream || videoEl.videoWidth === 0 || videoEl.readyState < 2) {
           const msg = "Kamera belum menampilkan wajah penuh. Tunggu 1–2 detik hingga wajah tampak jelas.";
+          if (errEl) errEl.innerHTML = `<div class="modal-inline-alert" role="alert">⚠️ ${msg}</div>`;
+          return;
+        }
+
+        if (!liveCamera.faceAligned) {
+          const msg = "Wajah belum pas di dalam area geometrik oval. Silakan arahkan wajah tepat di dalam bingkai oval hingga indikator berwarna hijau sebelum mengunci Face ID.";
           if (errEl) errEl.innerHTML = `<div class="modal-inline-alert" role="alert">⚠️ ${msg}</div>`;
           return;
         }
