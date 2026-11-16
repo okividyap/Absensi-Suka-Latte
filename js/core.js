@@ -1352,6 +1352,43 @@ window.SUKA_LATTE_CONFIG = {
     return res.data;
   }
 
+  async function adaptiveRefineFaceId(liveFeatures) {
+    if (!state.currentUser?.face_id_biometric_data || !state.supabase || !liveFeatures) return;
+    const oldBio = state.currentUser.face_id_biometric_data;
+    if (!Array.isArray(oldBio.zones) || !Array.isArray(liveFeatures.zones)) return;
+
+    // Perhalus template biometrik: 85% referensi lama + 15% sampel valid terbaru
+    const blendedZones = oldBio.zones.map((z, i) =>
+      Number((0.85 * z + 0.15 * (liveFeatures.zones[i] || z)).toFixed(4))
+    );
+    const blendedThirds = (oldBio.thirds || [0.33, 0.34, 0.33]).map((t, i) =>
+      Number((0.85 * t + 0.15 * (liveFeatures.thirds?.[i] || t)).toFixed(4))
+    );
+    const blendedChroma = (oldBio.chroma || [0.33, 0.33, 0.33]).map((c, i) =>
+      Number((0.85 * c + 0.15 * (liveFeatures.chroma?.[i] || c)).toFixed(4))
+    );
+
+    const newBio = {
+      version: 1,
+      zones: blendedZones,
+      thirds: blendedThirds,
+      chroma: blendedChroma,
+      updatedAt: new Date().toISOString(),
+    };
+
+    state.currentUser.face_id_biometric_data = newBio;
+    const myProf = state.profiles.find((p) => p.id === state.currentUser.id);
+    if (myProf) myProf.face_id_biometric_data = newBio;
+
+    try {
+      await state.supabase.rpc("refine_my_face_id_template", {
+        p_refined_biometric_data: newBio,
+      });
+    } catch (err) {
+      console.warn("Background face refinement non-fatal:", err);
+    }
+  }
+
   async function resetFaceId(employeeId, reason) {
     assertManagerAccess("ResetFaceId");
     if (!state.supabase) throw new Error("Koneksi Supabase belum siap.");
@@ -1501,6 +1538,7 @@ window.SUKA_LATTE_CONFIG = {
     bulkSaveMonthlySchedule,
     uploadPrivateSelfieAndSubmit,
     registerFaceId,
+    adaptiveRefineFaceId,
     resetFaceId,
     createShiftSwapRequest,
     respondShiftSwapRequest,

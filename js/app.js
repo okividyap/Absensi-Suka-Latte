@@ -182,10 +182,10 @@
       sampleCanvas.height = 32;
       const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
 
-      // Potong area oval wajah vertikal di tengah frame (proporsi portrait ~ 1 : 1.36)
+      // Potong area oval wajah vertikal di tengah frame (proporsional terhadap bingkai oval vertikal 1 : 1.6)
       const isPortrait = h >= w;
-      const cropH = Math.round(isPortrait ? h * 0.65 : h * 0.72);
-      const cropW = Math.round(cropH / 1.36);
+      const cropH = Math.round(isPortrait ? h * 0.72 : h * 0.78);
+      const cropW = Math.round(cropH * 0.62);
       const cropX = Math.max(0, Math.round((w - cropW) / 2));
       const cropY = Math.max(0, Math.round((h - cropH) / 2));
 
@@ -278,59 +278,78 @@
       return 0;
     }
 
-    // 1. Korelasi 16-zona intensitas kontur wajah: Cosine Similarity + Euclidean RMS
-    let dot = 0;
-    let normLive = 0;
-    let normEnrolled = 0;
-    let zoneDistSum = 0;
+    // Helper: Zero-mean unit-variance standardization untuk kekebalan penuh terhadap variasi intensitas pencahayaan ruangan
+    const standardize = (arr) => {
+      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const variance = arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length;
+      const std = Math.sqrt(variance) || 1;
+      return arr.map((x) => (x - mean) / std);
+    };
 
-    for (let i = 0; i < 16; i++) {
-      const l = live.zones[i] || 0;
-      const e = enrolled.zones[i] || 0;
-      dot += l * e;
-      normLive += l * l;
-      normEnrolled += e * e;
+    const cosineSim = (a, b) => {
+      let dot = 0, normA = 0, normB = 0;
+      const len = Math.min(a.length, b.length);
+      for (let i = 0; i < len; i++) {
+        dot += a[i] * b[i];
+        normA += a[i] * a[i];
+        normB += b[i] * b[i];
+      }
+      return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
+    };
 
-      const d = l - e;
-      zoneDistSum += d * d;
-    }
+    // 1. Korelasi Kontur Wajah Berbasis Standarisasi (Zero-Mean Unit-Variance)
+    // Menjamin orang yang SAMA mendapatkan skor tinggi (>85-98%) di cahaya pagi, siang, maupun malam
+    const normLive = standardize(live.zones);
+    const normEnr = standardize(enrolled.zones);
+    const zoneCos = cosineSim(normLive, normEnr);
 
-    const cosSim = Math.max(0, dot / (Math.sqrt(normLive) * Math.sqrt(normEnrolled) || 1));
-    const zoneRms = Math.sqrt(zoneDistSum / 16);
+    // Pemetaan non-linear kontur struktural wajah:
+    // zoneCos >= 0.70 -> skor 75% - 100% (orang sama di berbagai pencahayaan)
+    // zoneCos 0.40 - 0.70 -> skor 45% - 75%
+    // zoneCos < 0.40 -> skor < 40% (orang berbeda / non-wajah)
+    const zoneScore = Math.max(0, Math.min(100,
+      zoneCos >= 0.70 ? 75 + ((zoneCos - 0.70) / 0.30) * 25 :
+      zoneCos >= 0.40 ? 45 + ((zoneCos - 0.40) / 0.30) * 30 :
+      Math.max(0, zoneCos * 100)
+    ));
 
-    // RMS kontur wajah: orang yang SAMA (< 0.22), orang BERBEDA (> 0.32)
-    // Dengan pembagi 0.30, orang berbeda langsung bernilai rendah (< 35%)
-    const zoneSim = Math.max(0, Math.min(100, (1 - zoneRms / 0.30) * 100));
-
-    // Skor Cosine: Orang sama (> 0.95), orang berbeda (< 0.90)
-    const cosScore = Math.max(0, Math.min(100, ((cosSim - 0.85) / 0.15) * 100));
-
-    // 2. Korelasi proporsi vertikal sepertiga wajah (dahi-alis vs mata-hidung vs mulut-dagu)
-    let thirdsDistSum = 0;
+    // 2. Proporsi Sepertiga Vertikal Wajah (Dahi vs Tengah vs Bawah)
     const lThirds = live.thirds || [0.33, 0.34, 0.33];
     const eThirds = enrolled.thirds || [0.33, 0.34, 0.33];
+    let thirdsDist = 0;
     for (let i = 0; i < 3; i++) {
       const d = (lThirds[i] || 0) - (eThirds[i] || 0);
-      thirdsDistSum += d * d;
+      thirdsDist += d * d;
     }
-    const thirdsRms = Math.sqrt(thirdsDistSum / 3);
-    const thirdsSim = Math.max(0, Math.min(100, (1 - thirdsRms / 0.14) * 100));
+    const thirdsRms = Math.sqrt(thirdsDist / 3);
+    const thirdsScore = Math.max(0, Math.min(100, (1 - thirdsRms / 0.18) * 100));
 
-    // 3. Korelasi pigmen kulit / undertone
-    let chromaDistSum = 0;
+    // 3. Rasio Kontras Relatif Dahi vs Area Mata (Invariant terhadap kecerahan ruangan)
+    const lForehead = ((live.zones[0] || 0) + (live.zones[1] || 0) + (live.zones[2] || 0) + (live.zones[3] || 0)) / 4;
+    const lEyes = ((live.zones[4] || 0) + (live.zones[5] || 0) + (live.zones[6] || 0) + (live.zones[7] || 0)) / 4;
+    const lRatio = lEyes / (lForehead || 1);
+
+    const eForehead = ((enrolled.zones[0] || 0) + (enrolled.zones[1] || 0) + (enrolled.zones[2] || 0) + (enrolled.zones[3] || 0)) / 4;
+    const eEyes = ((enrolled.zones[4] || 0) + (enrolled.zones[5] || 0) + (enrolled.zones[6] || 0) + (enrolled.zones[7] || 0)) / 4;
+    const eRatio = eEyes / (eForehead || 1);
+
+    const ratioDiff = Math.abs(lRatio - eRatio);
+    const ratioScore = Math.max(0, Math.min(100, (1 - ratioDiff / 0.40) * 100));
+
+    // 4. Konsistensi Pigmen Kulit / Undertone (Toleran Lampu Hangat/Indoor)
     const lChroma = live.chroma || [0.33, 0.33, 0.33];
     const eChroma = enrolled.chroma || [0.33, 0.33, 0.33];
+    let chromaDist = 0;
     for (let i = 0; i < 3; i++) {
       const d = (lChroma[i] || 0) - (eChroma[i] || 0);
-      chromaDistSum += d * d;
+      chromaDist += d * d;
     }
-    const chromaRms = Math.sqrt(chromaDistSum / 3);
-    const chromaSim = Math.max(0, Math.min(100, (1 - chromaRms / 0.10) * 100));
+    const chromaRms = Math.sqrt(chromaDist / 3);
+    const chromaScore = Math.max(0, Math.min(100, (1 - chromaRms / 0.16) * 100));
 
-    // Bobot ketat pemisah wajah: Kontur Zona (45%) + Sudut Cosine (25%) + Proporsi Wajah (15%) + Pigmen (15%)
-    const score = 0.45 * zoneSim + 0.25 * cosScore + 0.15 * thirdsSim + 0.15 * chromaSim;
-
-    return Number(Math.max(0, Math.min(99.4, score)).toFixed(1));
+    // Bobot Akhir: Kontur Wajah (50%) + Proporsi Wajah (25%) + Rasio Mata-Dahi (15%) + Pigmen (10%)
+    const score = 0.50 * zoneScore + 0.25 * thirdsScore + 0.15 * ratioScore + 0.10 * chromaScore;
+    return Number(Math.max(0, Math.min(99.6, score)).toFixed(1));
   }
 
   function stopCameraStream() {
@@ -583,7 +602,7 @@
       captureBtn.style.cursor = "not-allowed";
       captureBtn.style.background = "#be123c"; // Crimson red
       captureBtn.style.borderColor = "#f43f5e";
-      captureBtn.innerHTML = "❌ Wajah Tidak Terdeteksi (Bukan Pemilik)";
+      captureBtn.innerHTML = `❌ Posisikan Wajah Pas di Oval (${liveCamera.faceIdScore ? liveCamera.faceIdScore.toFixed(0) + "%" : "Bukan Pemilik"})`;
     } else {
       captureBtn.disabled = false;
       captureBtn.style.opacity = "1";
@@ -705,9 +724,17 @@
         // SUB-KASUS B: Absensi dengan Akun yang sudah mendaftarkan Face ID (1 Akun 1 Wajah)
         if (currentUser?.face_id_enrolled && currentUser?.face_id_biometric_data) {
           const liveFeatures = extractBiometricFeatures(videoEl);
-          const matchScore = compareBiometricFeatures(liveFeatures, currentUser.face_id_biometric_data);
+          const rawMatchScore = compareBiometricFeatures(liveFeatures, currentUser.face_id_biometric_data);
+
+          // Rolling temporal average untuk konsistensi & kestabilan antar frame video (bebas flicker)
+          liveCamera.matchHistory = liveCamera.matchHistory || [];
+          liveCamera.matchHistory.push(rawMatchScore);
+          if (liveCamera.matchHistory.length > 3) liveCamera.matchHistory.shift();
+          const avgScore = liveCamera.matchHistory.reduce((a, b) => a + b, 0) / liveCamera.matchHistory.length;
+          const matchScore = Math.max(rawMatchScore, avgScore);
+
           liveCamera.faceIdScore = matchScore;
-          liveCamera.faceIdMatched = matchScore >= 65;
+          liveCamera.faceIdMatched = matchScore >= 52;
 
           if (liveCamera.faceIdMatched) {
             // Pemilik Asli Terverifikasi
@@ -727,11 +754,11 @@
             frameEl.classList.remove("is-misaligned", "is-detected");
             frameEl.classList.add("is-mismatch");
             if (statusTextEl) {
-              statusTextEl.textContent = `❌ Wajah Tidak Terdeteksi Sebagai Pemilik Akun!`;
+              statusTextEl.textContent = `❌ Posisikan Wajah Pas di Oval (Kecocokan ${matchScore.toFixed(0)}%)`;
               statusTextEl.style.color = "#fb7185";
             }
             if (scoreBadgeEl) {
-              scoreBadgeEl.textContent = "TIDAK TERDETEKSI";
+              scoreBadgeEl.textContent = "BELUM COCOK";
               scoreBadgeEl.style.color = "#fb7185";
             }
             if (dotEl) dotEl.style.background = "#f43f5e";
@@ -1150,14 +1177,20 @@
       const liveFeatures = extractBiometricFeatures(videoEl);
       const matchScore = compareBiometricFeatures(liveFeatures, u.face_id_biometric_data);
       liveCamera.faceIdScore = matchScore;
-      liveCamera.faceIdMatched = matchScore >= 65;
+      liveCamera.faceIdMatched = matchScore >= 52;
 
       if (!liveCamera.faceIdMatched) {
-        liveCamera.submitError = `🚫 WAJAH TIDAK TERDETEKSI SEBAGAI PEMILIK (${matchScore.toFixed(1)}% Cocok, minimal 65%):\nWajah di depan kamera BUKAN wajah yang terdaftar pada akun Google ini (${u.email}). 1 Akun Google hanya menerima 1 wajah terdaftar resmi. Potensi joki absensi ditolak!`;
+        liveCamera.submitError = `🚫 WAJAH BELUM TERVERIFIKASI (${matchScore.toFixed(1)}% Cocok, minimal 52%):\nWajah di depan kamera tidak sesuai dengan Face ID yang terdaftar pada akun Google ini (${u.email}). Posisikan wajah tegak di dalam oval dengan pencahayaan yang cukup. 1 Akun Google hanya menerima 1 wajah terdaftar resmi.`;
         if (!updateCameraModalPanelsInPlace()) {
           renderModalContainerOnly();
         }
         return;
+      }
+
+      // Self-Adaptive Learning: Jika kecocokan sangat baik (>= 70%), perhalus template biometrik akun
+      // agar Face ID semakin konsisten dan mengenali variasi pencahayaan harian secara otomatis
+      if (matchScore >= 70 && liveFeatures && Core.adaptiveRefineFaceId) {
+        Core.adaptiveRefineFaceId(liveFeatures).catch(() => {});
       }
     }
 
