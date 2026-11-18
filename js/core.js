@@ -215,6 +215,7 @@
 
     signedUrls: {}, // path -> { url, exp }
     serverClockOffsetMs: 0,
+    manualShiftOverrideId: null, // Diisi hanya jika karyawan mengetuk pilihan shift manual di sesi ini
   };
 
   let uiNotifyCallback = null;
@@ -799,15 +800,28 @@ window.SUKA_LATTE_CONFIG = {
     if (list.length === 0) return null;
 
     const tz = state.settings.operational_timezone || "Asia/Makassar";
-    let parts;
-    if (targetDateOrParts && typeof targetDateOrParts === "object" && typeof targetDateOrParts.hours === "number") {
-      parts = targetDateOrParts;
+    let hNum = null;
+    let mNum = null;
+
+    if (
+      targetDateOrParts &&
+      typeof targetDateOrParts === "object" &&
+      !(targetDateOrParts instanceof Date) &&
+      (typeof targetDateOrParts.hour === "number" || typeof targetDateOrParts.hours === "number")
+    ) {
+      hNum = typeof targetDateOrParts.hour === "number" ? targetDateOrParts.hour : targetDateOrParts.hours;
+      mNum = typeof targetDateOrParts.minute === "number" ? targetDateOrParts.minute : (targetDateOrParts.minutes || 0);
     } else {
       const now = targetDateOrParts instanceof Date ? targetDateOrParts : getServerNow();
-      parts = getTimePartsInTimezone(now, tz);
+      const parts = getTimePartsInTimezone(now, tz);
+      hNum = parts.hour;
+      mNum = parts.minute;
     }
 
-    const currentMins = parts.hours * 60 + parts.minutes;
+    const currentMins = Number(hNum) * 60 + Number(mNum);
+    if (!Number.isFinite(currentMins)) {
+      return list[0];
+    }
 
     // Prioritaskan shift reguler (Pagi, Middle, Siang) - hindari Full Day sebagai default otomatis
     const regularShifts = list.filter((s) => !String(s.name).toLowerCase().includes("full"));
@@ -842,6 +856,28 @@ window.SUKA_LATTE_CONFIG = {
     return selected;
   }
 
+  function getEffectiveCheckInShift(shifts, myToday) {
+    const all = shifts || state.shifts || [];
+    const active = all.filter((sh) => sh.status === "active");
+
+    // 1. Jika sudah Check In hari ini, kunci ke shift transaksi Check In (Check Out tidak berubah otomatis)
+    if (myToday?.shift_id) {
+      return all.find((sh) => sh.id === myToday.shift_id) || active[0] || all[0] || null;
+    }
+
+    // 2. Jika karyawan mengetuk tombol pilih shift manual pada sesi ini (misal Shift Full Day), hormati pilihannya
+    if (state.manualShiftOverrideId) {
+      const manual = active.find((sh) => sh.id === state.manualShiftOverrideId);
+      if (manual) return manual;
+    }
+
+    // 3. Default otomatis berdasarkan jam WITA real-time (pergantian otomatis 30 menit sebelum shift mulai)
+    const autoShift = getAutoRecommendedShift(active);
+    if (autoShift) return autoShift;
+
+    return all.find((sh) => sh.id === state.currentUser?.shift_id) || active[0] || all[0] || null;
+  }
+
   async function selectMyActiveShift(shiftId) {
     if (!state.supabase || !isApprovedUser()) {
       throw new Error("Sesi Anda tidak aktif atau belum disetujui Admin.");
@@ -855,6 +891,7 @@ window.SUKA_LATTE_CONFIG = {
     if (state.currentUser) {
       state.currentUser.shift_id = shiftId;
     }
+    state.manualShiftOverrideId = shiftId;
     await refreshAllData();
     return data;
   }
@@ -872,6 +909,9 @@ window.SUKA_LATTE_CONFIG = {
     if (error) throw new Error(error.message);
     if (state.currentUser) {
       state.currentUser.shift_id = newShiftId;
+    }
+    if (!data?.has_attendance) {
+      state.manualShiftOverrideId = newShiftId;
     }
     await refreshAllData();
     return data;
@@ -946,6 +986,7 @@ window.SUKA_LATTE_CONFIG = {
         await safeRemoveOrphanPhoto(storagePath);
         throw new Error(rpcRes.error.message);
       }
+      state.manualShiftOverrideId = null;
       await refreshAllData();
       return rpcRes.data;
     } else {
@@ -964,6 +1005,7 @@ window.SUKA_LATTE_CONFIG = {
         await safeRemoveOrphanPhoto(storagePath);
         throw new Error(rpcRes.error.message);
       }
+      state.manualShiftOverrideId = null;
       await refreshAllData();
       return rpcRes.data;
     }
@@ -1522,6 +1564,7 @@ window.SUKA_LATTE_CONFIG = {
     signInWithGoogle,
     signOut,
     getAutoRecommendedShift,
+    getEffectiveCheckInShift,
     selectMyActiveShift,
     switchMyTodayShift,
     changeEmployeeRoleFast,

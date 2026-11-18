@@ -1275,6 +1275,9 @@
 
   function getSmartRecommendedShiftId(activeShifts) {
     if (!activeShifts || activeShifts.length === 0) return null;
+    if (Core.state.manualShiftOverrideId && activeShifts.some((sh) => sh.id === Core.state.manualShiftOverrideId)) {
+      return Core.state.manualShiftOverrideId;
+    }
     const autoShift = Core.getAutoRecommendedShift(activeShifts);
     if (autoShift) return autoShift.id;
     if (Core.state.currentUser?.shift_id && activeShifts.some((sh) => sh.id === Core.state.currentUser.shift_id)) {
@@ -4428,6 +4431,7 @@
         const sid = btn.getAttribute("data-id");
         if (sid) {
           liveCamera.shiftId = sid;
+          Core.state.manualShiftOverrideId = sid;
           render();
         }
         return;
@@ -5722,17 +5726,56 @@
   });
 
   // ==========================================================================
-  // 9. DETAK JAM SERVER RESMI WITA REAL-TIME & INISIALISASI APLIKASI
+  // 9. DETAK JAM SERVER RESMI WITA REAL-TIME & PERGANTIAN SHIFT OTOMATIS LIVE
   // ==========================================================================
+  let lastAutoShiftId = null;
+
   setInterval(() => {
-    const timeEl = document.getElementById("live-server-clock-time");
-    const dateEl = document.getElementById("live-server-clock-date");
-    if (!timeEl && !dateEl) return;
     const tz = Core.state.settings.operational_timezone || "Asia/Makassar";
     const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+    const timeEl = document.getElementById("live-server-clock-time");
+    const dateEl = document.getElementById("live-server-clock-date");
     if (timeEl) timeEl.textContent = parts.timeString;
     if (dateEl) {
       dateEl.textContent = `Tanggal: ${parts.dateString} • 📁 ${parts.archiveFolderLabel}`;
+    }
+
+    // Pergantian shift otomatis secara real-time saat melewati batas H-30 menit (06:30 Pagi, 11:30 Middle, 14:00 Siang)
+    if (Core.state.shifts && Core.state.shifts.length > 0 && Core.isApprovedUser()) {
+      const currAuto = Core.getAutoRecommendedShift(Core.state.shifts, parts);
+      if (currAuto) {
+        if (lastAutoShiftId && currAuto.id !== lastAutoShiftId) {
+          // Waktu baru saja memasuki jendela shift berikutnya! Reset override & alihkan otomatis khusus Check In
+          Core.state.manualShiftOverrideId = null;
+          const u = Core.state.currentUser;
+          const myToday = Core.state.attendance.find(
+            (a) => a.employee_id === u?.id && a.work_date === parts.dateString
+          );
+          const hasCheckedIn = Boolean(myToday?.check_in_at);
+
+          if (!hasCheckedIn) {
+            if (
+              uiState.modal &&
+              uiState.modal.type === "camera_attendance" &&
+              liveCamera.mode === "check_in" &&
+              !liveCamera.capturedDataUrl &&
+              !liveCamera.submitting
+            ) {
+              liveCamera.shiftId = currAuto.id;
+              renderModalContainerOnly();
+              attachStreamToVideoElement();
+            } else if (!uiState.modal) {
+              render();
+            }
+            showBanner(
+              true,
+              `⚡ Pergantian Shift Otomatis: Jendela Check In ${currAuto.name} (${String(currAuto.start_time).slice(0, 5)}–${String(currAuto.end_time).slice(0, 5)} WITA) kini aktif!`,
+              7000
+            );
+          }
+        }
+        lastAutoShiftId = currAuto.id;
+      }
     }
   }, 1000);
 

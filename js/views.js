@@ -1041,16 +1041,13 @@
 
     // Alih Shift Otomatis 30 Menit Sebelum Shift Mulai (Khusus Check In):
     // - Jika sudah check in hari ini, kunci ke shift transaksi check in (myToday.shift_id)
-    // - Jika belum check in, otomatis beralih ke shift rekomendasi jam WITA (H-30m)
-    const autoShift = Core.getAutoRecommendedShift ? Core.getAutoRecommendedShift(activeShifts) : null;
+    // - Jika belum check in, otomatis beralih ke shift rekomendasi jam WITA (H-30m) kecuali karyawan memilih manual di sesi ini
     const myShift =
-      myToday?.shift_id
-        ? s.shifts.find((sh) => sh.id === myToday.shift_id)
-        : autoShift ||
-          scheduledShift ||
-          s.shifts.find((sh) => sh.id === u.shift_id) ||
-          activeShifts[0] ||
-          s.shifts[0];
+      (Core.getEffectiveCheckInShift ? Core.getEffectiveCheckInShift(s.shifts, myToday) : null) ||
+      scheduledShift ||
+      s.shifts.find((sh) => sh.id === u.shift_id) ||
+      activeShifts[0] ||
+      s.shifts[0];
     const selectedShiftId = myShift ? myShift.id : u.shift_id;
     const { todayHolidays, myTodayApprovedLeave } = getHolidayAndLeaveSummary(parts.dateString, u.id);
 
@@ -2482,14 +2479,11 @@
     const tz = s.settings.operational_timezone || "Asia/Makassar";
     const myOutlet = s.outlets.find((o) => o.id === u.outlet_id) || s.outlets[0];
     const activeShifts = s.shifts.filter((sh) => sh.status === "active");
-    const autoShift = Core.getAutoRecommendedShift ? Core.getAutoRecommendedShift(activeShifts) : null;
     const myShift =
-      myToday?.shift_id
-        ? s.shifts.find((sh) => sh.id === myToday.shift_id)
-        : autoShift ||
-          s.shifts.find((sh) => sh.id === u.shift_id) ||
-          activeShifts[0] ||
-          s.shifts[0];
+      (Core.getEffectiveCheckInShift ? Core.getEffectiveCheckInShift(s.shifts, myToday) : null) ||
+      s.shifts.find((sh) => sh.id === u.shift_id) ||
+      activeShifts[0] ||
+      s.shifts[0];
 
     const pendingUsers = s.profiles.filter(
       (p) => p.status === "pending_approval" || (!p.first_login_approved && p.status !== "rejected")
@@ -2559,7 +2553,7 @@
               Outlet Aktif: <strong style="color:var(--white);">${esc(myOutlet ? myOutlet.name : "-")}</strong> •
               Shift: <strong style="color:var(--white);">${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
             </p>
-            ${renderShiftSelectorHtml(s.shifts, myToday?.shift_id || autoShift?.id || u.shift_id || myShift?.id, !canCheckIn)}
+            ${renderShiftSelectorHtml(s.shifts, myToday?.shift_id || myShift?.id || u.shift_id, !canCheckIn)}
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
               ${
                 canCheckIn
