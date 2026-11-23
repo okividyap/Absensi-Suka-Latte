@@ -216,6 +216,21 @@
     signedUrls: {}, // path -> { url, exp }
     serverClockOffsetMs: 0,
     manualShiftOverrideId: null, // Diisi hanya jika karyawan mengetuk pilihan shift manual di sesi ini
+
+    dutyTracker: {
+      active: false,
+      watchId: null,
+      currentGps: null, // { lat, lng, accuracy, timestamp, distance, inside, outletName }
+      lastAlertAt: {
+        outOfBounds: 0,
+        overtime: 0,
+      },
+      status: "idle", // "idle" | "inside" | "outside"
+      notificationPermission:
+        typeof window !== "undefined" && "Notification" in window
+          ? Notification.permission
+          : "unsupported",
+    },
   };
 
   let uiNotifyCallback = null;
@@ -1535,6 +1550,29 @@ window.SUKA_LATTE_CONFIG = {
     return res.data;
   }
 
+  function getMyTodayAttendance(dateString) {
+    const u = state.currentUser;
+    if (!u) return null;
+    const tz = state.settings.operational_timezone || "Asia/Makassar";
+    const parts = getTimePartsInTimezone(getServerNow(), tz);
+    const todayStr = dateString || parts.dateString;
+    const open = state.attendance.find(
+      (a) => a.employee_id === u.id && a.check_in_at && !a.check_out_at
+    );
+    if (open) return open;
+    return (
+      state.attendance.find(
+        (a) => a.employee_id === u.id && a.work_date === todayStr
+      ) || null
+    );
+  }
+
+  function getOutletForUser(user) {
+    const u = user || state.currentUser;
+    if (!u) return state.outlets[0] || null;
+    return state.outlets.find((o) => o.id === u.outlet_id) || state.outlets[0] || null;
+  }
+
   window.SukaCore = {
     state,
     DEFAULT_SETTINGS,
@@ -1586,5 +1624,7 @@ window.SUKA_LATTE_CONFIG = {
     createShiftSwapRequest,
     respondShiftSwapRequest,
     cancelShiftSwapRequest,
+    getMyTodayAttendance,
+    getOutletForUser,
   };
 })();

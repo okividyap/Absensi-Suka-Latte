@@ -371,6 +371,151 @@
   }
 
   // ==========================================================================
+  // 4A. WIDGET PATROLI LOKASI HP & STATUS BERTUGAS REAL-TIME (DUTY TRACKER)
+  // ==========================================================================
+  function renderDutyLiveTrackerWidget(myToday, myOutlet, myShift, tz) {
+    if (!myToday || !myToday.check_in_at || myToday.check_out_at) return "";
+
+    const s = Core.state;
+    const tracker = s.dutyTracker || {};
+    const gps = tracker.currentGps;
+    const now = Core.getServerNow();
+    const checkInDate = new Date(myToday.check_in_at);
+    const elapsedMs = Math.max(0, now.getTime() - checkInDate.getTime());
+    const elapsedMins = Math.floor(elapsedMs / 60000);
+    const elapsedSecs = Math.floor((elapsedMs % 60000) / 1000);
+    const hh = String(Math.floor(elapsedMins / 60)).padStart(2, "0");
+    const mm = String(elapsedMins % 60).padStart(2, "0");
+    const ss = String(elapsedSecs).padStart(2, "0");
+
+    const targetMins = 480; // Standar 8 Jam Kerja
+    const progressPct = Math.min(100, Math.round((elapsedMins / targetMins) * 100));
+    const isOvertime = elapsedMins >= targetMins;
+
+    const hasGps = Boolean(gps && typeof gps.lat === "number");
+    const isInside = gps ? gps.inside : true;
+    const distText = gps && gps.distance !== null ? `${Math.round(gps.distance)} m` : "...";
+    const radius = myOutlet?.geofence_radius_meters || 50;
+
+    const notifPerm =
+      tracker.notificationPermission ||
+      (typeof Notification !== "undefined" ? Notification.permission : "default");
+
+    return `
+      <div id="duty-live-tracker-card" class="card" style="margin-bottom:18px;border:2px solid ${isOvertime ? "#f59e0b" : !isInside ? "#ef4444" : "#10b981"};background:${isOvertime ? "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)" : !isInside ? "linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)" : "linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)"};box-shadow:0 8px 24px rgba(0,0,0,0.06);position:relative;overflow:hidden;">
+        <!-- Header Strip Status -->
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;border-bottom:1px solid rgba(0,0,0,0.08);padding-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${!isInside ? "#ef4444" : isOvertime ? "#f59e0b" : "#10b981"};box-shadow:0 0 0 3px ${!isInside ? "rgba(239,68,68,0.3)" : isOvertime ? "rgba(245,158,11,0.3)" : "rgba(16,185,129,0.3)"};"></span>
+            <strong style="font-size:13.5px;color:${!isInside ? "#991b1b" : isOvertime ? "#92400e" : "#065f46"};text-transform:uppercase;letter-spacing:0.04em;">
+              ☕ Sedang Bertugas: ${esc(myShift ? myShift.name : "Shift Aktif")}
+            </strong>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span class="badge" style="background:${hasGps ? (isInside ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)") : "rgba(245,158,11,0.2)"};color:${hasGps ? (isInside ? "#047857" : "#b91c1c") : "#b45309"};font-weight:700;font-size:11px;">
+              📍 ${hasGps ? (isInside ? "Dalam Radius Kafe" : "Di Luar Area Kafe") : "Mencari GPS..."}
+            </span>
+            ${
+              notifPerm !== "granted"
+                ? `<button type="button" class="btn btn-warning btn-xs" data-action="request-duty-notification" style="font-size:10.5px;padding:3px 8px;font-weight:700;" title="Aktifkan notifikasi otomatis di layar HP">
+                    🔔 Aktifkan Notif HP
+                  </button>`
+                : `<span class="badge badge-success" style="font-size:10px;">🔔 Notif HP Aktif</span>`
+            }
+          </div>
+        </div>
+
+        <!-- Warning Box jika Di Luar Radius -->
+        ${
+          !isInside
+            ? `<div style="background:#fee2e2;border:1.5px solid #f87171;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">
+                <span style="font-size:22px;line-height:1;">⚠️</span>
+                <div>
+                  <div style="font-size:13.5px;font-weight:800;color:#991b1b;">
+                    Shift belum selesai tolong lanjutkan kerja terlebih dahulu!
+                  </div>
+                  <div style="font-size:11.5px;color:#b91c1c;margin-top:2px;">
+                    HP Anda terdeteksi berada di luar area outlet <strong>${esc(myOutlet?.name || "Suka Latte")}</strong> (Jarak: <strong>${distText}</strong>, Batas: <strong>${radius}m</strong>). Silakan kembali ke area kafe untuk melanjutkan shift bertugas.
+                  </div>
+                </div>
+              </div>`
+            : ""
+        }
+
+        <!-- Warning Box jika >= 8 Jam -->
+        ${
+          isOvertime
+            ? `<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">
+                <span style="font-size:22px;line-height:1;">⏰</span>
+                <div style="flex:1;">
+                  <div style="font-size:13.5px;font-weight:800;color:#92400e;">
+                    Jam shift sudah selesai tolong melakukan absensi check out!
+                  </div>
+                  <div style="font-size:11.5px;color:#b45309;margin-top:2px;">
+                    Durasi kerja Anda hari ini telah mencapai batas 8 jam. Silakan lakukan absensi check out selfie pulang sekarang.
+                  </div>
+                </div>
+                <button type="button" class="btn btn-amber btn-sm" data-action="open-camera" data-mode="check_out" style="white-space:nowrap;font-weight:700;">
+                  📷 Check Out Sekarang
+                </button>
+              </div>`
+            : ""
+        }
+
+        <!-- Grid Status: Live Timer & Lokasi Geofence -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-bottom:12px;">
+          <!-- Timer Durasi Kerja -->
+          <div style="background:rgba(255,255,255,0.7);backdrop-filter:blur(4px);padding:12px 14px;border-radius:12px;border:1px solid rgba(0,0,0,0.06);">
+            <div style="font-size:11px;font-weight:700;color:#4b5563;text-transform:uppercase;letter-spacing:0.04em;">
+              Durasi Kerja Berjalan
+            </div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin:4px 0;">
+              <span id="live-duty-timer" class="mono" style="font-size:24px;font-weight:800;color:#111827;">${hh}:${mm}:${ss}</span>
+              <span style="font-size:11px;color:#6b7280;">/ target 08:00:00</span>
+            </div>
+            <!-- Progress Bar Menuju 8 Jam -->
+            <div style="width:100%;height:7px;background:#e5e7eb;border-radius:6px;overflow:hidden;margin-top:6px;">
+              <div id="live-duty-progress-bar" style="width:${progressPct}%;height:100%;background:${isOvertime ? "#f59e0b" : "#10b981"};border-radius:6px;transition:width 0.4s ease;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#6b7280;margin-top:4px;">
+              <span>Masuk: ${Core.formatOperationalDateTime(myToday.check_in_at, tz, false).slice(12, 17)} WITA</span>
+              <span>${progressPct}% Target Shift (8 Jam)</span>
+            </div>
+          </div>
+
+          <!-- Radar Posisi HP & Geofence -->
+          <div style="background:rgba(255,255,255,0.7);backdrop-filter:blur(4px);padding:12px 14px;border-radius:12px;border:1px solid rgba(0,0,0,0.06);">
+            <div style="font-size:11px;font-weight:700;color:#4b5563;text-transform:uppercase;letter-spacing:0.04em;">
+              Patroli Lokasi HP Pengguna
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin:4px 0;">
+              <span id="live-duty-location-status" style="font-size:14px;font-weight:800;color:${!isInside ? "#dc2626" : "#059669"};">
+                ${hasGps ? (isInside ? "✓ Terverifikasi di Kafe" : "⚠️ Berada di Luar Outlet") : "🔍 Mendeteksi Lokasi HP..."}
+              </span>
+            </div>
+            <div id="live-duty-distance-badge" class="mono" style="font-size:11.5px;color:#4b5563;margin-top:2px;">
+              Jarak ke titik outlet: <strong>${distText}</strong> (Batas radius: <strong>${radius}m</strong>)
+            </div>
+            <div style="font-size:10.5px;color:#6b7280;margin-top:4px;">
+              ${hasGps && gps.accuracy ? `Akurasi sinyal GPS: ±${Math.round(gps.accuracy)}m • GPS Otomatis Aktif` : "Sistem otomatis mendeteksi keberadaan HP selama shift"}
+            </div>
+          </div>
+        </div>
+
+        <!-- Tombol Aksi Cepat Check Out -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(0,0,0,0.06);">
+          <div style="font-size:11.5px;color:#4b5563;">
+            Shift Anda masih berlaku. Saat jam kerja selesai, tekan tombol di samping untuk mengakhiri tugas.
+          </div>
+          <button type="button" class="btn btn-amber" data-action="open-camera" data-mode="check_out" style="padding:8px 18px;font-weight:800;font-size:12.5px;">
+            📷 Ambil Foto Check Out Sekarang →
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // ==========================================================================
   // 4. PETA RADAR GEOFENCE & KARTU BUKTI SELFIE BERDAMPINGAN
   // ==========================================================================
   function renderGeofenceMapCard(outlet, userGps) {
@@ -1119,6 +1264,8 @@
           : ""
       }
 
+      ${canCheckOut ? renderDutyLiveTrackerWidget(myToday, myOutlet, myShift, tz) : ""}
+
       <!-- 3 LANGKAH MUDAH UNTUK KARYAWAN (TOMBOL AKTIF DAPAT DIKLIK) -->
       <div class="staff-steps-grid">
         <button
@@ -1287,7 +1434,7 @@
 
       <div class="grid-12">
         <div class="col-7">
-          ${renderGeofenceMapCard(myOutlet, null)}
+          ${renderGeofenceMapCard(myOutlet, canCheckOut && s.dutyTracker ? s.dutyTracker.currentGps : null)}
         </div>
         <div class="col-5 card" style="display:flex;flex-direction:column;justify-content:space-between;gap:14px;">
           <div>
@@ -2542,6 +2689,8 @@
           : ""
       }
 
+      ${canCheckOut ? renderDutyLiveTrackerWidget(myToday, myOutlet, myShift, tz) : ""}
+
       <div class="hero-banner">
         <div class="grid-12" style="align-items:center;">
           <div class="col-7">
@@ -2737,7 +2886,7 @@
 
       <div class="grid-12">
         <div class="col-7">
-          ${renderGeofenceMapCard(myOutlet, null)}
+          ${renderGeofenceMapCard(myOutlet, canCheckOut && s.dutyTracker ? s.dutyTracker.currentGps : null)}
         </div>
         <div class="col-5 card" style="display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
           <div>
@@ -4120,6 +4269,7 @@
     renderGoogleLoginOrBootstrapScreen,
     renderPendingOrBlockedScreen,
     renderGeofenceMapCard,
+    renderDutyLiveTrackerWidget,
     renderAttendanceRecordCard,
     renderMemberAttendanceHome,
     renderMemberScheduleView,

@@ -1335,6 +1335,270 @@
   }
 
   // ==========================================================================
+  // 2B. PATROLI TUGAS LOKASI REAL-TIME & NOTIFIKASI SHIFT HP OTOMATIS
+  // ==========================================================================
+
+  // 1. Audio Synthesizer (Web Audio API) untuk Peringatan Suara di HP Pengguna
+  function playDutyChimeAlert(type) {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      if (type === "out_of_bounds") {
+        // Nada peringatan ganda menurun (peringatan keluar radius outlet)
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(620, now);
+        osc.frequency.setValueAtTime(420, now + 0.18);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+        osc.start(now);
+        osc.stop(now + 0.48);
+      } else if (type === "shift_complete") {
+        // Nada melodi 3-tingkat selesai shift (C5 -> E5 -> G5)
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.setValueAtTime(659.25, now + 0.14);
+        osc.frequency.setValueAtTime(783.99, now + 0.28);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+        osc.start(now);
+        osc.stop(now + 0.62);
+      } else if (type === "welcome_back") {
+        // Nada ramah selamat kembali ke area kafe
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.setValueAtTime(587.33, now + 0.15);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+        osc.start(now);
+        osc.stop(now + 0.42);
+      }
+    } catch {
+      // Audio playback ditangani tanpa error jika perangkat membisukan audio
+    }
+  }
+
+  // 2. Notifikasi Push Sistem HP (Web Notification API)
+  function sendDutyPushNotification(title, body, tag) {
+    try {
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+      if (Notification.permission === "granted") {
+        const notif = new Notification(title, {
+          body,
+          icon: "assets/branding/suka-logo.png",
+          badge: "assets/branding/suka-logo.png",
+          tag: tag || "suka-latte-duty",
+          renotify: true,
+        });
+        notif.onclick = () => {
+          window.focus();
+          notif.close();
+        };
+      }
+    } catch {
+      // Tangani browser mobile jika constructor restricted
+    }
+  }
+
+  async function requestDutyNotificationPermission() {
+    if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+    if (Notification.permission === "default") {
+      try {
+        const perm = await Notification.requestPermission();
+        if (Core.state.dutyTracker) {
+          Core.state.dutyTracker.notificationPermission = perm;
+        }
+        return perm;
+      } catch {
+        return Notification.permission;
+      }
+    }
+    return Notification.permission;
+  }
+
+  // 3. Pemrosesan Posisi GPS Patroli Tugas & Deteksi Keluar Area Outlet
+  function handleDutyGpsUpdate(pos) {
+    const s = Core.state;
+    if (!s.dutyTracker || !s.dutyTracker.active) return;
+    const u = s.currentUser;
+    if (!u) return;
+
+    const myOutlet = Core.getOutletForUser ? Core.getOutletForUser(u) : s.outlets[0];
+    if (!myOutlet || typeof myOutlet.latitude !== "number" || typeof myOutlet.longitude !== "number") return;
+
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    const accuracy = pos.coords.accuracy || 0;
+    const dist = Core.calculateDistanceMeters(lat, lng, myOutlet.latitude, myOutlet.longitude);
+
+    // Toleransi radius: radius geofence outlet + akurasi perangkat (maksimal toleransi 25 meter)
+    const effectiveRadius = (myOutlet.geofence_radius_meters || 50) + Math.min(accuracy, 25);
+    const inside = dist !== null && dist <= effectiveRadius;
+
+    const prevStatus = s.dutyTracker.status;
+    s.dutyTracker.status = inside ? "inside" : "outside";
+    s.dutyTracker.currentGps = {
+      lat,
+      lng,
+      accuracy,
+      timestamp: Date.now(),
+      distance: dist,
+      inside,
+      outletName: myOutlet.name,
+    };
+
+    // Update elemen UI radar/status secara langsung di layar jika ada
+    updateLiveDutyWidgets(inside, dist, myOutlet);
+
+    const now = Date.now();
+
+    if (!inside) {
+      // PENGGUNA TERDETEKSI BERADA DI LUAR AREA OUTLET
+      const lastAlert = s.dutyTracker.lastAlertAt.outOfBounds || 0;
+      const shouldAlert = prevStatus !== "outside" || (now - lastAlert >= 180000); // Alert pertama atau setiap 3 menit
+
+      if (shouldAlert) {
+        s.dutyTracker.lastAlertAt.outOfBounds = now;
+        const distText = dist !== null ? `${Math.round(dist)} meter` : "di luar batas";
+        const alertMsg = `⚠️ Shift belum selesai tolong lanjutkan kerja terlebih dahulu! Anda terdeteksi berada di luar area ${myOutlet.name} (${distText}). Silakan kembali ke area kafe.`;
+
+        // 1. Audio Chime peringatan ke HP
+        playDutyChimeAlert("out_of_bounds");
+
+        // 2. Notifikasi Sistem HP
+        sendDutyPushNotification(
+          "⚠️ Shift Belum Selesai!",
+          "Shift belum selesai tolong lanjutkan kerja terlebih dahulu! Anda terdeteksi berada di luar area outlet.",
+          "duty-out-of-bounds"
+        );
+
+        // 3. Banner peringatan mencolok di layar
+        showBanner(false, alertMsg, 12000);
+
+        // Jika status baru saja berubah dari dalam ke luar, render ulang agar card berubah warna merah
+        if (prevStatus !== "outside") {
+          render();
+        }
+      }
+    } else {
+      // PENGGUNA KEMBALI KE DALAM AREA OUTLET
+      if (prevStatus === "outside") {
+        playDutyChimeAlert("welcome_back");
+        showBanner(true, `✓ Anda telah kembali ke area ${myOutlet.name}. Selamat melanjutkan kerja!`, 5000);
+        render(); // render ulang agar card kembali hijau
+      }
+    }
+  }
+
+  function updateLiveDutyWidgets(inside, dist, myOutlet) {
+    const locEl = document.getElementById("live-duty-location-status");
+    if (locEl) {
+      locEl.textContent = inside ? "✓ Terverifikasi di Kafe" : "⚠️ Berada di Luar Outlet";
+      locEl.style.color = inside ? "#059669" : "#dc2626";
+    }
+
+    const distEl = document.getElementById("live-duty-distance-badge");
+    if (distEl) {
+      const distText = dist !== null ? `${Math.round(dist)} m` : "...";
+      const radius = myOutlet?.geofence_radius_meters || 50;
+      distEl.innerHTML = `Jarak ke titik outlet: <strong>${distText}</strong> (Batas radius: <strong>${radius}m</strong>)`;
+    }
+  }
+
+  // 4. Memulai & Menghentikan Patroli Lokasi Tugas
+  function startDutyShiftWatcher() {
+    if (!navigator.geolocation) return;
+    if (!Core.state.dutyTracker) {
+      Core.state.dutyTracker = {
+        active: false,
+        watchId: null,
+        currentGps: null,
+        lastAlertAt: { outOfBounds: 0, overtime: 0 },
+        status: "idle",
+        notificationPermission: typeof Notification !== "undefined" ? Notification.permission : "unsupported",
+      };
+    }
+
+    if (Core.state.dutyTracker.active && Core.state.dutyTracker.watchId !== null) {
+      return; // Sudah berjalan
+    }
+
+    Core.state.dutyTracker.active = true;
+    requestDutyNotificationPermission();
+
+    // Ambil posisi awal segera
+    navigator.geolocation.getCurrentPosition(
+      (pos) => handleDutyGpsUpdate(pos),
+      () => {},
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+
+    // Pantau posisi perangkat secara berkala selama shift aktif
+    if (typeof navigator.geolocation.watchPosition === "function") {
+      Core.state.dutyTracker.watchId = navigator.geolocation.watchPosition(
+        (pos) => handleDutyGpsUpdate(pos),
+        (err) => {
+          console.warn("Duty GPS watcher notice:", err?.message || err);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 25000,
+          maximumAge: 15000,
+        }
+      );
+    }
+  }
+
+  function stopDutyShiftWatcher() {
+    if (Core.state.dutyTracker && Core.state.dutyTracker.watchId !== null) {
+      if (navigator.geolocation && navigator.geolocation.clearWatch) {
+        navigator.geolocation.clearWatch(Core.state.dutyTracker.watchId);
+      }
+      Core.state.dutyTracker.watchId = null;
+    }
+    if (Core.state.dutyTracker) {
+      Core.state.dutyTracker.active = false;
+      Core.state.dutyTracker.status = "idle";
+      Core.state.dutyTracker.currentGps = null;
+      Core.state.dutyTracker.lastAlertAt.outOfBounds = 0;
+      Core.state.dutyTracker.lastAlertAt.overtime = 0;
+    }
+  }
+
+  function syncDutyLocationCheck() {
+    if (!Core.isApprovedUser() || !Core.state.currentUser) return;
+    const tz = Core.state.settings.operational_timezone || "Asia/Makassar";
+    const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+    const myToday = Core.getMyTodayAttendance ? Core.getMyTodayAttendance(parts.dateString) : null;
+    const isOnDuty = Boolean(myToday?.check_in_at && !myToday?.check_out_at);
+
+    if (isOnDuty) {
+      if (!Core.state.dutyTracker?.active || Core.state.dutyTracker?.watchId === null) {
+        startDutyShiftWatcher();
+      } else if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => handleDutyGpsUpdate(pos),
+          () => {},
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+        );
+      }
+    } else {
+      if (Core.state.dutyTracker?.active) {
+        stopDutyShiftWatcher();
+      }
+    }
+  }
+
+  // ==========================================================================
   // 3. RENDER MODAL PRODUKSI
   // ==========================================================================
   function renderActiveModalHtml() {
@@ -2759,6 +3023,17 @@
 
     const canCheckIn = !todayAttendance;
     const canCheckOut = Boolean(openAttendance);
+
+    // Sinkronisasi status patroli lokasi tugas real-time
+    if (canCheckOut) {
+      if (!Core.state.dutyTracker?.active || Core.state.dutyTracker?.watchId === null) {
+        startDutyShiftWatcher();
+      }
+    } else {
+      if (Core.state.dutyTracker?.active) {
+        stopDutyShiftWatcher();
+      }
+    }
 
     const pendingFirstLogins = isManager
       ? s.profiles.filter(
@@ -4593,6 +4868,7 @@
       if (action === "logout") {
         stopCameraStream();
         stopGpsWatcher();
+        stopDutyShiftWatcher();
         uiState.modal = null;
         await Core.signOut();
         return;
@@ -5127,6 +5403,7 @@
           const matchedShift = Core.state.shifts.find((sh) => sh.id === (res?.shift_id || chosenShiftId));
           const shiftLabel = res?.shift_name || matchedShift?.name || "Shift";
           if (liveCamera.mode === "check_in") {
+            startDutyShiftWatcher();
             const lateMins = Number(res?.late_minutes || 0);
             const statusText = lateMins > 0 ? `Terlambat ${lateMins} menit` : "Hadir Tepat Waktu";
             showBanner(
@@ -5135,6 +5412,7 @@
               9500
             );
           } else {
+            stopDutyShiftWatcher();
             const statusLabel = res?.status_label || "Selesai (Lengkap)";
             const durText = Core.formatDurationMinutes(res?.duration_minutes || 0);
             showBanner(
@@ -5149,6 +5427,43 @@
           if (!updateCameraModalPanelsInPlace()) renderModalContainerOnly();
           showBanner(false, liveCamera.submitError, 9000);
           focusCameraErrorBox();
+        }
+        return;
+      }
+
+      if (action === "request-duty-notification") {
+        if (typeof Notification === "undefined") {
+          showBanner(
+            false,
+            "Browser ini belum mendukung Notifikasi Web. Peringatan suara dan banner layar tetap berfungsi normal."
+          );
+          return;
+        }
+        try {
+          const perm = await Notification.requestPermission();
+          if (Core.state.dutyTracker) {
+            Core.state.dutyTracker.notificationPermission = perm;
+          }
+          if (perm === "granted") {
+            playDutyChimeAlert("welcome_back");
+            sendDutyPushNotification(
+              "☕ Suka Latte Attendance",
+              "Notifikasi HP aktif! Anda akan menerima pengingat otomatis selama jam shift bertugas.",
+              "test-notif"
+            );
+            showBanner(
+              true,
+              "✓ Notifikasi HP berhasil diaktifkan! Pengingat lokasi dan jam selesai shift akan otomatis muncul di HP Anda."
+            );
+            render();
+          } else if (perm === "denied") {
+            showBanner(
+              false,
+              "Izin notifikasi ditolak di pengaturan browser. Aktifkan izin notifikasi pada setelan situs browser HP Anda."
+            );
+          }
+        } catch (e) {
+          showBanner(false, "Gagal meminta izin notifikasi: " + (e?.message || e));
         }
         return;
       }
@@ -5777,7 +6092,84 @@
         lastAutoShiftId = currAuto.id;
       }
     }
+
+    // Deteksi Status Bertugas, Timer Live Real-Time & Pengingat 8 Jam Kerja Selesai
+    if (Core.state.currentUser && Core.isApprovedUser()) {
+      const u = Core.state.currentUser;
+      const myToday = Core.getMyTodayAttendance ? Core.getMyTodayAttendance(parts.dateString) : null;
+      const isOnDuty = Boolean(myToday?.check_in_at && !myToday?.check_out_at);
+
+      if (isOnDuty) {
+        // Pastikan watcher GPS aktif
+        if (!Core.state.dutyTracker?.active || Core.state.dutyTracker?.watchId === null) {
+          startDutyShiftWatcher();
+        }
+
+        // Hitung durasi kerja berjalan detik demi detik
+        const checkInDate = new Date(myToday.check_in_at);
+        const now = Core.getServerNow();
+        const elapsedMs = Math.max(0, now.getTime() - checkInDate.getTime());
+        const elapsedMins = Math.floor(elapsedMs / 60000);
+        const elapsedSecs = Math.floor((elapsedMs % 60000) / 1000);
+
+        // Update timer DOM live di widget bertugas
+        const timerEl = document.getElementById("live-duty-timer");
+        if (timerEl) {
+          const hh = String(Math.floor(elapsedMins / 60)).padStart(2, "0");
+          const mm = String(elapsedMins % 60).padStart(2, "0");
+          const ss = String(elapsedSecs).padStart(2, "0");
+          timerEl.textContent = `${hh}:${mm}:${ss}`;
+        }
+
+        // Update progress bar menuju 8 jam kerja (480 menit)
+        const progBar = document.getElementById("live-duty-progress-bar");
+        if (progBar) {
+          const progPct = Math.min(100, Math.round((elapsedMins / 480) * 100));
+          progBar.style.width = `${progPct}%`;
+          if (elapsedMins >= 480) {
+            progBar.style.background = "#f59e0b";
+          }
+        }
+
+        // Pengingat Jam Shift Selesai jika Melebihi 8 Jam Kerja (480 menit)
+        if (elapsedMins >= 480) {
+          const nowMs = Date.now();
+          const lastOt = Core.state.dutyTracker?.lastAlertAt?.overtime || 0;
+          // Peringatkan saat pertama kali menyentuh 8 jam atau setiap 15 menit jika belum check out
+          if (nowMs - lastOt >= 900000 || lastOt === 0) {
+            if (Core.state.dutyTracker) {
+              Core.state.dutyTracker.lastAlertAt.overtime = nowMs;
+            }
+            const durText = Core.formatDurationMinutes(elapsedMins);
+            const otMsg = `⏰ Jam shift sudah selesai tolong melakukan absensi check out! Durasi kerja Anda telah mencapai ${durText}.`;
+
+            playDutyChimeAlert("shift_complete");
+            sendDutyPushNotification(
+              "⏰ Jam Shift Sudah Selesai!",
+              "Jam shift sudah selesai tolong melakukan absensi check out. Durasi: " + durText + ".",
+              "duty-overtime"
+            );
+            showBanner(false, otMsg, 15000);
+          }
+        }
+      } else {
+        // Jika sudah check out atau belum check in, pastikan duty tracker mati total
+        if (Core.state.dutyTracker?.active) {
+          stopDutyShiftWatcher();
+        }
+      }
+    }
   }, 1000);
+
+  // Sinkronisasi lokasi & status tugas saat browser HP aktif kembali dari background/kunci layar
+  window.addEventListener("focus", () => {
+    syncDutyLocationCheck();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      syncDutyLocationCheck();
+    }
+  });
 
   Core.initializeApp(render);
 })();
