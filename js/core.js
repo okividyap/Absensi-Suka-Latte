@@ -1573,6 +1573,23 @@ window.SUKA_LATTE_CONFIG = {
     return state.outlets.find((o) => o.id === u.outlet_id) || state.outlets[0] || null;
   }
 
+  async function syncDutyLiveLocation(lat, lng, accuracy, distanceMeters, status) {
+    if (!state.supabase || !state.currentUser) return null;
+    try {
+      const res = await state.supabase.rpc("sync_duty_live_location", {
+        p_latitude: typeof lat === "number" ? lat : null,
+        p_longitude: typeof lng === "number" ? lng : null,
+        p_accuracy: typeof accuracy === "number" ? accuracy : null,
+        p_distance_meters: typeof distanceMeters === "number" ? distanceMeters : null,
+        p_status: status || "inside",
+      });
+      return res.data;
+    } catch (err) {
+      console.warn("Sync duty live location error:", err?.message || err);
+      return null;
+    }
+  }
+
   window.SukaCore = {
     state,
     DEFAULT_SETTINGS,
@@ -1626,5 +1643,6 @@ window.SUKA_LATTE_CONFIG = {
     cancelShiftSwapRequest,
     getMyTodayAttendance,
     getOutletForUser,
+    syncDutyLiveLocation,
   };
 })();

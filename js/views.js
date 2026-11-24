@@ -518,35 +518,113 @@
   // ==========================================================================
   // 4. PETA RADAR GEOFENCE & KARTU BUKTI SELFIE BERDAMPINGAN
   // ==========================================================================
-  function renderGeofenceMapCard(outlet, userGps) {
+  function renderGeofenceMapCard(outlet, userGpsOrList) {
     if (!outlet) return "";
-    const hasGps = userGps && typeof userGps.lat === "number" && typeof userGps.lng === "number";
-    const dist = hasGps
-      ? Core.calculateDistanceMeters(userGps.lat, userGps.lng, outlet.latitude, outlet.longitude)
-      : null;
-    const inside = dist !== null && dist <= outlet.geofence_radius_meters;
 
-    let dotX = 180;
-    let dotY = 105;
-    if (hasGps) {
-      const dLatM = (outlet.latitude - userGps.lat) * 111320;
-      const dLngM =
-        (userGps.lng - outlet.longitude) *
-        111320 *
-        Math.cos((outlet.latitude * Math.PI) / 180);
-      const scale = 70 / Math.max(outlet.geofence_radius_meters, 20);
-      dotX = Math.max(28, Math.min(332, 180 + dLngM * scale));
-      dotY = Math.max(24, Math.min(186, 105 + dLatM * scale));
+    const s = Core.state;
+    let markers = [];
+    if (Array.isArray(userGpsOrList)) {
+      markers = userGpsOrList
+        .filter(
+          (item) =>
+            item &&
+            (typeof item.lat === "number" ||
+              typeof item.live_latitude === "number" ||
+              typeof item.check_in_latitude === "number")
+        )
+        .map((item) => {
+          const lat =
+            typeof item.lat === "number"
+              ? item.lat
+              : item.live_latitude ?? item.check_in_latitude;
+          const lng =
+            typeof item.lng === "number"
+              ? item.lng
+              : item.live_longitude ?? item.check_in_longitude;
+          const rawDist =
+            item.distance ?? item.live_distance_meters ?? item.check_in_distance_meters;
+          const dist =
+            typeof rawDist === "number"
+              ? rawDist
+              : Core.calculateDistanceMeters(lat, lng, outlet.latitude, outlet.longitude);
+          const inside =
+            item.inside !== undefined
+              ? item.inside
+              : item.live_status
+              ? item.live_status === "inside"
+              : dist !== null && dist <= outlet.geofence_radius_meters;
+          const empProfile = item.employee_id
+            ? s.profiles.find((p) => p.id === item.employee_id)
+            : null;
+          const name =
+            item.name ||
+            item.employee_name ||
+            item.full_name ||
+            empProfile?.full_name ||
+            (item.employee ? item.employee.full_name : "Anggota");
+          return { lat, lng, dist, inside, name };
+        });
+    } else if (
+      userGpsOrList &&
+      typeof userGpsOrList.lat === "number" &&
+      typeof userGpsOrList.lng === "number"
+    ) {
+      const dist =
+        typeof userGpsOrList.distance === "number"
+          ? userGpsOrList.distance
+          : Core.calculateDistanceMeters(
+              userGpsOrList.lat,
+              userGpsOrList.lng,
+              outlet.latitude,
+              outlet.longitude
+            );
+      const inside =
+        userGpsOrList.inside !== undefined
+          ? userGpsOrList.inside
+          : dist !== null && dist <= outlet.geofence_radius_meters;
+      markers = [
+        {
+          lat: userGpsOrList.lat,
+          lng: userGpsOrList.lng,
+          dist,
+          inside,
+          name: "Posisi Anda",
+        },
+      ];
     }
+
+    const scale = 70 / Math.max(outlet.geofence_radius_meters, 20);
+
+    const renderedMarkersSvg = markers
+      .map((m) => {
+        const dLatM = (outlet.latitude - m.lat) * 111320;
+        const dLngM =
+          (m.lng - outlet.longitude) *
+          111320 *
+          Math.cos((outlet.latitude * Math.PI) / 180);
+        const dotX = Math.max(28, Math.min(332, 180 + dLngM * scale));
+        const dotY = Math.max(24, Math.min(186, 105 + dLatM * scale));
+        const distStr = m.dist !== null ? `${Math.round(m.dist)}m` : "";
+
+        return `
+        <line x1="180" y1="105" x2="${dotX}" y2="${dotY}" stroke="${m.inside ? "#34D399" : "#EF4444"}" stroke-width="${m.inside ? "1.5" : "2"}" stroke-dasharray="${m.inside ? "3 3" : "4 2"}"/>
+        <circle cx="${dotX}" cy="${dotY}" r="${m.inside ? "6" : "7.5"}" fill="${m.inside ? "#10B981" : "#EF4444"}" stroke="#FFFFFF" stroke-width="${m.inside ? "2" : "2.5"}"/>
+        <text x="${dotX}" y="${dotY + 16}" text-anchor="middle" fill="${m.inside ? "#6EE7B7" : "#F87171"}" font-size="9" font-weight="bold">${esc(m.name)} (${distStr})</text>
+      `;
+      })
+      .join("");
 
     return `
       <div class="card" style="padding:0;overflow:hidden;">
         <div style="padding:14px 18px;background:var(--coffee-50);border-bottom:1px solid var(--coffee-200);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <div>
-            <div style="font-size:12.5px;font-weight:800;text-transform:uppercase;">📍 Lokasi Geofence: ${esc(outlet.name)}</div>
+            <div style="font-size:12.5px;font-weight:800;text-transform:uppercase;">📍 Radar Geofence: ${esc(outlet.name)}</div>
             <div style="font-size:11px;color:var(--stone-600);">${esc(outlet.address)}</div>
           </div>
-          <span class="badge badge-success mono">Radius: ${outlet.geofence_radius_meters}m • Min Akurasi: ±${outlet.minimum_gps_accuracy_meters}m</span>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <span class="badge badge-success mono">Batas Radius: ${outlet.geofence_radius_meters}m</span>
+            ${markers.length > 0 ? `<span class="badge ${markers.some((m) => !m.inside) ? "badge-danger" : "badge-success"} mono" style="font-size:10px;">${markers.filter((m) => !m.inside).length > 0 ? `🔴 ${markers.filter((m) => !m.inside).length} Luar Radius` : "🟢 Seluruh Anggota di Kafe"}</span>` : ""}
+          </div>
         </div>
         <div style="background:#191512;padding:16px;text-align:center;color:var(--cream);">
           <svg viewBox="0 0 360 210" style="width:100%;max-width:420px;height:190px;">
@@ -555,13 +633,7 @@
             <circle cx="180" cy="105" r="70" fill="rgba(16,185,129,0.16)" stroke="#10B981" stroke-width="2" stroke-dasharray="6 4"/>
             <circle cx="180" cy="105" r="7" fill="#C8A67D" stroke="#FFFFFF" stroke-width="2"/>
             <text x="180" y="91" text-anchor="middle" fill="#FDFBF8" font-size="10" font-weight="bold">OUTLET SUKA LATTE</text>
-            ${
-              hasGps
-                ? `<line x1="180" y1="105" x2="${dotX}" y2="${dotY}" stroke="${inside ? "#34D399" : "#F87171"}" stroke-width="1.5" stroke-dasharray="3 3"/>
-                   <circle cx="${dotX}" cy="${dotY}" r="6" fill="${inside ? "#10B981" : "#EF4444"}" stroke="#FFFFFF" stroke-width="2"/>
-                   <text x="${dotX}" y="${dotY + 16}" text-anchor="middle" fill="${inside ? "#6EE7B7" : "#FCA5A5"}" font-size="9.5" font-weight="bold">POSISI ANDA (${dist}m)</text>`
-                : ""
-            }
+            ${renderedMarkersSvg}
           </svg>
           <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--coffee-300);margin-top:6px;flex-wrap:wrap;gap:6px;">
             <span id="radar-outlet-coords-label" class="mono">Titik Outlet: ${Number(outlet.latitude).toFixed(6)}, ${Number(outlet.longitude).toFixed(6)}</span>
@@ -2822,19 +2894,22 @@
                     const checkInTime = rec.check_in_at
                       ? Core.formatOperationalDateTime(rec.check_in_at, tz, false).slice(12, 17)
                       : "--:--";
-                    const dist =
-                      rec.check_in_distance_meters !== null
-                        ? `${rec.check_in_distance_meters}m`
-                        : "-";
-                    const hasGps = rec.check_in_latitude && rec.check_in_longitude;
+                    const activeLat = rec.live_latitude ?? rec.check_in_latitude;
+                    const activeLng = rec.live_longitude ?? rec.check_in_longitude;
+                    const rawLiveDist =
+                      rec.live_distance_meters ?? rec.check_in_distance_meters;
+                    const liveDist =
+                      rawLiveDist !== null ? `${Math.round(rawLiveDist)}m` : "-";
+                    const hasGps = activeLat && activeLng;
                     const isOutside =
-                      rec.check_in_distance_meters !== null &&
-                      rec.check_in_distance_meters > (myOutlet?.geofence_radius_meters || 50);
+                      rec.live_status === "outside" ||
+                      (rawLiveDist !== null &&
+                        rawLiveDist > (myOutlet?.geofence_radius_meters || 50));
 
                     return `
-                    <div class="card-subtle" style="background:#ffffff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                    <div class="card-subtle" style="background:${isOutside ? "#fef2f2" : "#ffffff"};border:${isOutside ? "1.5px solid #ef4444" : "1px solid #e5e7eb"};box-shadow:${isOutside ? "0 0 12px rgba(239,68,68,0.18)" : "none"};padding:12px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-radius:12px;">
                       <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-                        <div class="brand-logo-wrap sm" style="background:var(--coffee-900);color:var(--gold-200);font-weight:800;font-size:12px;">
+                        <div class="brand-logo-wrap sm" style="background:${isOutside ? "#991b1b" : "var(--coffee-900)"};color:${isOutside ? "#fee2e2" : "var(--gold-200)"};font-weight:800;font-size:12px;">
                           ${esc((emp?.full_name || "K").slice(0, 2).toUpperCase())}
                         </div>
                         <div>
@@ -2842,18 +2917,27 @@
                             <span>${esc(emp?.full_name || "Karyawan")}</span>
                             <span class="mono" style="font-size:11px;color:var(--stone-500);">(${esc(emp?.employee_code || "-")})</span>
                             ${emp?.department ? getDepartmentBadge(emp.department) : ""}
+                            ${
+                              isOutside
+                                ? `<span class="badge badge-danger" style="font-size:10.5px;font-weight:800;background:#fee2e2;color:#991b1b;border:1.5px solid #ef4444;padding:3px 8px;">🔴 DI LUAR RADIUS (${liveDist}) — TERDETEKSI KELUAR!</span>`
+                                : `<span class="badge badge-success" style="font-size:10.5px;font-weight:700;padding:3px 8px;">🟢 Dalam Area Kafe (${liveDist})</span>`
+                            }
                           </div>
                           <div style="font-size:11.5px;color:var(--stone-600);margin-top:2px;">
                             Shift: <strong>${esc(sh?.name || "Shift")}</strong> • Masuk: <strong>${checkInTime} WITA</strong> • 
-                            Jarak GPS Check In: <strong class="mono" style="color:${isOutside ? "#dc2626" : "#059669"};">${dist}</strong>
-                            ${isOutside ? `<span class="badge badge-danger" style="font-size:10px;margin-left:4px;">⚠️ Di Luar Radius</span>` : `<span class="badge badge-success" style="font-size:10px;margin-left:4px;">✓ Dalam Radius Kafe</span>`}
+                            Jarak GPS: <strong class="mono" style="color:${isOutside ? "#dc2626" : "#059669"};font-weight:800;">${liveDist}</strong>
+                            ${
+                              isOutside
+                                ? `<span style="color:#b91c1c;font-weight:600;margin-left:4px;">(Peringatan shift belum selesai telah dikirim ke HP)</span>`
+                                : ""
+                            }
                           </div>
                         </div>
                       </div>
                       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                         ${
                           hasGps
-                            ? `<a href="https://maps.google.com/?q=${rec.check_in_latitude},${rec.check_in_longitude}" target="_blank" rel="noreferrer" class="btn btn-outline btn-xs" style="border-color:#10b981;color:#047857;font-weight:700;text-decoration:none;">
+                            ? `<a href="https://maps.google.com/?q=${activeLat},${activeLng}" target="_blank" rel="noreferrer" class="btn ${isOutside ? "btn-danger" : "btn-outline"} btn-xs" style="${!isOutside ? "border-color:#10b981;color:#047857;" : ""}font-weight:700;text-decoration:none;">
                                 📍 Buka di Google Maps ↗
                               </a>`
                             : ""
@@ -2960,7 +3044,7 @@
 
       <div class="grid-12">
         <div class="col-7">
-          ${renderGeofenceMapCard(myOutlet, canCheckOut && s.dutyTracker ? s.dutyTracker.currentGps : null)}
+          ${renderGeofenceMapCard(myOutlet, workingNowRecs.length > 0 ? workingNowRecs : (canCheckOut && s.dutyTracker ? s.dutyTracker.currentGps : null))}
         </div>
         <div class="col-5 card" style="display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
           <div>

@@ -1459,7 +1459,16 @@
     // Update elemen UI radar/status secara langsung di layar jika ada
     updateLiveDutyWidgets(inside, dist, myOutlet);
 
+    // 4. Sinkronisasi Live Lokasi ala Strava ke Server Supabase secara Berkala
+    const statusChanged = prevStatus !== s.dutyTracker.status;
+    const lastSync = s.dutyTracker.lastServerSyncAt || 0;
     const now = Date.now();
+    const shouldSyncServer = statusChanged || (now - lastSync >= 20000);
+
+    if (shouldSyncServer && Core.syncDutyLiveLocation) {
+      s.dutyTracker.lastServerSyncAt = now;
+      Core.syncDutyLiveLocation(lat, lng, accuracy, dist, s.dutyTracker.status).catch(() => {});
+    }
 
     if (!inside) {
       // PENGGUNA TERDETEKSI BERADA DI LUAR AREA OUTLET
@@ -1523,6 +1532,7 @@
         watchId: null,
         currentGps: null,
         lastAlertAt: { outOfBounds: 0, overtime: 0 },
+        lastServerSyncAt: 0,
         status: "idle",
         notificationPermission: typeof Notification !== "undefined" ? Notification.permission : "unsupported",
       };
@@ -6054,6 +6064,7 @@
   // 9. DETAK JAM SERVER RESMI WITA REAL-TIME & PERGANTIAN SHIFT OTOMATIS LIVE
   // ==========================================================================
   let lastAutoShiftId = null;
+  let lastAdminLiveRefreshAt = 0;
 
   setInterval(() => {
     const tz = Core.state.settings.operational_timezone || "Asia/Makassar";
@@ -6167,6 +6178,17 @@
         if (Core.state.dutyTracker?.active) {
           stopDutyShiftWatcher();
         }
+      }
+    }
+
+    // Auto-refresh data radar & status anggota bertugas untuk Admin setiap 12 detik
+    if (Core.isApprovedUser() && Core.isManager() && uiState.activeNav === "dashboard" && !uiState.modal) {
+      const nowMs = Date.now();
+      if (nowMs - lastAdminLiveRefreshAt >= 12000) {
+        lastAdminLiveRefreshAt = nowMs;
+        Core.refreshAllData().then(() => {
+          render();
+        }).catch(() => {});
       }
     }
   }, 1000);
