@@ -2097,6 +2097,11 @@
                     Status Lokasi: ${esc(rec.check_in_location_status || "-")}
                   </div>
                   ${
+                    rec.check_in_latitude && rec.check_in_longitude
+                      ? `<a href="https://maps.google.com/?q=${rec.check_in_latitude},${rec.check_in_longitude}" target="_blank" rel="noreferrer" class="btn btn-outline btn-xs" style="margin-top:6px;width:100%;text-decoration:none;border-color:var(--emerald-600);color:var(--emerald-800);font-weight:700;">📍 Buka Lokasi Check In di Google Maps ↗</a>`
+                      : ""
+                  }
+                  ${
                     inUrl
                       ? `<a href="${esc(inUrl)}" target="_blank" rel="noreferrer" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;text-decoration:none;">↗ Buka / Unduh Foto Check In</a>`
                       : ""
@@ -2114,6 +2119,11 @@
                     Jarak &amp; Akurasi: ${rec.check_out_distance_meters ?? "-"}m (±${Math.round(rec.check_out_accuracy || 0)}m)<br/>
                     Status Lokasi: ${esc(rec.check_out_location_status || "-")}
                   </div>
+                  ${
+                    rec.check_out_latitude && rec.check_out_longitude
+                      ? `<a href="https://maps.google.com/?q=${rec.check_out_latitude},${rec.check_out_longitude}" target="_blank" rel="noreferrer" class="btn btn-outline btn-xs" style="margin-top:6px;width:100%;text-decoration:none;border-color:var(--amber-600);color:var(--amber-800);font-weight:700;">📍 Buka Lokasi Check Out di Google Maps ↗</a>`
+                      : ""
+                  }
                   ${
                     outUrl
                       ? `<a href="${esc(outUrl)}" target="_blank" rel="noreferrer" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;text-decoration:none;">↗ Buka / Unduh Foto Check Out</a>`

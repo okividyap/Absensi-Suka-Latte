@@ -2638,7 +2638,8 @@
     const activeEmployees = s.profiles.filter((p) => p.status === "active" && p.first_login_approved);
     const todayRecs = s.attendance.filter((a) => a.work_date === parts.dateString);
     const presentToday = todayRecs.filter((a) => a.check_in_at).length;
-    const workingNow = todayRecs.filter((a) => a.check_in_at && !a.check_out_at).length;
+    const workingNowRecs = todayRecs.filter((a) => a.check_in_at && !a.check_out_at);
+    const workingNow = workingNowRecs.length;
     const lateToday = todayRecs.filter((a) => a.late_minutes > 0 || a.attendance_status === "terlambat").length;
     const {
       todayHolidays,
@@ -2796,6 +2797,79 @@
           <div style="font-size:11.5px;color:var(--rose-700);">Mengacu waktu resmi server WITA</div>
         </div>
       </div>
+
+      <!-- DAFTAR ANGGOTA SEDANG BERTUGAS SAAT INI (MONITORING LOKASI & GPS LIVE) -->
+      ${
+        workingNowRecs.length > 0
+          ? `<div class="card" style="margin-bottom:18px;border:1.5px solid #d97706;background:#fffdfa;">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;border-bottom:1px solid #fde68a;padding-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#059669;box-shadow:0 0 0 3px rgba(16,185,129,0.3);"></span>
+                  <h3 style="font-size:15px;font-weight:800;color:#92400e;margin:0;">
+                    ☕ Anggota Sedang Bertugas Saat Ini (${workingNowRecs.length} Orang)
+                  </h3>
+                </div>
+                <span class="badge badge-warning" style="font-size:11px;font-weight:700;">📍 Terpantau di Jam Kerja Aktif</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                ${workingNowRecs
+                  .map((rec) => {
+                    const emp =
+                      s.profiles.find((p) => p.id === rec.employee_id) ||
+                      rec.employee ||
+                      (s.currentUser?.id === rec.employee_id ? s.currentUser : null);
+                    const sh = s.shifts.find((x) => x.id === rec.shift_id) || rec.shift;
+                    const checkInTime = rec.check_in_at
+                      ? Core.formatOperationalDateTime(rec.check_in_at, tz, false).slice(12, 17)
+                      : "--:--";
+                    const dist =
+                      rec.check_in_distance_meters !== null
+                        ? `${rec.check_in_distance_meters}m`
+                        : "-";
+                    const hasGps = rec.check_in_latitude && rec.check_in_longitude;
+                    const isOutside =
+                      rec.check_in_distance_meters !== null &&
+                      rec.check_in_distance_meters > (myOutlet?.geofence_radius_meters || 50);
+
+                    return `
+                    <div class="card-subtle" style="background:#ffffff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                        <div class="brand-logo-wrap sm" style="background:var(--coffee-900);color:var(--gold-200);font-weight:800;font-size:12px;">
+                          ${esc((emp?.full_name || "K").slice(0, 2).toUpperCase())}
+                        </div>
+                        <div>
+                          <div style="font-size:13.5px;font-weight:800;color:var(--coffee-950);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <span>${esc(emp?.full_name || "Karyawan")}</span>
+                            <span class="mono" style="font-size:11px;color:var(--stone-500);">(${esc(emp?.employee_code || "-")})</span>
+                            ${emp?.department ? getDepartmentBadge(emp.department) : ""}
+                          </div>
+                          <div style="font-size:11.5px;color:var(--stone-600);margin-top:2px;">
+                            Shift: <strong>${esc(sh?.name || "Shift")}</strong> • Masuk: <strong>${checkInTime} WITA</strong> • 
+                            Jarak GPS Check In: <strong class="mono" style="color:${isOutside ? "#dc2626" : "#059669"};">${dist}</strong>
+                            ${isOutside ? `<span class="badge badge-danger" style="font-size:10px;margin-left:4px;">⚠️ Di Luar Radius</span>` : `<span class="badge badge-success" style="font-size:10px;margin-left:4px;">✓ Dalam Radius Kafe</span>`}
+                          </div>
+                        </div>
+                      </div>
+                      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                        ${
+                          hasGps
+                            ? `<a href="https://maps.google.com/?q=${rec.check_in_latitude},${rec.check_in_longitude}" target="_blank" rel="noreferrer" class="btn btn-outline btn-xs" style="border-color:#10b981;color:#047857;font-weight:700;text-decoration:none;">
+                                📍 Buka di Google Maps ↗
+                              </a>`
+                            : ""
+                        }
+                        <button type="button" class="btn btn-primary btn-xs" data-action="inspect-record" data-id="${esc(rec.id)}" style="font-weight:700;">
+                          🔍 Detail Bukti &amp; Foto
+                        </button>
+                      </div>
+                    </div>
+                  `;
+                  })
+                  .join("")}
+              </div>
+            </div>`
+          : ""
+      }
 
       <!-- KARTU HARI LIBUR OUTLET & ANTREAN IZIN / CUTI KARYAWAN DI DASHBOARD -->
       <div class="grid-2" style="margin-bottom:18px;">
