@@ -211,6 +211,9 @@
     holidaysAndLeaves: [],
     workSchedules: [],
     shiftSwaps: [],
+    shiftChecklists: [],
+    shiftLogbooks: [],
+    announcements: [],
     auditLogs: [],
 
     signedUrls: {}, // path -> { url, exp }
@@ -539,7 +542,7 @@ window.SUKA_LATTE_CONFIG = {
     if (!state.supabase || !isApprovedUser()) return;
 
     // Data dasar yang diizinkan dibaca oleh pengguna aktif (Outlets, Shifts, Settings, Schedules)
-    const [outRes, shRes, setRes, attRes, corrRes, hlRes, schedRes, swapRes] = await Promise.all([
+    const [outRes, shRes, setRes, attRes, corrRes, hlRes, schedRes, swapRes, chkRes, logRes, annRes] = await Promise.all([
       state.supabase.from("outlets").select("*").order("created_at", { ascending: true }),
       state.supabase.from("work_shifts").select("*").order("start_time", { ascending: true }),
       state.supabase.from("system_settings").select("*").eq("key", "operational_config").maybeSingle(),
@@ -580,6 +583,22 @@ window.SUKA_LATTE_CONFIG = {
         .from("shift_swap_requests")
         .select("*")
         .order("created_at", { ascending: false }),
+      state.supabase
+        .from("shift_checklists")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(100),
+      state.supabase
+        .from("shift_logbooks")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(100),
+      state.supabase
+        .from("announcements")
+        .select("*")
+        .order("is_pinned", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(50),
     ]);
 
     state.outlets = outRes.data || [];
@@ -592,6 +611,9 @@ window.SUKA_LATTE_CONFIG = {
     state.holidaysAndLeaves = hlRes.data || [];
     state.workSchedules = schedRes.data || [];
     state.shiftSwaps = swapRes?.data || [];
+    state.shiftChecklists = chkRes?.data || [];
+    state.shiftLogbooks = logRes?.data || [];
+    state.announcements = annRes?.data || [];
 
     // DATA MENDALAM: Manager memuat seluruh profil + audit logs; Anggota memuat direktori rekan aktif
     if (isManager()) {
@@ -696,6 +718,13 @@ window.SUKA_LATTE_CONFIG = {
       if (r.check_out_photo_path) {
         const cached = state.signedUrls[r.check_out_photo_path];
         if (!cached || cached.exp < nowMs) pathsToSign.push(r.check_out_photo_path);
+      }
+    });
+
+    (state.holidaysAndLeaves || []).forEach((h) => {
+      if (h.attachment_path) {
+        const cached = state.signedUrls[h.attachment_path];
+        if (!cached || cached.exp < nowMs) pathsToSign.push(h.attachment_path);
       }
     });
 
@@ -1673,6 +1702,258 @@ window.SUKA_LATTE_CONFIG = {
     }
   }
 
+  // ==========================================================================
+  // OPERASIONAL KAFE SUKA LATTE: CHECKLIST, LOGBOOK, ANNOUNCEMENTS, LEAVES, WA DIGEST
+  // ==========================================================================
+
+  async function submitShiftChecklist(payload) {
+    if (!state.supabase || !isApprovedUser()) {
+      throw new Error("Sesi Anda tidak aktif atau belum disetujui.");
+    }
+    const tz = state.settings.operational_timezone || "Asia/Makassar";
+    const parts = getTimePartsInTimezone(getServerNow(), tz);
+    const u = state.currentUser;
+    const outletId = payload.outletId || u.outlet_id || state.outlets[0]?.id;
+    const workDate = payload.workDate || parts.dateString;
+    const shiftId = payload.shiftId || u.shift_id || state.shifts[0]?.id;
+    const checklistType = payload.checklistType;
+    const items = payload.items || [];
+    const notes = payload.notes || null;
+
+    const insRes = await withTimeout(
+      state.supabase
+        .from("shift_checklists")
+        .insert({
+          outlet_id: outletId,
+          work_date: workDate,
+          shift_id: shiftId,
+          checklist_type: checklistType,
+          submitted_by: u.id,
+          submitted_by_name: u.full_name,
+          items: items,
+          notes: notes,
+        })
+        .select()
+        .single(),
+      15000,
+      "Penyimpanan checklist SOP kafe timeout."
+    );
+
+    if (insRes.error) throw insRes.error;
+    await refreshAllData();
+    return insRes.data;
+  }
+
+  async function createShiftLogbook(payload) {
+    if (!state.supabase || !isApprovedUser()) {
+      throw new Error("Sesi Anda tidak aktif.");
+    }
+    const tz = state.settings.operational_timezone || "Asia/Makassar";
+    const parts = getTimePartsInTimezone(getServerNow(), tz);
+    const u = state.currentUser;
+    const outletId = payload.outletId || u.outlet_id || state.outlets[0]?.id;
+    const workDate = payload.workDate || parts.dateString;
+    const shiftId = payload.shiftId || u.shift_id || state.shifts[0]?.id;
+
+    const { data, error } = await withTimeout(
+      state.supabase
+        .from("shift_logbooks")
+        .insert({
+          outlet_id: outletId,
+          work_date: workDate,
+          shift_id: shiftId,
+          author_id: u.id,
+          author_name: u.full_name,
+          category: payload.category || "umum",
+          title: payload.title || "Catatan Handover",
+          message: payload.message,
+          priority: payload.priority || "normal",
+        })
+        .select()
+        .single(),
+      15000,
+      "Penyimpanan catatan handover timeout."
+    );
+    if (error) throw error;
+    await refreshAllData();
+    return data;
+  }
+
+  async function resolveShiftLogbook(logbookId) {
+    if (!state.supabase || !isApprovedUser()) throw new Error("Sesi tidak aktif.");
+    const { error } = await state.supabase
+      .from("shift_logbooks")
+      .update({ is_resolved: true })
+      .eq("id", logbookId);
+    if (error) throw error;
+    await refreshAllData();
+  }
+
+  async function createAnnouncement(payload) {
+    if (!state.supabase || !isManager()) {
+      throw new Error("Hanya Admin atau Manager yang dapat membuat pengumuman.");
+    }
+    const u = state.currentUser;
+    const { data, error } = await withTimeout(
+      state.supabase
+        .from("announcements")
+        .insert({
+          outlet_id: payload.outletId || u.outlet_id || null,
+          author_id: u.id,
+          author_name: u.full_name,
+          title: payload.title,
+          content: payload.content,
+          badge_tag: payload.badgeTag || "Pengumuman",
+          priority: payload.priority || "info",
+          is_pinned: Boolean(payload.isPinned),
+        })
+        .select()
+        .single(),
+      15000,
+      "Pembuatan pengumuman timeout."
+    );
+    if (error) throw error;
+    await refreshAllData();
+    return data;
+  }
+
+  async function deleteAnnouncement(announcementId) {
+    if (!state.supabase || !isManager()) {
+      throw new Error("Hanya Admin atau Manager yang dapat menghapus pengumuman.");
+    }
+    const { error } = await state.supabase
+      .from("announcements")
+      .delete()
+      .eq("id", announcementId);
+    if (error) throw error;
+    await refreshAllData();
+  }
+
+  async function requestLeave(payload) {
+    if (!state.supabase || !isApprovedUser()) {
+      throw new Error("Sesi Anda tidak aktif atau belum disetujui.");
+    }
+    const u = state.currentUser;
+    const tz = state.settings.operational_timezone || "Asia/Makassar";
+    const parts = getTimePartsInTimezone(getServerNow(), tz);
+
+    let storagePath = null;
+    if (payload.attachmentDataUrl) {
+      const rand = Math.random().toString(36).substring(2, 10);
+      storagePath = `SUKA-LATTE-ATTENDANCE/attendance-photos/${parts.archiveFolderLabel}/${u.id}/${Date.now()}-leave-letter-${rand}.jpg`;
+      const blob = dataUrlToBlob(payload.attachmentDataUrl);
+      const { error: upErr } = await state.supabase.storage
+        .from(state.storageBucket)
+        .upload(storagePath, blob, {
+          contentType: "image/jpeg",
+          upsert: false,
+        });
+      if (upErr) {
+        console.warn("Upload surat dokter warning:", upErr.message);
+      }
+    }
+
+    const res = await withTimeout(
+      state.supabase.rpc("request_leave", {
+        p_type: payload.type,
+        p_date_start: payload.dateStart,
+        p_date_end: payload.dateEnd,
+        p_title: payload.title || `Pengajuan ${payload.type.toUpperCase()}`,
+        p_reason: payload.reason || "-",
+        p_attachment_path: storagePath,
+      }),
+      18000,
+      "Pengajuan izin timeout setelah 18 detik."
+    );
+    if (res.error) throw res.error;
+    await refreshAllData();
+    return res.data;
+  }
+
+  async function reviewLeaveRequest(leaveId, approved, notes) {
+    if (!state.supabase || !isManager()) {
+      throw new Error("Hanya Admin yang dapat meninjau permohonan izin.");
+    }
+    const res = await withTimeout(
+      state.supabase.rpc("review_leave_request", {
+        p_leave_id: leaveId,
+        p_approved: Boolean(approved),
+        p_notes: notes || null,
+      }),
+      18000,
+      "Verifikasi permohonan izin timeout."
+    );
+    if (res.error) throw res.error;
+    await refreshAllData();
+    return res.data;
+  }
+
+  function generateWhatsAppDailyDigest(dateString) {
+    const tz = state.settings.operational_timezone || "Asia/Makassar";
+    const parts = getTimePartsInTimezone(getServerNow(), tz);
+    const targetDate = dateString || parts.dateString;
+    const outlet = state.outlets.find((o) => o.id === state.currentUser?.outlet_id) || state.outlets[0] || { name: "Suka Latte Coffee & Space" };
+
+    const atts = (state.attendance || []).filter((a) => a.work_date === targetDate);
+    const approvedEmployees = (state.profiles || []).filter((p) => p.status === "active" && p.role === "member");
+    const leavesToday = (state.holidaysAndLeaves || []).filter(
+      (h) => h.status === "approved" && h.date_start <= targetDate && h.date_end >= targetDate
+    );
+
+    const totalHadir = atts.filter((a) => a.check_in_at).length;
+    const totalCheckOut = atts.filter((a) => a.check_out_at).length;
+    const onDutyNow = atts.filter((a) => a.check_in_at && !a.check_out_at).length;
+    const terlambatList = atts.filter((a) => a.late_minutes && a.late_minutes > 0);
+    const radiusViolations = atts.filter((a) => a.live_status === "outside");
+
+    const chkToday = (state.shiftChecklists || []).filter((c) => c.work_date === targetDate);
+    const openingChk = chkToday.find((c) => c.checklist_type === "opening");
+    const closingChk = chkToday.find((c) => c.checklist_type === "closing");
+    const logsToday = (state.shiftLogbooks || []).filter((l) => l.work_date === targetDate);
+
+    let text = `☕ *RINGKASAN OPERASIONAL SUKA LATTE*\n`;
+    text += `📅 *Tanggal:* ${targetDate}\n`;
+    text += `🏢 *Outlet:* ${outlet.name}\n`;
+    text += `🕒 *Dibuat:* ${String(parts.hour).padStart(2, "0")}:${String(parts.minute).padStart(2, "0")} WITA\n\n`;
+
+    text += `👥 *STATUS KEHADIRAN (${approvedEmployees.length} Staf Terdaftar):*\n`;
+    text += `✅ Total Hadir: *${totalHadir} orang* (Check Out: ${totalCheckOut}, Sedang Tugas: ${onDutyNow})\n`;
+    if (terlambatList.length > 0) {
+      const listNames = terlambatList.map((a) => `${a.employee?.full_name || "Staf"} (+${a.late_minutes}m)`).join(", ");
+      text += `⚠️ Terlambat: *${terlambatList.length} orang* (${listNames})\n`;
+    } else {
+      text += `✨ Terlambat: *0 orang (Tepat Waktu 100%)*\n`;
+    }
+    if (leavesToday.length > 0) {
+      const leaveNames = leavesToday.map((l) => `${l.applicant_name || l.title} (${l.type.toUpperCase()})`).join(", ");
+      text += `🏥 Izin / Sakit Disetujui: *${leavesToday.length} orang* (${leaveNames})\n`;
+    } else {
+      text += `🏥 Izin / Sakit: *0 orang*\n`;
+    }
+
+    text += `\n📍 *MONITORING GEOFENCE KAFE:*\n`;
+    if (radiusViolations.length > 0) {
+      const outNames = radiusViolations.map((a) => `${a.employee?.full_name || "Staf"} (${Math.round(a.live_distance_meters || 0)}m)`).join(", ");
+      text += `🚨 Peringatan Luar Radius: *${radiusViolations.length} staf* (${outNames})\n`;
+    } else {
+      text += `🛡️ Status Radius: *Aman di Dalam Area Kafe (0 Pelanggaran)*\n`;
+    }
+
+    text += `\n📋 *SOP OPENING & CLOSING KAFE:*\n`;
+    text += `🌅 Opening: ${openingChk ? `✓ Selesai (oleh ${openingChk.submitted_by_name})` : `⏳ Belum Diisi`}\n`;
+    text += `🌙 Closing: ${closingChk ? `✓ Selesai (oleh ${closingChk.submitted_by_name})` : `⏳ Belum Diisi`}\n`;
+
+    if (logsToday.length > 0) {
+      text += `\n📝 *LOGBOOK HANDOVER ANTAR SHIFT (${logsToday.length}):*\n`;
+      logsToday.slice(0, 4).forEach((l, idx) => {
+        text += `${idx + 1}. [${l.category.toUpperCase()}] "${l.message}" - _${l.author_name}_\n`;
+      });
+    }
+
+    text += `\n_Dihasilkan otomatis oleh Sistem Presensi Suka Latte_`;
+    return text;
+  }
+
   window.SukaCore = {
     state,
     DEFAULT_SETTINGS,
@@ -1731,5 +2012,13 @@ window.SUKA_LATTE_CONFIG = {
     getShiftTimingInfo,
     getOutletForUser,
     syncDutyLiveLocation,
+    submitShiftChecklist,
+    createShiftLogbook,
+    resolveShiftLogbook,
+    createAnnouncement,
+    deleteAnnouncement,
+    requestLeave,
+    reviewLeaveRequest,
+    generateWhatsAppDailyDigest,
   };
 })();

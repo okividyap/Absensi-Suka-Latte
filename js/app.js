@@ -2690,26 +2690,26 @@
         <div class="modal-backdrop">
           <div class="modal-window sm">
             <div class="modal-header">
-              <h3 style="font-size:16px;font-weight:800;">📅 Ajukan Izin, Cuti atau Libur</h3>
+              <h3 style="font-size:16px;font-weight:800;">📅 Ajukan Izin, Sakit atau Cuti</h3>
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
               <div style="margin-bottom:14px;padding:11px 13px;border-radius:12px;background:var(--emerald-50);border:1px solid #a7f3d0;color:var(--emerald-800);font-size:12px;line-height:1.5;">
-                📍 <strong>Bisa diajukan dari luar outlet (tanpa foto wajah &amp; tanpa GPS):</strong><br/>
-                Absensi foto wajah di outlet hanya diperlukan saat Anda masuk hadir bekerja. Untuk libur pribadi, izin, sakit, atau cuti cukup isi formulir di bawah ini.
+                📍 <strong>Bisa diajukan dari luar outlet (tanpa selfie wajah &amp; tanpa GPS):</strong><br/>
+                Absensi selfie wajah di outlet hanya diperlukan saat Anda masuk hadir bekerja. Untuk libur pribadi, izin, sakit, atau cuti cukup isi formulir di bawah ini.
               </div>
               <form id="form-member-leave" novalidate>
                 <div class="form-group">
                   <label class="form-label">Jenis Pengajuan *</label>
                   <select class="form-select" name="type">
-                    <option value="izin">Izin / Libur Tidak Masuk (Diluar Outlet)</option>
-                    <option value="cuti">Cuti / Pengajuan Libur Terjadwal</option>
-                    <option value="sakit">Sakit</option>
+                    <option value="sakit">Sakit (Lampirkan Foto Surat Dokter jika ada)</option>
+                    <option value="izin">Izin / Keperluan Pribadi</option>
+                    <option value="cuti">Cuti / Libur Terencana</option>
                   </select>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Judul Singkat *</label>
-                  <input class="form-input" name="title" placeholder="Contoh: Pengajuan Libur / Izin Keluarga / Cuti" required />
+                  <input class="form-input" name="title" placeholder="Contoh: Sakit Demam / Izin Acara Keluarga / Cuti Tahunan" required />
                 </div>
                 <div class="grid-2" style="gap:10px;">
                   <div class="form-group">
@@ -2723,11 +2723,213 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">Keterangan Lengkap *</label>
-                  <textarea class="form-textarea" name="reason" rows="3" placeholder="Tuliskan alasan pengajuan libur / izin / cuti untuk ditinjau Admin..." required></textarea>
+                  <textarea class="form-textarea" name="reason" rows="3" placeholder="Tuliskan alasan pengajuan izin / sakit untuk ditinjau Admin..." required></textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Lampiran Bukti Foto / Surat Dokter (Opsional)</label>
+                  <input type="file" id="leave-attachment-file-input" accept="image/*" capture="environment" style="display:none;" />
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-trigger-leave-file" style="font-size:12px;display:flex;align-items:center;gap:6px;background:white;">
+                      <span>📷</span>
+                      <span>${uiState.leaveAttachmentDataUrl ? "Ganti Foto Surat Dokter" : "Ambil Foto / Pilih Surat Dokter"}</span>
+                    </button>
+                    ${uiState.leaveAttachmentDataUrl ? `
+                      <button type="button" class="btn btn-outline btn-xs" id="btn-remove-leave-file" style="color:#ef4444;border-color:#fca5a5;font-size:11px;">✕ Hapus Foto</button>
+                    ` : ""}
+                  </div>
+                  ${uiState.leaveAttachmentDataUrl ? `
+                    <div style="margin-top:10px;">
+                      <img src="${uiState.leaveAttachmentDataUrl}" alt="Preview Surat Dokter" style="max-width:140px;max-height:100px;object-fit:cover;border-radius:8px;border:1.5px solid #10b981;box-shadow:0 2px 8px rgba(0,0,0,0.1);" />
+                      <div style="font-size:11px;color:#059669;font-weight:700;margin-top:3px;">✓ Foto surat dokter siap dikirim</div>
+                    </div>
+                  ` : `
+                    <div style="font-size:11px;color:var(--stone-500);margin-top:4px;">Disarankan melampirkan foto surat dokter untuk izin sakit.</div>
+                  `}
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
-                  <button type="button" class="btn btn-primary" data-action="submit-member-leave">Kirim Pengajuan</button>
+                  <button type="button" class="btn btn-primary" data-action="submit-member-leave">Kirim Pengajuan Izin</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // MODAL CHECKLIST SOP OPENING & CLOSING KAFE
+    if (uiState.modal.type === "shift_checklist") {
+      const isOpening = uiState.modal.checklistType === "opening";
+      const todayStr = Core.getTimePartsInTimezone(Core.getServerNow(), tz).dateString;
+      const existing = (s.shiftChecklists || []).find(
+        (c) => c.work_date === todayStr && c.checklist_type === uiState.modal.checklistType
+      );
+      const existingItems = existing?.items || [];
+
+      const defaultOpening = [
+        "Nyalakan mesin espresso & water boiler (pastikan tekanan 9 bar & suhu stabil)",
+        "Nyalakan grinder & kalibrasi dial-in espresso (cek yield 18g/36g & brew time 25-30s)",
+        "Cek stok bahan baku bar (Susu segar, house blend beans, sirup, es batu & cup)",
+        "Nyalakan AC, pencahayaan kafe & sound system / playlist resmi",
+        "Bersihkan seluruh meja bar, rapikan area seating & hitung kas modal laci kasir",
+      ];
+
+      const defaultClosing = [
+        "Backflush group head mesin espresso dengan blind basket & espresso chemical",
+        "Bersihkan steam wand (lap basah & rendam air panas), drip tray & kosongkan hopper grinder",
+        "Buang ampas kopi, cuci knock box & bersihkan sink tempat cuci bar",
+        "Matikan mesin espresso, grinder, AC, sound system & seluruh lampu outlet",
+        "Rekap omset transaksi kasir harian & pastikan pintu/jendela terkunci rapat",
+      ];
+
+      const itemsToUse = isOpening ? defaultOpening : defaultClosing;
+
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window">
+            <div class="modal-header">
+              <h3 style="font-size:16px;font-weight:800;">
+                ${isOpening ? "🌅 SOP Opening Shift Pagi" : "🌙 SOP Closing Shift Malam"} • ${esc(todayStr)}
+              </h3>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body">
+              <div style="margin-bottom:14px;padding:11px 13px;border-radius:12px;background:${isOpening ? "#fffbeb" : "#ecfdf5"};border:1px solid ${isOpening ? "#fde68a" : "#a7f3d0"};color:${isOpening ? "#92400e" : "#065f46"};font-size:12px;line-height:1.5;">
+                ${isOpening ? "Centang seluruh tugas persiapan bar sebelum kafe melayani pelanggan." : "Centang seluruh tugas penutupan & pembersihan bar sebelum meninggalkan outlet."}
+              </div>
+
+              <form id="form-shift-checklist" novalidate>
+                <input type="hidden" name="checklist_type" value="${isOpening ? "opening" : "closing"}" />
+                <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+                  ${itemsToUse.map((text, idx) => {
+                    const matched = existingItems.find((it) => it.index === idx);
+                    const isChecked = matched ? matched.done : false;
+                    return `
+                      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--stone-50);border:1px solid var(--stone-200);border-radius:10px;cursor:pointer;font-size:12.5px;line-height:1.45;">
+                        <input type="checkbox" name="item_${idx}" value="1" ${isChecked ? "checked" : ""} style="width:18px;height:18px;margin-top:2px;accent-color:var(--coffee-700);" />
+                        <span style="color:var(--stone-900);font-weight:600;">${idx + 1}. ${esc(text)}</span>
+                      </label>
+                    `;
+                  }).join("")}
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Catatan Tambahan (Opsional)</label>
+                  <textarea class="form-textarea" name="notes" rows="2" placeholder="Catatan kondisi mesin, kendala, atau hal penting...">${esc(existing?.notes || "")}</textarea>
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="button" class="btn btn-emerald" data-action="submit-shift-checklist" style="font-weight:700;">
+                    ✓ Simpan Checklist SOP
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // MODAL BUKU CATATAN HANDOVER ANTAR SHIFT
+    if (uiState.modal.type === "create_logbook") {
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm">
+            <div class="modal-header">
+              <h3 style="font-size:16px;font-weight:800;">📝 Tulis Catatan Handover Shift</h3>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body">
+              <p style="font-size:12px;color:var(--stone-600);margin-bottom:14px;line-height:1.5;">
+                Tinggalkan catatan untuk rekan kerja shift berikutnya mengenai stok yang habis, mesin, kasir, atau event pelanggan.
+              </p>
+              <form id="form-create-logbook" novalidate>
+                <div class="form-group">
+                  <label class="form-label">Kategori Catatan *</label>
+                  <select class="form-select" name="category">
+                    <option value="stok">📦 Stok Habis / Menipis</option>
+                    <option value="mesin_alat">⚙️ Mesin Kopi &amp; Peralatan Bar</option>
+                    <option value="kasir">💰 Kasir &amp; Keuangan</option>
+                    <option value="kebersihan">🧹 Kebersihan &amp; Area</option>
+                    <option value="tamu_event">👥 Tamu / Event Khusus / Catering</option>
+                    <option value="umum" selected>📝 Catatan Umum</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Judul Singkat *</label>
+                  <input class="form-input" name="title" placeholder="Contoh: Susu Oatside sisa 2 pack / Pintu kulkas bawah agak renggang" required />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Isi Pesan Lengkap *</label>
+                  <textarea class="form-textarea" name="message" rows="3" placeholder="Tuliskan detail pesan handover untuk rekan shift berikutnya..." required></textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Tingkat Urgensi</label>
+                  <select class="form-select" name="priority">
+                    <option value="normal">Normal (Informasi biasa)</option>
+                    <option value="penting">Penting (Harap diperhatikan)</option>
+                    <option value="mendesak">Mendesak (Wajib segera ditangani)</option>
+                  </select>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="button" class="btn btn-emerald" data-action="submit-create-logbook" style="font-weight:700;">
+                    ✓ Simpan Catatan Handover
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // MODAL BUAT PENGUMUMAN KAFE
+    if (uiState.modal.type === "create_announcement") {
+      Core.assertManagerAccess("ModalCreateAnnouncement");
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm">
+            <div class="modal-header">
+              <h3 style="font-size:16px;font-weight:800;">📢 Buat Pengumuman Kafe Baru</h3>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body">
+              <form id="form-create-announcement" novalidate>
+                <div class="form-group">
+                  <label class="form-label">Judul Pengumuman *</label>
+                  <input class="form-input" name="title" placeholder="Contoh: Jadwal Briefing Bulanan / Menu Baru" required />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Isi Pesan Pengumuman *</label>
+                  <textarea class="form-textarea" name="content" rows="4" placeholder="Tuliskan pengumuman yang akan tampil di beranda aplikasi seluruh staf..." required></textarea>
+                </div>
+                <div class="grid-2" style="gap:10px;">
+                  <div class="form-group">
+                    <label class="form-label">Tag Badge</label>
+                    <input class="form-input" name="badge_tag" value="Pengumuman" placeholder="Pengumuman / Info / SOP" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Prioritas</label>
+                    <select class="form-select" name="priority">
+                      <option value="info">Info Standar</option>
+                      <option value="penting">Penting</option>
+                      <option value="urgent">Mendesak / Urgent</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+                    <input type="checkbox" name="is_pinned" value="1" checked style="width:16px;height:16px;" />
+                    <span>📌 Sematkan di bagian paling atas (Pinned)</span>
+                  </label>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                  <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                  <button type="button" class="btn btn-emerald" data-action="submit-create-announcement" style="font-weight:700;">
+                    ✓ Terbitkan Pengumuman
+                  </button>
                 </div>
               </form>
             </div>
@@ -4979,11 +5181,11 @@
     if (!form) return;
 
     const fd = new FormData(form);
-    const s = Core.state;
     const title = String(fd.get("title") || "").trim();
     const reason = String(fd.get("reason") || "").trim();
     const dateStart = normalizeDateInput(fd.get("date_start"));
     const dateEnd = normalizeDateInput(fd.get("date_end"));
+    const type = String(fd.get("type") || "izin");
 
     if (!title || !reason) {
       showBanner(false, "Judul dan keterangan pengajuan wajib diisi.");
@@ -4995,16 +5197,6 @@
       return;
     }
 
-    const payload = {
-      employee_id: s.currentUser.id,
-      type: String(fd.get("type") || "izin"),
-      title,
-      date_start: dateStart,
-      date_end: dateEnd,
-      reason,
-      status: "pending",
-    };
-
     const origText = btn ? btn.innerHTML : "";
     if (btn) {
       btn.disabled = true;
@@ -5012,23 +5204,142 @@
     }
 
     try {
-      const { error } = await s.supabase.from("holidays_and_leaves").insert(payload);
-      if (error) throw error;
-      await Core.logSecurityEvent(
-        "MEMBER_REQUESTED_LEAVE",
-        "holidays_and_leaves",
-        payload.type,
-        `Anggota mengajukan ${payload.type}: ${payload.title} (${payload.date_start} s/d ${payload.date_end}).`
-      );
+      await Core.requestLeave({
+        type,
+        dateStart,
+        dateEnd,
+        title,
+        reason,
+        attachmentDataUrl: uiState.leaveAttachmentDataUrl || null,
+      });
+      uiState.leaveAttachmentDataUrl = null;
       uiState.modal = null;
-      await Core.refreshAllData();
-      showBanner(true, "Pengajuan izin/sakit/cuti berhasil dikirim ke Admin.");
+      showBanner(true, "✓ Pengajuan izin/sakit/cuti berhasil dikirim ke Admin!");
+      render();
     } catch (err) {
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = origText || "Kirim Pengajuan";
       }
       showBanner(false, "Gagal mengirim pengajuan izin: " + (err.message || err));
+    }
+  }
+
+  // 17B. Simpan SOP Opening & Closing Checklist
+  async function handleShiftChecklistSubmit(btn) {
+    const form = document.getElementById("form-shift-checklist");
+    if (!form) return;
+    const checklistType = form.checklist_type?.value || "opening";
+    const notes = form.notes?.value?.trim() || "";
+    const items = [];
+    for (let i = 0; i < 5; i++) {
+      const chk = form[`item_${i}`];
+      items.push({ index: i, done: Boolean(chk && chk.checked) });
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Checklist...";
+    }
+
+    try {
+      await Core.submitShiftChecklist({
+        checklistType,
+        items,
+        notes,
+      });
+      uiState.modal = null;
+      showBanner(true, `✓ Checklist SOP ${checklistType === "opening" ? "Opening" : "Closing"} berhasil disimpan!`);
+      render();
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Simpan Checklist SOP";
+      }
+      showBanner(false, "Gagal menyimpan checklist: " + (err.message || err));
+    }
+  }
+
+  // 17C. Simpan Catatan Handover Shift (Logbook)
+  async function handleCreateLogbook(btn) {
+    const form = document.getElementById("form-create-logbook");
+    if (!form) return;
+    const fd = new FormData(form);
+    const title = String(fd.get("title") || "").trim();
+    const message = String(fd.get("message") || "").trim();
+    const category = String(fd.get("category") || "umum");
+    const priority = String(fd.get("priority") || "normal");
+
+    if (!title || !message) {
+      showBanner(false, "Judul dan isi pesan catatan wajib diisi.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Catatan...";
+    }
+
+    try {
+      await Core.createShiftLogbook({
+        category,
+        title,
+        message,
+        priority,
+      });
+      uiState.modal = null;
+      showBanner(true, "✓ Catatan handover shift berhasil disimpan dan tampil untuk rekan kerja!");
+      render();
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Simpan Catatan Handover";
+      }
+      showBanner(false, "Gagal menyimpan catatan: " + (err.message || err));
+    }
+  }
+
+  // 17D. Terbitkan Pengumuman Kafe
+  async function handleCreateAnnouncement(btn) {
+    const form = document.getElementById("form-create-announcement");
+    if (!form) return;
+    const fd = new FormData(form);
+    const title = String(fd.get("title") || "").trim();
+    const content = String(fd.get("content") || "").trim();
+    const badgeTag = String(fd.get("badge_tag") || "Pengumuman").trim();
+    const priority = String(fd.get("priority") || "info");
+    const isPinned = form.is_pinned ? form.is_pinned.checked : true;
+
+    if (!title || !content) {
+      showBanner(false, "Judul dan pesan pengumuman wajib diisi.");
+      return;
+    }
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menerbitkan...";
+    }
+
+    try {
+      await Core.createAnnouncement({
+        title,
+        content,
+        badgeTag,
+        priority,
+        isPinned,
+      });
+      uiState.modal = null;
+      showBanner(true, "✓ Pengumuman kafe berhasil diterbitkan ke seluruh staf!");
+      render();
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Terbitkan Pengumuman";
+      }
+      showBanner(false, "Gagal menerbitkan pengumuman: " + (err.message || err));
     }
   }
 
@@ -6044,12 +6355,124 @@
         return;
       }
 
-      if (action === "open-member-leave") {
+      if (action === "open-member-leave" || action === "open-request-leave") {
         if (!Core.isManager() && !Core.state.settings.allow_member_request_leaves) {
           Core.assertManagerAccess("OpenMemberLeave");
         }
+        uiState.leaveAttachmentDataUrl = null;
         uiState.modal = { type: "member_leave" };
         render();
+        return;
+      }
+
+      if (action === "open-shift-checklist-modal") {
+        uiState.modal = {
+          type: "shift_checklist",
+          checklistType: btn.getAttribute("data-type") || "opening",
+        };
+        render();
+        return;
+      }
+
+      if (action === "submit-shift-checklist") {
+        await handleShiftChecklistSubmit(btn);
+        return;
+      }
+
+      if (action === "open-create-logbook") {
+        uiState.modal = { type: "create_logbook" };
+        render();
+        return;
+      }
+
+      if (action === "submit-create-logbook") {
+        await handleCreateLogbook(btn);
+        return;
+      }
+
+      if (action === "resolve-logbook-item") {
+        const logId = btn.getAttribute("data-id");
+        if (!logId) return;
+        try {
+          await Core.resolveShiftLogbook(logId);
+          showBanner(true, "✓ Catatan handover ditandai selesai.");
+          render();
+        } catch (err) {
+          showBanner(false, "Gagal memperbarui catatan: " + (err.message || err));
+        }
+        return;
+      }
+
+      if (action === "open-create-announcement") {
+        Core.assertManagerAccess("OpenCreateAnnouncement");
+        uiState.modal = { type: "create_announcement" };
+        render();
+        return;
+      }
+
+      if (action === "submit-create-announcement") {
+        await handleCreateAnnouncement(btn);
+        return;
+      }
+
+      if (action === "delete-announcement") {
+        const annId = btn.getAttribute("data-id");
+        if (!annId) return;
+        if (!confirm("Hapus pengumuman ini?")) return;
+        try {
+          await Core.deleteAnnouncement(annId);
+          showBanner(true, "✓ Pengumuman berhasil dihapus.");
+          render();
+        } catch (err) {
+          showBanner(false, "Gagal menghapus pengumuman: " + (err.message || err));
+        }
+        return;
+      }
+
+      if (action === "review-leave-approve") {
+        const leaveId = btn.getAttribute("data-id");
+        if (!leaveId) return;
+        btn.disabled = true;
+        try {
+          await Core.reviewLeaveRequest(leaveId, true);
+          showBanner(true, "✓ Permohonan izin / sakit berhasil disetujui!");
+          render();
+        } catch (err) {
+          btn.disabled = false;
+          showBanner(false, "Gagal menyetujui izin: " + (err.message || err));
+        }
+        return;
+      }
+
+      if (action === "review-leave-reject") {
+        const leaveId = btn.getAttribute("data-id");
+        if (!leaveId) return;
+        const reason = prompt("Masukkan alasan penolakan (opsional):", "");
+        btn.disabled = true;
+        try {
+          await Core.reviewLeaveRequest(leaveId, false, reason);
+          showBanner(true, "✓ Permohonan izin ditolak.");
+          render();
+        } catch (err) {
+          btn.disabled = false;
+          showBanner(false, "Gagal menolak izin: " + (err.message || err));
+        }
+        return;
+      }
+
+      if (action === "copy-whatsapp-digest") {
+        const tz = Core.state.settings.operational_timezone || "Asia/Makassar";
+        const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+        const text = Core.generateWhatsAppDailyDigest ? Core.generateWhatsAppDailyDigest(parts.dateString) : "";
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            showBanner(true, "✓ Ringkasan harian berhasil disalin ke clipboard! Siap ditempel di WhatsApp.");
+          }).catch(() => {
+            showBanner(true, "✓ Teks ringkasan siap dikirim via WhatsApp.");
+          });
+        } else {
+          showBanner(true, "✓ Teks ringkasan siap dikirim via WhatsApp.");
+        }
         return;
       }
 
@@ -6444,8 +6867,39 @@
         );
         return;
       }
+
+      if (
+        (e.target && (e.target.id === "btn-trigger-leave-file" || e.target.closest("#btn-trigger-leave-file"))) ||
+        (rawTarget && (rawTarget.id === "btn-trigger-leave-file" || rawTarget.closest("#btn-trigger-leave-file")))
+      ) {
+        const inp = document.getElementById("leave-attachment-file-input");
+        if (inp) inp.click();
+        return;
+      }
+
+      if (
+        (e.target && (e.target.id === "btn-remove-leave-file" || e.target.closest("#btn-remove-leave-file"))) ||
+        (rawTarget && (rawTarget.id === "btn-remove-leave-file" || rawTarget.closest("#btn-remove-leave-file")))
+      ) {
+        uiState.leaveAttachmentDataUrl = null;
+        render();
+        return;
+      }
     } catch (err) {
       showBanner(false, err.message || "Terjadi kesalahan saat memproses permintaan.");
+    }
+  });
+
+  document.addEventListener("change", (e) => {
+    if (e.target && e.target.id === "leave-attachment-file-input") {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        uiState.leaveAttachmentDataUrl = ev.target.result;
+        render();
+      };
+      reader.readAsDataURL(file);
     }
   });
 

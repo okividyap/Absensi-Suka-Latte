@@ -1194,6 +1194,204 @@
     });
   }
 
+  function renderAnnouncementsBanner(s, isManager) {
+    const list = s.announcements || [];
+    if (list.length === 0) return "";
+    return `
+      <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:10px;">
+        ${list.map((ann) => {
+          const isUrgent = ann.priority === "urgent";
+          const isImportant = ann.priority === "penting";
+          const bg = isUrgent ? "#fef2f2" : isImportant ? "#fffbeb" : "linear-gradient(135deg, #fffaf3, #ffffff)";
+          const border = isUrgent ? "#ef4444" : isImportant ? "#f59e0b" : "#d4a373";
+          const badgeBg = isUrgent ? "#ef4444" : isImportant ? "#f59e0b" : "var(--coffee-700)";
+          return `
+            <div class="card" style="border:1.5px solid ${border};background:${bg};padding:12px 16px;position:relative;box-shadow:0 4px 12px rgba(0,0,0,0.04);">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span class="badge" style="background:${badgeBg};color:white;font-weight:800;font-size:10.5px;padding:3px 8px;border-radius:6px;">
+                    ${ann.is_pinned ? "📌 " : ""}${esc(ann.badge_tag || "Pengumuman")}
+                  </span>
+                  <strong style="font-size:14px;color:var(--coffee-950);">${esc(ann.title)}</strong>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:11px;color:var(--stone-500);">
+                    Oleh ${esc(ann.author_name)} • ${esc(ann.created_at ? ann.created_at.slice(0, 10) : "")}
+                  </span>
+                  ${isManager ? `
+                    <button type="button" class="btn btn-outline btn-xs" data-action="delete-announcement" data-id="${esc(ann.id)}" style="color:#ef4444;border-color:#fca5a5;padding:2px 6px;font-size:10px;" title="Hapus Pengumuman">🗑️</button>
+                  ` : ""}
+                </div>
+              </div>
+              <div style="font-size:12.5px;color:var(--stone-800);line-height:1.5;white-space:pre-wrap;">${esc(ann.content)}</div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderShiftChecklistCard(myToday, myShift, isManager, parts) {
+    const s = Core.state;
+    const workDate = parts.dateString;
+    const chks = (s.shiftChecklists || []).filter((c) => c.work_date === workDate);
+    const openingChk = chks.find((c) => c.checklist_type === "opening");
+    const closingChk = chks.find((c) => c.checklist_type === "closing");
+
+    return `
+      <div class="card" style="margin-bottom:16px;border:1px solid #e5e7eb;background:#ffffff;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:20px;">📋</span>
+            <div>
+              <strong style="font-size:14px;color:var(--coffee-950);text-transform:uppercase;letter-spacing:0.02em;">SOP Operasional Kafe: Checklist Shift</strong>
+              <div style="font-size:11px;color:var(--stone-500);">Standar kebersihan mesin kopi, persiapan bar & penutupan kasir</div>
+            </div>
+          </div>
+          <span class="badge badge-coffee" style="font-size:11px;">Hari Ini: ${esc(workDate)}</span>
+        </div>
+
+        <div class="grid-2" style="gap:12px;">
+          <!-- 1. SOP OPENING -->
+          <div style="background:${openingChk ? "#ecfdf5" : "#fefce8"};border:1.5px solid ${openingChk ? "#a7f3d0" : "#fde047"};border-radius:12px;padding:12px 14px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
+              <div>
+                <strong style="font-size:13px;color:${openingChk ? "#065f46" : "#854d0e"};">🌅 SOP Opening Shift Pagi</strong>
+                <div style="font-size:11px;color:${openingChk ? "#047857" : "#a16207"};margin-top:2px;">
+                  ${openingChk ? `✓ Diisi oleh ${esc(openingChk.submitted_by_name)} (${esc(openingChk.created_at?.slice(11, 16))} WITA)` : "Belum diisi hari ini"}
+                </div>
+              </div>
+              <span class="badge ${openingChk ? "badge-success" : "badge-amber"}" style="font-size:10px;">
+                ${openingChk ? "✓ SELESAI" : "MENUNGGU"}
+              </span>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+              <button type="button" class="btn ${openingChk ? "btn-outline btn-xs" : "btn-amber btn-sm"}" data-action="open-shift-checklist-modal" data-type="opening" style="font-size:11px;padding:4px 10px;font-weight:700;">
+                ${openingChk ? "👁️ Lihat / Edit Checklist" : "📝 Isi Checklist Opening →"}
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. SOP CLOSING -->
+          <div style="background:${closingChk ? "#ecfdf5" : "#fefce8"};border:1.5px solid ${closingChk ? "#a7f3d0" : "#fde047"};border-radius:12px;padding:12px 14px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
+              <div>
+                <strong style="font-size:13px;color:${closingChk ? "#065f46" : "#854d0e"};">🌙 SOP Closing Shift Malam</strong>
+                <div style="font-size:11px;color:${closingChk ? "#047857" : "#a16207"};margin-top:2px;">
+                  ${closingChk ? `✓ Diisi oleh ${esc(closingChk.submitted_by_name)} (${esc(closingChk.created_at?.slice(11, 16))} WITA)` : "Belum diisi hari ini"}
+                </div>
+              </div>
+              <span class="badge ${closingChk ? "badge-success" : "badge-amber"}" style="font-size:10px;">
+                ${closingChk ? "✓ SELESAI" : "MENUNGGU"}
+              </span>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+              <button type="button" class="btn ${closingChk ? "btn-outline btn-xs" : "btn-amber btn-sm"}" data-action="open-shift-checklist-modal" data-type="closing" style="font-size:11px;padding:4px 10px;font-weight:700;">
+                ${closingChk ? "👁️ Lihat / Edit Checklist" : "📝 Isi Checklist Closing →"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderShiftLogbookWidget(s, u, isManager, parts) {
+    const list = (s.shiftLogbooks || []).slice(0, 5);
+    const categoryLabels = {
+      stok: "📦 STOK HABIS",
+      mesin_alat: "⚙️ MESIN & ALAT",
+      kasir: "💰 KASIR",
+      kebersihan: "🧹 KEBERSIHAN",
+      tamu_event: "👥 TAMU & EVENT",
+      umum: "📝 CATATAN UMUM",
+    };
+
+    return `
+      <div class="card" style="margin-bottom:16px;border:1px solid #e5e7eb;background:#ffffff;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:20px;">📝</span>
+            <div>
+              <strong style="font-size:14px;color:var(--coffee-950);text-transform:uppercase;letter-spacing:0.02em;">Buku Logbook Handover Shift</strong>
+              <div style="font-size:11px;color:var(--stone-500);">Pesan penting untuk rekan kerja shift berikutnya</div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-emerald btn-sm" data-action="open-create-logbook" style="font-size:11.5px;padding:5px 12px;font-weight:700;">
+            ➕ Tulis Catatan Baru
+          </button>
+        </div>
+
+        ${list.length === 0 ? `
+          <div class="card-subtle" style="padding:16px;text-align:center;font-size:12px;color:var(--stone-500);font-style:italic;">
+            Belum ada catatan handover shift hari ini. Tekan tombol "+ Tulis Catatan Baru" untuk meninggalkan pesan kepada shift berikutnya.
+          </div>
+        ` : `
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            ${list.map((l) => {
+              const catBadge = categoryLabels[l.category] || "📝 UMUM";
+              const isUrgent = l.priority === "mendesak";
+              const isImportant = l.priority === "penting";
+              const bg = l.is_resolved ? "#f9fafb" : isUrgent ? "#fef2f2" : isImportant ? "#fffbeb" : "#fffdf7";
+              const border = l.is_resolved ? "#e5e7eb" : isUrgent ? "#fca5a5" : isImportant ? "#fde68a" : "#e5e7eb";
+              return `
+                <div style="background:${bg};border:1px solid ${border};border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+                  <div style="flex:1;min-width:240px;">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+                      <span class="badge" style="font-size:10px;background:rgba(0,0,0,0.06);color:var(--stone-800);">${catBadge}</span>
+                      <strong style="font-size:13px;color:var(--stone-900);${l.is_resolved ? "text-decoration:line-through;opacity:0.7;" : ""}">${esc(l.title)}</strong>
+                      ${l.is_resolved ? `<span class="badge badge-success" style="font-size:9.5px;">✓ SELESAI</span>` : isUrgent ? `<span class="badge badge-danger" style="font-size:9.5px;">MENDESAK</span>` : ""}
+                    </div>
+                    <div style="font-size:12px;color:var(--stone-700);line-height:1.45;margin-bottom:4px;${l.is_resolved ? "opacity:0.7;" : ""}">${esc(l.message)}</div>
+                    <div style="font-size:10.5px;color:var(--stone-500);">
+                      Oleh <strong>${esc(l.author_name)}</strong> • ${esc(l.work_date)} (${esc(l.created_at?.slice(11, 16))} WITA)
+                    </div>
+                  </div>
+                  ${!l.is_resolved && (isManager || l.author_id === u?.id) ? `
+                    <button type="button" class="btn btn-outline btn-xs" data-action="resolve-logbook-item" data-id="${esc(l.id)}" style="font-size:10.5px;padding:3px 8px;color:#059669;border-color:#6ee7b7;" title="Tandai catatan sudah selesai ditangani">
+                      ✓ Selesai
+                    </button>
+                  ` : ""}
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `}
+      </div>
+    `;
+  }
+
+  function renderWhatsAppDailyDigestCard(s, u, parts) {
+    const rawText = Core.generateWhatsAppDailyDigest ? Core.generateWhatsAppDailyDigest(parts.dateString) : "";
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(rawText)}`;
+
+    return `
+      <div class="card" style="margin-bottom:16px;border:2px solid #25d366;background:linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);box-shadow:0 6px 20px rgba(37,211,102,0.1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;border-bottom:1px solid #bbf7d0;padding-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:24px;">📲</span>
+            <div>
+              <strong style="font-size:14.5px;color:#166534;letter-spacing:0.02em;">Ringkasan Eksekutif Harian (WhatsApp Digest)</strong>
+              <div style="font-size:11.5px;color:#15803d;">Kirim rekap lengkap kehadiran, SOP opening/closing & logbook ke Owner dalam 1-klik</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-outline btn-sm" data-action="copy-whatsapp-digest" style="font-size:11.5px;padding:6px 12px;font-weight:700;border-color:#22c55e;color:#15803d;background:white;">
+              📋 Salin Format WhatsApp
+            </button>
+            <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-emerald btn-sm" style="font-size:11.5px;padding:6px 14px;font-weight:800;background:#25d366;border-color:#25d366;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+              <span>💬</span><span>Kirim ke WhatsApp →</span>
+            </a>
+          </div>
+        </div>
+
+        <div style="background:#ffffff;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;font-family:monospace;font-size:11px;color:#14532d;white-space:pre-wrap;max-height:160px;overflow-y:auto;line-height:1.45;">
+${esc(rawText)}
+        </div>
+      </div>
+    `;
+  }
+
   function renderMemberScheduleHomeWidget(todayDateStr, currentUserId) {
     const s = Core.state;
     const u = s.currentUser;
@@ -1315,6 +1513,8 @@
     const stalePastAtt = Core.getMyStalePastAttendance ? Core.getMyStalePastAttendance(parts.dateString) : null;
 
     return `
+      ${renderAnnouncementsBanner(s, false)}
+
       ${
         stalePastAtt
           ? `<div class="card" style="margin-bottom:16px;border:1.5px solid #d97706;background:#fffbeb;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;">
@@ -1434,6 +1634,22 @@
             <div class="staff-step-title">3. Selesai / Izin</div>
             <div class="staff-step-desc">${canCheckOut ? "Selesai / Izin" : myToday?.check_out_at ? "✓ Sudah Selesai" : "📅 Ajukan Izin"}</div>
           </div>
+        </button>
+      </div>
+
+      <!-- BAR KONTROL OPERASIONAL KAFE CEPAT -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-outline btn-sm" data-action="open-member-leave" style="font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;background:white;border-color:#d1d5db;color:var(--coffee-900);">
+          <span>🏥</span><span>Ajukan Izin / Sakit (+ Surat Dokter)</span>
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" data-action="nav" data-target="jadwal_saya" style="font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;background:white;border-color:#d1d5db;color:var(--coffee-900);">
+          <span>🔁</span><span>Tukar Shift Antar Rekan</span>
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" data-action="open-shift-checklist-modal" data-type="opening" style="font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;background:white;border-color:#d1d5db;color:var(--coffee-900);">
+          <span>📋</span><span>SOP Opening &amp; Closing</span>
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" data-action="open-create-logbook" style="font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;background:white;border-color:#d1d5db;color:var(--coffee-900);">
+          <span>📝</span><span>Logbook Handover</span>
         </button>
       </div>
 
@@ -1558,6 +1774,10 @@
       }
 
       ${renderMemberScheduleHomeWidget(parts.dateString, u.id)}
+
+      ${renderShiftChecklistCard(myToday, myShift, false, parts)}
+
+      ${renderShiftLogbookWidget(s, u, false, parts)}
 
       ${renderMemberHolidayAndLeaveCard(parts.dateString, u.id)}
 
@@ -2783,6 +3003,8 @@
     Core.ensureSignedUrlsForAttendance(s.attendance.slice(0, 8));
 
     return `
+      ${renderAnnouncementsBanner(s, true)}
+
       ${
         pendingUsers.length > 0
           ? `<div class="card" style="margin-bottom:14px;border:2px solid var(--amber-600);background:var(--amber-50);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
@@ -2881,6 +3103,8 @@
         </div>
       </div>
 
+      ${renderWhatsAppDailyDigestCard(s, u, parts)}
+
       <div class="grid-4" style="margin-bottom:18px;">
         <div class="kpi-card">
           <div class="kpi-head">
@@ -2926,6 +3150,10 @@
           <div style="font-size:11.5px;color:var(--rose-700);">Mengacu waktu resmi server WITA</div>
         </div>
       </div>
+
+      ${renderShiftChecklistCard(myToday, myShift, true, parts)}
+
+      ${renderShiftLogbookWidget(s, u, true, parts)}
 
       <!-- DAFTAR ANGGOTA SEDANG BERTUGAS SAAT INI (MONITORING LOKASI & GPS LIVE) -->
       ${
@@ -3411,6 +3639,7 @@
       (p) => p.status === "pending_approval" || (!p.first_login_approved && p.status !== "rejected")
     ).length;
     const pendingCorrCount = s.corrections.filter((c) => c.status === "pending").length;
+    const pendingLeaveCount = (s.holidaysAndLeaves || []).filter((h) => h.employee_id && h.status === "pending").length;
 
     const tabs = [
       {
@@ -3418,13 +3647,21 @@
         label: "Persetujuan Google & Karyawan",
         count: pendingCount,
       },
+      {
+        id: "leaves_approval",
+        label: "🏥 Persetujuan Izin & Cuti",
+        count: pendingLeaveCount,
+      },
       { id: "roles", label: "Role & Admin" },
       { id: "schedule", label: "🗓️ Roster Jadwal Kerja" },
       { id: "shifts", label: "Jadwal Shift" },
       { id: "outlets", label: "Outlet & Geofence GPS" },
+      { id: "checklists_mgr", label: "📋 SOP Checklist Kafe" },
+      { id: "logbooks_mgr", label: "📝 Logbook Handover" },
+      { id: "announcements_mgr", label: "📢 Pengumuman Kafe" },
       { id: "rules", label: "Aturan & Zona Waktu" },
       { id: "corrections", label: "Koreksi Kehadiran", count: pendingCorrCount },
-      { id: "calendar", label: "Kalender, Libur & Izin" },
+      { id: "calendar", label: "Kalender & Libur" },
       { id: "branding", label: "Branding & Tampilan" },
       { id: "audit", label: "Audit Log" },
       { id: "security", label: "Keamanan & Cloud" },
@@ -3439,7 +3676,7 @@
         </span>
         <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Pusat Kendali &amp; Manajemen Operasional</h2>
         <p style="font-size:12.5px;color:var(--coffee-200);margin-bottom:18px;max-width:780px;">
-          Kelola persetujuan akun Google, promosi Admin 1-klik, jadwal Shift Pagi/Siang, radius GPS outlet, aturan keterlambatan, koreksi absensi, dan tampilan aplikasi secara langsung.
+          Kelola persetujuan akun Google, izin &amp; cuti dokter, SOP opening/closing, logbook handover, pengumuman kafe, promosi Admin 1-klik, jadwal shift, dan radius GPS.
         </p>
         <div class="tab-pills">
           ${tabs
@@ -3455,10 +3692,14 @@
       </div>
 
       ${tab === "employees" ? renderCpEmployeesAndApproval(uiState) : ""}
+      ${tab === "leaves_approval" ? renderCpLeavesApproval(uiState) : ""}
       ${tab === "roles" ? renderCpRoles() : ""}
       ${tab === "schedule" ? renderCpSchedule(uiState) : ""}
       ${tab === "shifts" ? renderCpShifts(uiState) : ""}
       ${tab === "outlets" ? renderCpOutlets(uiState) : ""}
+      ${tab === "checklists_mgr" ? renderCpChecklists(uiState) : ""}
+      ${tab === "logbooks_mgr" ? renderCpLogbooks(uiState) : ""}
+      ${tab === "announcements_mgr" ? renderCpAnnouncements(uiState) : ""}
       ${tab === "rules" ? renderCpRules() : ""}
       ${tab === "corrections" ? renderCpCorrections() : ""}
       ${tab === "calendar" ? renderCpCalendar(uiState) : ""}
@@ -4313,6 +4554,334 @@
     `;
   }
 
+  // 7.7B Persetujuan Izin & Cuti Karyawan (Tinjau Alasan & Surat Dokter)
+  function renderCpLeavesApproval(uiState) {
+    const s = Core.state;
+    const tz = s.settings.operational_timezone || "Asia/Makassar";
+    const allLeaves = (s.holidaysAndLeaves || []).filter((h) => Boolean(h.employee_id));
+    const pendingLeaves = allLeaves.filter((h) => h.status === "pending");
+    const reviewedLeaves = allLeaves.filter((h) => h.status !== "pending");
+
+    return `
+      <div style="display:flex;flex-direction:column;gap:18px;">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+            <div>
+              <h3 style="font-size:16px;font-weight:800;margin:0 0 4px 0;color:var(--coffee-950);">
+                🏥 Permohonan Izin, Sakit &amp; Cuti Menunggu Persetujuan (${pendingLeaves.length})
+              </h3>
+              <p style="font-size:12px;color:var(--stone-600);margin:0;">
+                Tinjau alasan dan foto bukti surat dokter karyawan, lalu klik Setujui atau Tolak.
+              </p>
+            </div>
+          </div>
+
+          ${pendingLeaves.length === 0 ? `
+            <div class="card-subtle" style="padding:18px;text-align:center;font-size:12.5px;color:var(--stone-500);font-style:italic;">
+              ✓ Tidak ada permohonan izin atau sakit yang sedang menunggu persetujuan saat ini.
+            </div>
+          ` : `
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              ${pendingLeaves.map((lv) => {
+                const emp = s.profiles.find((p) => p.id === lv.employee_id);
+                const signedPhoto = lv.attachment_path ? Core.getSignedPhotoUrl(lv.attachment_path) : null;
+                return `
+                  <div class="card" style="border:1.5px solid #fde68a;background:#fffdf7;padding:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        ${renderAvatarHtml(emp)}
+                        <div>
+                          <strong style="font-size:14px;color:var(--stone-900);">${esc(emp?.full_name || lv.applicant_name || "Karyawan")}</strong>
+                          <span style="font-size:11px;color:var(--stone-500);">(${esc(emp?.employee_code || "-")})</span>
+                          <div style="font-size:11px;color:var(--coffee-700);margin-top:2px;">
+                            Diajukan: ${esc(lv.created_at ? Core.formatOperationalDateTime(lv.created_at, tz, true) : "-")}
+                          </div>
+                        </div>
+                      </div>
+                      <span class="badge badge-amber" style="font-size:11px;">MENUNGGU PERSETUJUAN</span>
+                    </div>
+
+                    <div class="grid-2" style="gap:10px;background:white;padding:10px 12px;border-radius:10px;border:1px solid var(--stone-200);margin-bottom:10px;">
+                      <div>
+                        <div style="font-size:11px;font-weight:700;color:var(--stone-500);text-transform:uppercase;">Jenis &amp; Tanggal:</div>
+                        <div style="display:flex;align-items:center;gap:6px;margin:3px 0;">
+                          <span class="badge badge-coffee">${esc(getLeaveTypeLabel(lv.type))}</span>
+                          <strong style="font-size:13px;color:var(--stone-900);">${esc(lv.title)}</strong>
+                        </div>
+                        <div class="mono" style="font-size:12px;color:var(--coffee-900);font-weight:700;">
+                          📅 ${esc(lv.date_start)}${lv.date_end && lv.date_end !== lv.date_start ? ` s/d ${esc(lv.date_end)}` : ""}
+                        </div>
+                        <div style="font-size:12px;color:var(--stone-700);margin-top:6px;background:#fefce8;padding:6px 10px;border-radius:8px;">
+                          💬 <strong>Alasan:</strong> "${esc(lv.reason)}"
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style="font-size:11px;font-weight:700;color:var(--stone-500);text-transform:uppercase;margin-bottom:4px;">Lampiran Foto / Surat Dokter:</div>
+                        ${signedPhoto ? `
+                          <div style="position:relative;display:inline-block;">
+                            <img src="${signedPhoto}" alt="Surat Dokter" style="width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.1);" onclick="window.open('${signedPhoto}', '_blank')" title="Ketuk untuk melihat foto ukuran penuh" />
+                            <div style="font-size:10px;color:var(--stone-500);margin-top:2px;">🔍 Ketuk untuk perbesar foto</div>
+                          </div>
+                        ` : `
+                          <div style="font-size:11.5px;color:var(--stone-400);font-style:italic;padding:12px;background:#f9fafb;border-radius:8px;">
+                            (Tanpa lampiran foto surat dokter)
+                          </div>
+                        `}
+                      </div>
+                    </div>
+
+                    <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+                      <button type="button" class="btn btn-outline btn-sm" data-action="review-leave-reject" data-id="${esc(lv.id)}" style="color:var(--rose-700);border-color:#fca5a5;font-size:12px;padding:6px 14px;">
+                        ✕ Tolak Permohonan
+                      </button>
+                      <button type="button" class="btn btn-emerald btn-sm" data-action="review-leave-approve" data-id="${esc(lv.id)}" style="font-size:12px;padding:6px 18px;font-weight:800;">
+                        ✓ Setujui Izin / Sakit
+                      </button>
+                    </div>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          `}
+        </div>
+
+        <div class="card">
+          <h3 style="font-size:15px;font-weight:800;margin:0 0 10px 0;color:var(--coffee-950);">
+            📋 Riwayat Izin &amp; Cuti Terakhir (${reviewedLeaves.length})
+          </h3>
+          ${reviewedLeaves.length === 0 ? `
+            <div class="card-subtle" style="padding:14px;text-align:center;font-size:12px;color:var(--stone-500);">Belum ada riwayat permohonan yang selesai ditinjau.</div>
+          ` : `
+            <div style="overflow-x:auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Karyawan</th>
+                    <th>Jenis &amp; Tanggal</th>
+                    <th>Alasan</th>
+                    <th>Lampiran</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${reviewedLeaves.slice(0, 15).map((lv) => {
+                    const emp = s.profiles.find((p) => p.id === lv.employee_id);
+                    const photo = lv.attachment_path ? Core.getSignedPhotoUrl(lv.attachment_path) : null;
+                    return `
+                      <tr>
+                        <td>
+                          <strong>${esc(emp?.full_name || lv.applicant_name || "-")}</strong>
+                          <div style="font-size:10.5px;color:var(--stone-500);">${esc(emp?.employee_code || "")}</div>
+                        </td>
+                        <td>
+                          <span class="badge badge-coffee" style="font-size:10px;">${esc(getLeaveTypeLabel(lv.type))}</span>
+                          <div style="font-size:11px;font-weight:700;margin-top:2px;">${esc(lv.date_start)}${lv.date_end && lv.date_end !== lv.date_start ? ` s/d ${esc(lv.date_end)}` : ""}</div>
+                        </td>
+                        <td style="font-size:11.5px;max-width:240px;">${esc(lv.reason)}</td>
+                        <td>
+                          ${photo ? `<a href="${photo}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--coffee-700);font-weight:700;text-decoration:underline;">🖼️ Lihat Foto</a>` : "-"}
+                        </td>
+                        <td>${getApprovalStatusBadgeHtml(lv.status)}</td>
+                      </tr>
+                    `;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  }
+
+  // 7.7C Papan Pengumuman & Broadcast Kafe
+  function renderCpAnnouncements(uiState) {
+    const s = Core.state;
+    const list = s.announcements || [];
+
+    return `
+      <div style="display:flex;flex-direction:column;gap:18px;">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+            <div>
+              <h3 style="font-size:16px;font-weight:800;margin:0 0 4px 0;color:var(--coffee-950);">
+                📢 Papan Pengumuman Kafe &amp; Broadcast Pesan (${list.length})
+              </h3>
+              <p style="font-size:12px;color:var(--stone-600);margin:0;">
+                Kirimkan pengumuman resmi ke seluruh anggota tim yang langsung tampil di layar utama aplikasi mereka.
+              </p>
+            </div>
+            <button type="button" class="btn btn-emerald" data-action="open-create-announcement" style="font-size:12.5px;padding:8px 16px;font-weight:700;">
+              ➕ Buat Pengumuman Baru
+            </button>
+          </div>
+
+          ${list.length === 0 ? `
+            <div class="card-subtle" style="padding:20px;text-align:center;font-size:12.5px;color:var(--stone-500);font-style:italic;">
+              Belum ada pengumuman yang aktif. Tekan tombol "+ Buat Pengumuman Baru" untuk membagikan info ke tim.
+            </div>
+          ` : `
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              ${list.map((ann) => `
+                <div class="card" style="border:1.5px solid ${ann.is_pinned ? "#d4a373" : "#e5e7eb"};background:${ann.is_pinned ? "#fffdfa" : "#ffffff"};padding:14px;">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                      <span class="badge" style="background:${ann.priority === "urgent" ? "#ef4444" : ann.priority === "penting" ? "#f59e0b" : "var(--coffee-800)"};color:white;font-size:10.5px;">
+                        ${ann.is_pinned ? "📌 " : ""}${esc(ann.badge_tag || "Pengumuman")}
+                      </span>
+                      <strong style="font-size:14.5px;color:var(--coffee-950);">${esc(ann.title)}</strong>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span style="font-size:11px;color:var(--stone-500);">Oleh ${esc(ann.author_name)} (${esc(ann.created_at?.slice(0, 10))})</span>
+                      <button type="button" class="btn btn-outline btn-xs" data-action="delete-announcement" data-id="${esc(ann.id)}" style="color:#ef4444;border-color:#fca5a5;padding:3px 8px;font-size:11px;">
+                        🗑️ Hapus
+                      </button>
+                    </div>
+                  </div>
+                  <div style="font-size:12.5px;color:var(--stone-800);line-height:1.5;white-space:pre-wrap;">${esc(ann.content)}</div>
+                </div>
+              `).join("")}
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  }
+
+  // 7.7D Riwayat SOP Opening & Closing Checklist Kafe
+  function renderCpChecklists(uiState) {
+    const s = Core.state;
+    const list = s.shiftChecklists || [];
+
+    return `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+          <div>
+            <h3 style="font-size:16px;font-weight:800;margin:0 0 4px 0;color:var(--coffee-950);">
+              📋 Riwayat SOP Opening &amp; Closing Kafe (${list.length})
+            </h3>
+            <p style="font-size:12px;color:var(--stone-600);margin:0;">
+              Laporan kepatuhan checklist mesin espresso, bar, kebersihan &amp; kasir oleh tim barista.
+            </p>
+          </div>
+        </div>
+
+        ${list.length === 0 ? `
+          <div class="card-subtle" style="padding:18px;text-align:center;font-size:12.5px;color:var(--stone-500);font-style:italic;">
+            Belum ada checklist SOP yang diisi oleh karyawan. Checklist dapat diisi saat opening atau closing kafe.
+          </div>
+        ` : `
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Jenis SOP</th>
+                  <th>Pengisi Checklist</th>
+                  <th>Item Selesai</th>
+                  <th>Catatan Tambahan</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${list.slice(0, 30).map((c) => {
+                  const completedItems = (c.items || []).filter((i) => i.done).length;
+                  const totalItems = (c.items || []).length || 5;
+                  const isOpening = c.checklist_type === "opening";
+                  return `
+                    <tr>
+                      <td class="mono" style="font-weight:700;">${esc(c.work_date)}</td>
+                      <td>
+                        <span class="badge ${isOpening ? "badge-amber" : "badge-coffee"}" style="font-size:10px;">
+                          ${isOpening ? "🌅 OPENING" : "🌙 CLOSING"}
+                        </span>
+                      </td>
+                      <td>
+                        <strong>${esc(c.submitted_by_name)}</strong>
+                        <div style="font-size:10.5px;color:var(--stone-500);">${esc(c.created_at?.slice(11, 16))} WITA</div>
+                      </td>
+                      <td>
+                        <span class="badge badge-success" style="font-size:10.5px;">✓ ${completedItems}/${totalItems} SOP</span>
+                      </td>
+                      <td style="font-size:11.5px;max-width:260px;">${esc(c.notes || "-")}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    `;
+  }
+
+  // 7.7E Riwayat Buku Logbook Handover Antar Shift
+  function renderCpLogbooks(uiState) {
+    const s = Core.state;
+    const list = s.shiftLogbooks || [];
+
+    return `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+          <div>
+            <h3 style="font-size:16px;font-weight:800;margin:0 0 4px 0;color:var(--coffee-950);">
+              📝 Riwayat Logbook Handover Antar Shift (${list.length})
+            </h3>
+            <p style="font-size:12px;color:var(--stone-600);margin:0;">
+              Catatan pesan internal staf mengenai stok bahan, perawatan mesin espresso, kasir &amp; tamu.
+            </p>
+          </div>
+          <button type="button" class="btn btn-emerald" data-action="open-create-logbook" style="font-size:12px;padding:6px 14px;font-weight:700;">
+            ➕ Tulis Catatan Baru
+          </button>
+        </div>
+
+        ${list.length === 0 ? `
+          <div class="card-subtle" style="padding:18px;text-align:center;font-size:12.5px;color:var(--stone-500);font-style:italic;">
+            Belum ada catatan logbook yang dibuat oleh karyawan.
+          </div>
+        ` : `
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Kategori</th>
+                  <th>Judul &amp; Pesan</th>
+                  <th>Penulis</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${list.slice(0, 30).map((l) => `
+                  <tr>
+                    <td class="mono" style="font-weight:700;">${esc(l.work_date)}</td>
+                    <td>
+                      <span class="badge" style="font-size:10px;background:rgba(0,0,0,0.06);color:var(--stone-800);">${esc(l.category?.toUpperCase() || "UMUM")}</span>
+                    </td>
+                    <td style="max-width:320px;">
+                      <strong style="font-size:12.5px;color:var(--stone-900);${l.is_resolved ? "text-decoration:line-through;opacity:0.7;" : ""}">${esc(l.title)}</strong>
+                      <div style="font-size:11.5px;color:var(--stone-700);margin-top:2px;${l.is_resolved ? "opacity:0.7;" : ""}">${esc(l.message)}</div>
+                    </td>
+                    <td>
+                      <strong>${esc(l.author_name)}</strong>
+                      <div style="font-size:10.5px;color:var(--stone-500);">${esc(l.created_at?.slice(11, 16))} WITA</div>
+                    </td>
+                    <td>
+                      ${l.is_resolved
+                        ? `<span class="badge badge-success" style="font-size:10px;">✓ SELESAI</span>`
+                        : `<button type="button" class="btn btn-outline btn-xs" data-action="resolve-logbook-item" data-id="${esc(l.id)}" style="font-size:10.5px;padding:3px 8px;color:#059669;border-color:#6ee7b7;">✓ Tandai Selesai</button>`}
+                    </td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    `;
+  }
+
   // 7.8 Branding & Tampilan (Full Edit Tanpa VS Code)
   function renderCpBranding() {
     const cfg = Core.state.settings;
@@ -4497,5 +5066,13 @@
     renderManagerArchiveView,
     renderManagerReportsView,
     renderControlPanelView,
+    renderAnnouncementsBanner,
+    renderShiftChecklistCard,
+    renderShiftLogbookWidget,
+    renderWhatsAppDailyDigestCard,
+    renderCpLeavesApproval,
+    renderCpAnnouncements,
+    renderCpChecklists,
+    renderCpLogbooks,
   };
 })();

@@ -1,13 +1,13 @@
 /**
  * ============================================================================
  * SUKA LATTE ATTENDANCE SYSTEM - SERVICE WORKER
- * File: sw.js (v20261127h)
+ * File: sw.js (v20261127i)
  * 
  * Mendukung Web Notification API & PWA pada Mobile Browser (Android & iOS)
  * ============================================================================
  */
 
-const CACHE_NAME = "suka-latte-cache-v20261127h";
+const CACHE_NAME = "suka-latte-cache-v20261127i";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
