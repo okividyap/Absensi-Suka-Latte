@@ -1340,7 +1340,7 @@
   // 2B. PATROLI TUGAS LOKASI REAL-TIME & NOTIFIKASI SHIFT HP OTOMATIS
   // ==========================================================================
 
-  // 1. Audio Synthesizer (Web Audio API) untuk Peringatan Suara di HP Pengguna
+  // 1. Audio Synthesizer (Web Audio API) Berkekuatan Tinggi & Jernih untuk Speaker HP & Laptop
   function playDutyChimeAlert(type) {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -1349,43 +1349,69 @@
       if (ctx.state === "suspended") {
         ctx.resume().catch(() => {});
       }
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
 
-      const now = ctx.currentTime;
+      // Dynamic Audio Compressor untuk memaksimalkan loudness & kejernihan speaker HP
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-18, ctx.currentTime);
+      compressor.knee.setValueAtTime(20, ctx.currentTime);
+      compressor.ratio.setValueAtTime(8, ctx.currentTime);
+      compressor.attack.setValueAtTime(0.003, ctx.currentTime);
+      compressor.release.setValueAtTime(0.2, ctx.currentTime);
+      compressor.connect(ctx.destination);
+
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.92, ctx.currentTime);
+      masterGain.connect(compressor);
+
+      const playTone = (freq, startOffset, duration, waveType = "triangle", gainLevel = 0.92) => {
+        const osc = ctx.createOscillator();
+        const oscHarmonic = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = waveType;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + startOffset);
+
+        // Harmonic layer (+ perfect 5th) untuk mempertebal bunyi pada speaker HP kecil
+        oscHarmonic.type = "sine";
+        oscHarmonic.frequency.setValueAtTime(freq * 1.5, ctx.currentTime + startOffset);
+
+        osc.connect(gain);
+        oscHarmonic.connect(gain);
+        gain.connect(masterGain);
+
+        const startTime = ctx.currentTime + startOffset;
+        const endTime = startTime + duration;
+
+        gain.gain.setValueAtTime(0.01, startTime);
+        gain.gain.linearRampToValueAtTime(gainLevel, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.01, endTime);
+
+        osc.start(startTime);
+        oscHarmonic.start(startTime);
+        osc.stop(endTime + 0.05);
+        oscHarmonic.stop(endTime + 0.05);
+      };
+
       if (type === "out_of_bounds") {
-        // Nada peringatan ganda menurun (peringatan keluar radius outlet)
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(620, now);
-        osc.frequency.setValueAtTime(420, now + 0.18);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
-        osc.start(now);
-        osc.stop(now + 0.48);
+        // ALARM KELUAR RADIUS: PULSA 4-KALI BERULANG TAJAM & MENDESAK (988Hz & 1318Hz)
+        playTone(988, 0.00, 0.12, "sawtooth", 0.88);
+        playTone(988, 0.16, 0.12, "sawtooth", 0.88);
+        playTone(1318, 0.36, 0.14, "sawtooth", 0.92);
+        playTone(1318, 0.54, 0.22, "sawtooth", 0.95);
       } else if (type === "shift_complete") {
-        // Nada melodi 3-tingkat selesai shift (C5 -> E5 -> G5)
-        osc.type = "triangle";
-        osc.frequency.setValueAtTime(523.25, now);
-        osc.frequency.setValueAtTime(659.25, now + 0.14);
-        osc.frequency.setValueAtTime(783.99, now + 0.28);
-        gain.gain.setValueAtTime(0.35, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
-        osc.start(now);
-        osc.stop(now + 0.62);
+        // MELODI SHIFT SELESAI / 8 JAM KERJA: 5-NADA TINGGI & MERDU BERSUARA LANTANG
+        playTone(880, 0.00, 0.14, "triangle", 0.88);
+        playTone(1108, 0.15, 0.14, "triangle", 0.88);
+        playTone(1318, 0.30, 0.14, "triangle", 0.92);
+        playTone(1760, 0.45, 0.18, "triangle", 0.95);
+        playTone(2093, 0.68, 0.38, "triangle", 0.98);
       } else if (type === "welcome_back") {
-        // Nada ramah selamat kembali ke area kafe
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(440, now);
-        osc.frequency.setValueAtTime(587.33, now + 0.15);
-        gain.gain.setValueAtTime(0.25, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-        osc.start(now);
-        osc.stop(now + 0.42);
+        // NADA RAMAH KEMBALI KE AREA KAFE
+        playTone(880, 0.00, 0.12, "triangle", 0.82);
+        playTone(1318, 0.14, 0.28, "triangle", 0.88);
       }
-    } catch {
-      // Audio playback ditangani tanpa error jika perangkat membisukan audio
+    } catch (err) {
+      console.warn("Audio chime notice:", err);
     }
   }
 
@@ -1553,20 +1579,56 @@
       if (shouldAlert) {
         s.dutyTracker.lastAlertAt.outOfBounds = now;
         const distText = dist !== null ? `${Math.round(dist)} meter` : "di luar batas";
-        const alertMsg = `⚠️ Shift belum selesai tolong lanjutkan kerja terlebih dahulu! Anda terdeteksi berada di luar area ${myOutlet.name} (${distText}). Silakan kembali ke area kafe.`;
 
-        // 1. Audio Chime peringatan ke HP
-        playDutyChimeAlert("out_of_bounds");
+        // Hitung durasi kerja berjalan & status jadwal shift saat ini
+        const tz = s.settings.operational_timezone || "Asia/Makassar";
+        const parts = Core.getTimePartsInTimezone(Core.getServerNow(), tz);
+        const myToday = Core.getMyTodayAttendance ? Core.getMyTodayAttendance(parts.dateString) : null;
+        const checkInDate = myToday?.check_in_at ? new Date(myToday.check_in_at) : null;
+        const elapsedMins = checkInDate ? Math.max(0, Math.floor((now - checkInDate.getTime()) / 60000)) : 0;
+        const is8HoursOrMore = elapsedMins >= 480;
+        const myShift = (s.shifts || []).find((sh) => sh.id === (myToday?.shift_id || u.shift_id));
+        const timing = Core.getShiftTimingInfo ? Core.getShiftTimingInfo(myToday, myShift, tz) : null;
+        const isShiftEnded = timing ? timing.isShiftEnded : false;
+        const isCompletedShift = is8HoursOrMore || isShiftEnded;
 
-        // 2. Notifikasi Sistem HP
-        sendDutyPushNotification(
-          "⚠️ Shift Belum Selesai!",
-          "Shift belum selesai tolong lanjutkan kerja terlebih dahulu! Anda terdeteksi berada di luar area outlet.",
-          "duty-out-of-bounds"
-        );
+        if (isCompletedShift) {
+          // KONDISI B: Keluar radius saat jam shift SUDAH 8 JAM / shift selesai -> TOLONG SEGERA CEK OUT
+          playDutyChimeAlert("shift_complete");
+          if (typeof navigator !== "undefined" && navigator.vibrate) {
+            navigator.vibrate([300, 150, 300, 150, 500]);
+          }
 
-        // 3. Banner peringatan mencolok di layar
-        showBanner(false, alertMsg, 12000);
+          sendDutyPushNotification(
+            "⏰ Jam Shift Sudah Selesai!",
+            "Tolong segera cek out! Jam shift kerja Anda telah mencapai 8 jam. Silakan lakukan absensi check out sekarang.",
+            "duty-out-overtime"
+          );
+
+          showBanner(
+            false,
+            `⏰ Anda berada di luar area ${myOutlet.name} (${distText}) dan jam shift telah mencapai 8 jam. Tolong segera cek out!`,
+            18000
+          );
+        } else {
+          // KONDISI A: Keluar radius saat shift MASIH BERJALAN (< 8 jam) -> TOLONG KEMBALI KE OUTLET LANJUTKAN PEKERJAAN
+          playDutyChimeAlert("out_of_bounds");
+          if (typeof navigator !== "undefined" && navigator.vibrate) {
+            navigator.vibrate([250, 100, 250, 100, 350]);
+          }
+
+          sendDutyPushNotification(
+            "⚠️ Shift Belum Selesai!",
+            "Tolong kembali ke outlet lanjutkan pekerjaan terlebih dahulu! Anda terdeteksi berada di luar area kafe.",
+            "duty-out-of-bounds"
+          );
+
+          showBanner(
+            false,
+            `⚠️ Anda terdeteksi berada di luar area ${myOutlet.name} (${distText}). Tolong kembali ke outlet lanjutkan pekerjaan terlebih dahulu!`,
+            14000
+          );
+        }
 
         // Jika status baru saja berubah dari dalam ke luar, render ulang agar card berubah warna merah
         if (prevStatus !== "outside") {
@@ -5769,11 +5831,16 @@
       }
 
       if (action === "test-duty-chime") {
-        playDutyChimeAlert("welcome_back");
+        playDutyChimeAlert("out_of_bounds");
         if (typeof navigator !== "undefined" && navigator.vibrate) {
-          navigator.vibrate([150, 80, 150]);
+          navigator.vibrate([250, 100, 250, 100, 350]);
         }
-        showBanner(true, "🔊 Nada lonceng berbunyi! Peringatan audio berfungsi normal di perangkat Anda.", 4500);
+        sendDutyPushNotification(
+          "🔊 Tes Suara Alarm Suka Latte",
+          "Suara alarm notifikasi kini bervolume kuat dan berbunyi jernih di speaker HP Anda!",
+          "test-alarm-chime"
+        );
+        showBanner(true, "🔊 Tes alarm speaker berhasil! Suara alarm keras dan getar HP aktif normal.", 5000);
         return;
       }
 

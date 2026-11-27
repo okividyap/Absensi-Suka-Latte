@@ -424,7 +424,7 @@
                 ? `<button type="button" class="btn btn-warning btn-xs" data-action="request-duty-notification" style="font-size:10.5px;padding:3px 8px;font-weight:700;" title="Aktifkan notifikasi otomatis di layar HP">
                     🔔 Aktifkan Notif HP
                   </button>`
-                : `<span class="badge badge-success" style="font-size:10px;">🔔 Notif HP Aktif</span>`
+                : `<button type="button" class="badge badge-success" data-action="test-duty-chime" style="cursor:pointer;font-size:10px;border:none;background:#d1fae5;color:#065f46;font-weight:700;padding:3px 7px;border-radius:6px;" title="Ketuk untuk tes bunyi alarm">🔔 Notif HP Aktif (Tes Suara)</button>`
             }
           </div>
         </div>
@@ -432,23 +432,40 @@
         <!-- Warning Box jika Di Luar Radius -->
         ${
           !isInside
-            ? `<div style="background:#fee2e2;border:1.5px solid #f87171;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">
-                <span style="font-size:22px;line-height:1;">⚠️</span>
-                <div>
-                  <div style="font-size:13.5px;font-weight:800;color:#991b1b;">
-                    Shift belum selesai tolong lanjutkan kerja terlebih dahulu!
+            ? isOvertime
+              ? `<div style="background:#fee2e2;border:2px solid #ef4444;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 0 16px rgba(239,68,68,0.25);">
+                  <div style="display:flex;align-items:flex-start;gap:10px;">
+                    <span style="font-size:26px;line-height:1;">⏰</span>
+                    <div>
+                      <div style="font-size:14px;font-weight:800;color:#991b1b;">
+                        Tolong segera cek out! Jam shift Anda sudah 8 jam!
+                      </div>
+                      <div style="font-size:12px;color:#b91c1c;margin-top:2px;">
+                        Anda berada di luar area outlet <strong>${esc(myOutlet?.name || "Suka Latte")}</strong> (Jarak: <strong>${distText}</strong>, Batas: <strong>${radius}m</strong>) dan jam kerja telah mencapai 8 jam. Silakan lakukan absensi check out sekarang.
+                      </div>
+                    </div>
                   </div>
-                  <div style="font-size:11.5px;color:#b91c1c;margin-top:2px;">
-                    HP Anda terdeteksi berada di luar area outlet <strong>${esc(myOutlet?.name || "Suka Latte")}</strong> (Jarak: <strong>${distText}</strong>, Batas: <strong>${radius}m</strong>). Silakan kembali ke area kafe untuk melanjutkan shift bertugas.
+                  <button type="button" class="btn btn-danger btn-sm" data-action="open-camera" data-mode="check_out" style="white-space:nowrap;font-weight:800;font-size:12.5px;padding:8px 16px;box-shadow:0 4px 12px rgba(239,68,68,0.35);">
+                    📷 Check Out Sekarang →
+                  </button>
+                </div>`
+              : `<div style="background:#fee2e2;border:1.5px solid #f87171;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">
+                  <span style="font-size:22px;line-height:1;">⚠️</span>
+                  <div>
+                    <div style="font-size:13.5px;font-weight:800;color:#991b1b;">
+                      Tolong kembali ke outlet lanjutkan pekerjaan terlebih dahulu!
+                    </div>
+                    <div style="font-size:11.5px;color:#b91c1c;margin-top:2px;">
+                      HP Anda terdeteksi berada di luar area outlet <strong>${esc(myOutlet?.name || "Suka Latte")}</strong> (Jarak: <strong>${distText}</strong>, Batas: <strong>${radius}m</strong>). Shift belum selesai, tolong kembali ke outlet lanjutkan pekerjaan terlebih dahulu.
+                    </div>
                   </div>
-                </div>
-              </div>`
+                </div>`
             : ""
         }
 
-        <!-- Warning Box jika Jam Shift Telah Selesai -->
+        <!-- Warning Box jika Jam Shift Telah Selesai (saat masih di dalam outlet) -->
         ${
-          isShiftEnded
+          isInside && isShiftEnded
             ? `<div style="background:#fef2f2;border:2px solid #ef4444;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 0 16px rgba(239,68,68,0.2);">
                 <div style="display:flex;align-items:flex-start;gap:10px;">
                   <span style="font-size:26px;line-height:1;">⏰</span>
@@ -465,14 +482,14 @@
                   📷 Check Out Pulang Sekarang →
                 </button>
               </div>`
-            : diffMins <= 15 && diffMins > 0
+            : isInside && diffMins <= 15 && diffMins > 0
             ? `<div style="background:#fffbeb;border:1.5px solid #f59e0b;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">
                 <span style="font-size:22px;line-height:1;">🔔</span>
                 <div style="font-size:12px;color:#92400e;">
                   <strong>15 Menit Menuju Akhir Shift:</strong> Jam shift Anda (${esc(myShift ? myShift.name : "")}) berakhir pukul <strong>${shiftEndText}</strong> (tersisa ~${diffMins} menit). Harap bersiap menyelesaikan pekerjaan dan ambil foto Check Out.
                 </div>
               </div>`
-            : isOvertime
+            : isInside && isOvertime
             ? `<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">
                 <span style="font-size:22px;line-height:1;">⏰</span>
                 <div style="flex:1;">
