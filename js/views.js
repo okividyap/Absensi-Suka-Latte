@@ -388,9 +388,13 @@
     const mm = String(elapsedMins % 60).padStart(2, "0");
     const ss = String(elapsedSecs).padStart(2, "0");
 
+    const timing = Core.getShiftTimingInfo ? Core.getShiftTimingInfo(myToday, myShift, tz) : null;
     const targetMins = 480; // Standar 8 Jam Kerja
     const progressPct = Math.min(100, Math.round((elapsedMins / targetMins) * 100));
-    const isOvertime = elapsedMins >= targetMins;
+    const isShiftEnded = timing ? timing.isShiftEnded : elapsedMins >= targetMins;
+    const isOvertime = isShiftEnded || elapsedMins >= targetMins;
+    const shiftEndText = timing ? `${timing.formattedShiftEnd} WITA` : "Selesai";
+    const diffMins = timing ? timing.diffToEndMins : 480 - elapsedMins;
 
     const hasGps = Boolean(gps && typeof gps.lat === "number");
     const isInside = gps ? gps.inside : true;
@@ -408,7 +412,7 @@
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${!isInside ? "#ef4444" : isOvertime ? "#f59e0b" : "#10b981"};box-shadow:0 0 0 3px ${!isInside ? "rgba(239,68,68,0.3)" : isOvertime ? "rgba(245,158,11,0.3)" : "rgba(16,185,129,0.3)"};"></span>
             <strong style="font-size:13.5px;color:${!isInside ? "#991b1b" : isOvertime ? "#92400e" : "#065f46"};text-transform:uppercase;letter-spacing:0.04em;">
-              ☕ Sedang Bertugas: ${esc(myShift ? myShift.name : "Shift Aktif")}
+              ☕ Sedang Bertugas: ${esc(myShift ? `${myShift.name} (${String(myShift.start_time || "").slice(0, 5)}–${String(myShift.end_time || "").slice(0, 5)} WITA)` : "Shift Aktif")}
             </strong>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
@@ -442,9 +446,33 @@
             : ""
         }
 
-        <!-- Warning Box jika >= 8 Jam -->
+        <!-- Warning Box jika Jam Shift Telah Selesai -->
         ${
-          isOvertime
+          isShiftEnded
+            ? `<div style="background:#fef2f2;border:2px solid #ef4444;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 0 16px rgba(239,68,68,0.2);">
+                <div style="display:flex;align-items:flex-start;gap:10px;">
+                  <span style="font-size:26px;line-height:1;">⏰</span>
+                  <div>
+                    <div style="font-size:14px;font-weight:800;color:#991b1b;">
+                      Jam shift sudah selesai tolong melakukan absensi check out!
+                    </div>
+                    <div style="font-size:12px;color:#b91c1c;margin-top:2px;">
+                      Jam shift <strong>${esc(myShift ? myShift.name : "kerja")}</strong> telah selesai pukul <strong>${shiftEndText}</strong> (Durasi kerja: <strong>${Core.formatDurationMinutes(elapsedMins)}</strong>). Check Out wajib diselesaikan hari ini juga.
+                    </div>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-danger btn-sm" data-action="open-camera" data-mode="check_out" style="white-space:nowrap;font-weight:800;font-size:12.5px;padding:8px 16px;box-shadow:0 4px 12px rgba(239,68,68,0.35);">
+                  📷 Check Out Pulang Sekarang →
+                </button>
+              </div>`
+            : diffMins <= 15 && diffMins > 0
+            ? `<div style="background:#fffbeb;border:1.5px solid #f59e0b;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">
+                <span style="font-size:22px;line-height:1;">🔔</span>
+                <div style="font-size:12px;color:#92400e;">
+                  <strong>15 Menit Menuju Akhir Shift:</strong> Jam shift Anda (${esc(myShift ? myShift.name : "")}) berakhir pukul <strong>${shiftEndText}</strong> (tersisa ~${diffMins} menit). Harap bersiap menyelesaikan pekerjaan dan ambil foto Check Out.
+                </div>
+              </div>`
+            : isOvertime
             ? `<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">
                 <span style="font-size:22px;line-height:1;">⏰</span>
                 <div style="flex:1;">
@@ -479,7 +507,7 @@
             </div>
             <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#6b7280;margin-top:4px;">
               <span>Masuk: ${Core.formatOperationalDateTime(myToday.check_in_at, tz, false).slice(12, 17)} WITA</span>
-              <span>${progressPct}% Target Shift (8 Jam)</span>
+              <span>${isShiftEnded ? "⚠️ Waktu Shift Berakhir" : `Sisa: ~${Math.max(0, diffMins)}m`}</span>
             </div>
           </div>
 
@@ -505,9 +533,9 @@
         <!-- Tombol Aksi Cepat Check Out -->
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(0,0,0,0.06);">
           <div style="font-size:11.5px;color:#4b5563;">
-            Shift Anda masih berlaku. Saat jam kerja selesai, tekan tombol di samping untuk mengakhiri tugas.
+            ${isShiftEnded ? "⚠️ Jam shift Anda telah selesai. Silakan ambil foto Check Out sekarang untuk mengakhiri tugas." : "Shift Anda masih berlaku. Saat jam kerja selesai, tekan tombol di samping untuk mengakhiri tugas."}
           </div>
-          <button type="button" class="btn btn-amber" data-action="open-camera" data-mode="check_out" style="padding:8px 18px;font-weight:800;font-size:12.5px;">
+          <button type="button" class="btn ${isShiftEnded ? "btn-danger" : "btn-amber"}" data-action="open-camera" data-mode="check_out" style="padding:8px 18px;font-weight:800;font-size:12.5px;">
             📷 Ambil Foto Check Out Sekarang →
           </button>
         </div>
@@ -1267,8 +1295,20 @@
       s.shifts[0];
     const selectedShiftId = myShift ? myShift.id : u.shift_id;
     const { todayHolidays, myTodayApprovedLeave } = getHolidayAndLeaveSummary(parts.dateString, u.id);
+    const stalePastAtt = Core.getMyStalePastAttendance ? Core.getMyStalePastAttendance(parts.dateString) : null;
 
     return `
+      ${
+        stalePastAtt
+          ? `<div class="card" style="margin-bottom:16px;border:1.5px solid #d97706;background:#fffbeb;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;">
+              <span style="font-size:22px;">ℹ️</span>
+              <div style="font-size:12px;color:#92400e;line-height:1.5;">
+                <strong>Catatan Sesi Tanggal Kemarin (${esc(stalePastAtt.work_date)}):</strong> Anda belum melakukan Check Out pada tanggal kemarin sehingga sesi telah difinalisasi otomatis oleh sistem. Untuk hari ini, silakan langsung lakukan <strong>Check In</strong> seperti biasa.
+              </div>
+            </div>`
+          : ""
+      }
+
       ${
         !u.face_id_enrolled
           ? `<div class="card" style="margin-bottom:16px;border:1.5px solid #f59e0b;background:#fffbeb;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">

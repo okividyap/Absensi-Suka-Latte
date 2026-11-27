@@ -667,6 +667,10 @@ window.SUKA_LATTE_CONFIG = {
         }
       }
       if (state.session && state.session.user) {
+        // Otomatis tutup sesi hari lampau yang belum check out agar tidak memblokir hari ini
+        try {
+          await state.supabase.rpc("auto_close_expired_attendances");
+        } catch {}
         await syncAuthenticatedGoogleUser();
       }
     } catch (err) {
@@ -1556,15 +1560,90 @@ window.SUKA_LATTE_CONFIG = {
     const tz = state.settings.operational_timezone || "Asia/Makassar";
     const parts = getTimePartsInTimezone(getServerNow(), tz);
     const todayStr = dateString || parts.dateString;
-    const open = state.attendance.find(
-      (a) => a.employee_id === u.id && a.check_in_at && !a.check_out_at
+
+    // 1. Prioritaskan record check in aktif khusus untuk HARI KERJA HARI INI
+    const openToday = state.attendance.find(
+      (a) => a.employee_id === u.id && a.work_date === todayStr && a.check_in_at && !a.check_out_at
     );
-    if (open) return open;
+    if (openToday) return openToday;
+
+    // 2. Jika tidak ada yang aktif, kembalikan data absensi hari kerja ini (misal sudah check-out)
     return (
       state.attendance.find(
         (a) => a.employee_id === u.id && a.work_date === todayStr
       ) || null
     );
+  }
+
+  function getMyStalePastAttendance(dateString) {
+    const u = state.currentUser;
+    if (!u) return null;
+    const tz = state.settings.operational_timezone || "Asia/Makassar";
+    const parts = getTimePartsInTimezone(getServerNow(), tz);
+    const todayStr = dateString || parts.dateString;
+    return (
+      state.attendance.find(
+        (a) => a.employee_id === u.id && a.work_date < todayStr && a.check_in_at && !a.check_out_at
+      ) || null
+    );
+  }
+
+  async function autoCloseExpiredAttendances() {
+    if (!state.supabase) return null;
+    try {
+      const res = await state.supabase.rpc("auto_close_expired_attendances");
+      return res.data;
+    } catch {
+      return null;
+    }
+  }
+
+  function getShiftTimingInfo(myToday, myShift, timezone) {
+    if (!myToday || !myShift) return null;
+    const tz = timezone || state.settings.operational_timezone || "Asia/Makassar";
+    const now = getServerNow();
+    const parts = getTimePartsInTimezone(now, tz);
+
+    const [startH, startM] = String(myShift.start_time || "07:00").split(":").map(Number);
+    const [endH, endM] = String(myShift.end_time || "15:00").split(":").map(Number);
+
+    const shiftStartMins = (startH || 0) * 60 + (startM || 0);
+    let shiftEndMins = (endH || 0) * 60 + (endM || 0);
+
+    const currentMins = parts.hour * 60 + parts.minute;
+
+    if (myShift.crosses_midnight || shiftEndMins <= shiftStartMins) {
+      shiftEndMins += 1440;
+    }
+
+    let effectiveCurrMins = currentMins;
+    if (myShift.crosses_midnight && currentMins < shiftStartMins) {
+      effectiveCurrMins += 1440;
+    }
+
+    const diffToEndMins = shiftEndMins - effectiveCurrMins;
+
+    const checkInDate = new Date(myToday.check_in_at);
+    const elapsedMs = Math.max(0, now.getTime() - checkInDate.getTime());
+    const elapsedMins = Math.floor(elapsedMs / 60000);
+
+    const isShiftEnded = diffToEndMins <= 0;
+    const isOvertime = isShiftEnded || elapsedMins >= 480;
+
+    const endHStr = String(endH).padStart(2, "0");
+    const endMStr = String(endM).padStart(2, "0");
+
+    return {
+      shiftStartMins,
+      shiftEndMins,
+      currentMins,
+      diffToEndMins,
+      elapsedMins,
+      isShiftEnded,
+      isOvertime,
+      formattedShiftEnd: `${endHStr}:${endMStr}`,
+      shiftName: myShift.name || "Shift",
+    };
   }
 
   function getOutletForUser(user) {
@@ -1642,6 +1721,9 @@ window.SUKA_LATTE_CONFIG = {
     respondShiftSwapRequest,
     cancelShiftSwapRequest,
     getMyTodayAttendance,
+    getMyStalePastAttendance,
+    autoCloseExpiredAttendances,
+    getShiftTimingInfo,
     getOutletForUser,
     syncDutyLiveLocation,
   };
