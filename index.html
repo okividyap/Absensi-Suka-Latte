@@ -10,6 +10,7 @@
     />
     <link rel="icon" href="assets/branding/suka-logo.png" />
     <link rel="apple-touch-icon" href="assets/branding/suka-logo.png" />
+    <link rel="manifest" href="manifest.json" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Suka Latte" />
@@ -20,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/styles.css?v=20261127a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261127b" />
   </head>
   <body data-theme="classic_latte">
     <div id="app">
@@ -62,14 +63,30 @@
     </div>
 
     <!-- 1. Supabase JS SDK (Self-Hosted Lokal agar Aman & Tanpa CDN Pihak Ketiga) -->
-    <script src="js/vendor/supabase.js?v=20261127a"></script>
+    <script src="js/vendor/supabase.js?v=20261127b"></script>
     <!-- 2. Konfigurasi Produksi -->
-    <script src="js/config.js?v=20261127a"></script>
+    <script src="js/config.js?v=20261127b"></script>
     <!-- 3. Modul Inti Keamanan, Google OAuth, RLS & Private Storage -->
-    <script src="js/core.js?v=20261127a"></script>
+    <script src="js/core.js?v=20261127b"></script>
     <!-- 4. Komponen Antarmuka Terpisah (Anggota vs Pengelola) & Control Panel Full-Edit -->
-    <script src="js/views.js?v=20261127a"></script>
+    <script src="js/views.js?v=20261127b"></script>
     <!-- 5. Pengendali Utama, Kamera Selfie Langsung, GPS Asli & Event Handler -->
-    <script src="js/app.js?v=20261127a"></script>
+    <script src="js/app.js?v=20261127b"></script>
+
+    <!-- 6. Registrasi Service Worker untuk Notifikasi Mobile (Android & iOS PWA) -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          navigator.serviceWorker
+            .register("sw.js?v=20261127b")
+            .then(function (reg) {
+              console.log("Service Worker aktif normal:", reg.scope);
+            })
+            .catch(function (err) {
+              console.warn("Pendaftaran Service Worker notice:", err);
+            });
+        });
+      }
+    </script>
   </body>
 </html>

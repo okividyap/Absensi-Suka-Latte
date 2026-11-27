@@ -1389,42 +1389,115 @@
     }
   }
 
-  // 2. Notifikasi Push Sistem HP (Web Notification API)
-  function sendDutyPushNotification(title, body, tag) {
-    try {
-      if (typeof window === "undefined" || !("Notification" in window)) return;
-      if (Notification.permission === "granted") {
-        const notif = new Notification(title, {
-          body,
-          icon: "assets/branding/suka-logo.png",
-          badge: "assets/branding/suka-logo.png",
-          tag: tag || "suka-latte-duty",
-          renotify: true,
-        });
+  // 2A. Deteksi Perangkat & Lingkungan PWA untuk Notifikasi Handphone
+  function isIosDevice() {
+    if (typeof navigator === "undefined") return false;
+    return (
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+    );
+  }
+
+  function isStandalonePwa() {
+    if (typeof window === "undefined") return false;
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true
+    );
+  }
+
+  function isInAppBrowser() {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    return /FBAN|FBAV|Instagram|Line|WhatsApp|GSA|Snapchat|Bytedance|TikTok/i.test(ua);
+  }
+
+  // 2B. Notifikasi Push Sistem HP (Web Notification API & Service Worker Registration)
+  async function sendDutyPushNotification(title, body, tag) {
+    const options = {
+      body,
+      icon: "assets/branding/suka-logo.png",
+      badge: "assets/branding/suka-logo.png",
+      tag: tag || "suka-latte-duty",
+      renotify: true,
+      vibrate: [250, 100, 250, 100, 400],
+      data: { url: window.location.href },
+    };
+
+    let sent = false;
+
+    // 1. Coba lewat Service Worker (Wajib untuk Chrome Android & iOS PWA agar tidak Illegal Constructor)
+    if ("serviceWorker" in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && reg.showNotification) {
+          await reg.showNotification(title, options);
+          sent = true;
+        }
+      } catch (swErr) {
+        console.warn("SW showNotification warning:", swErr);
+      }
+    }
+
+    // 2. Fallback lewat standard Notification constructor (Desktop Safari/Chrome/Firefox)
+    if (!sent && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try {
+        const notif = new Notification(title, options);
         notif.onclick = () => {
           window.focus();
           notif.close();
         };
+        sent = true;
+      } catch (notifErr) {
+        console.warn("new Notification() fallback warning:", notifErr);
       }
-    } catch {
-      // Tangani browser mobile jika constructor restricted
     }
+
+    return sent;
   }
 
   async function requestDutyNotificationPermission() {
-    if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
-    if (Notification.permission === "default") {
+    // 1. Jika di iPhone / iPad tapi masih di browser tab biasa (bukan PWA di layar utama)
+    if (isIosDevice() && !isStandalonePwa() && typeof Notification === "undefined") {
+      return "ios_home_screen_required";
+    }
+
+    // 2. Jika di dalam in-app browser (misal dari chat WA) yang memblokir Notification API
+    if (isInAppBrowser() && typeof Notification === "undefined") {
+      return "in_app_browser";
+    }
+
+    // 3. Jika Notification API tersedia di browser
+    if (typeof Notification !== "undefined") {
+      if (Notification.permission === "granted") return "granted";
+      if (Notification.permission === "denied") return "denied";
+
       try {
-        const perm = await Notification.requestPermission();
-        if (Core.state.dutyTracker) {
-          Core.state.dutyTracker.notificationPermission = perm;
+        let perm;
+        // Dukung Promise dan Callback legacy (Safari)
+        const p = Notification.requestPermission((res) => {
+          if (res) perm = res;
+        });
+        if (p && typeof p.then === "function") {
+          perm = await p;
         }
-        return perm;
+        return perm || Notification.permission;
       } catch {
-        return Notification.permission;
+        return Notification.permission || "default";
       }
     }
-    return Notification.permission;
+
+    // 4. Cek via ServiceWorker registration jika Notification tidak di window langsung
+    if ("serviceWorker" in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && "showNotification" in reg) {
+          return "granted";
+        }
+      } catch {}
+    }
+
+    return "unsupported";
   }
 
   // 3. Pemrosesan Posisi GPS Patroli Tugas & Deteksi Keluar Area Outlet
@@ -1536,7 +1609,12 @@
         lastAlertAt: { outOfBounds: 0, overtime: 0 },
         lastServerSyncAt: 0,
         status: "idle",
-        notificationPermission: typeof Notification !== "undefined" ? Notification.permission : "unsupported",
+        notificationPermission:
+          typeof Notification !== "undefined"
+            ? Notification.permission
+            : isIosDevice()
+            ? "ios_tab"
+            : "default",
       };
     }
 
@@ -2951,6 +3029,191 @@
               <div style="display:flex;justify-content:flex-end;gap:8px;">
                 <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
                 <button type="button" class="btn btn-danger" data-action="confirm-delete-item">Ya, Proses Sekarang</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // J1. MODAL PANDUAN NOTIFIKASI IPHONE / IPAD (APPLE IOS)
+    if (uiState.modal.type === "ios_notification_guide") {
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm" style="max-width:440px;">
+            <div class="modal-header">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:24px;">📲</span>
+                <div>
+                  <h3 style="font-size:16px;font-weight:800;color:var(--coffee-900);margin:0;">Aktifkan Notifikasi di iPhone</h3>
+                  <div style="font-size:11px;color:var(--stone-500);margin-top:2px;">Panduan Resmi Apple Web Push iOS</div>
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕</button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+              <div class="card-subtle" style="background:#fef3c7;border:1px solid #f59e0b;padding:12px 14px;border-radius:10px;font-size:12px;color:#92400e;line-height:1.5;">
+                <strong>Kebijakan Resmi Apple iOS:</strong><br/>
+                Sistem operasi Apple iPhone mewajibkan aplikasi web ditambahkan ke <strong>Layar Utama (Home Screen)</strong> agar izin notifikasi sistem Web Push dapat dibuka.
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 12px;background:#f9fafb;border-radius:10px;border:1px solid #e5e7eb;">
+                  <div style="width:26px;height:26px;border-radius:50%;background:var(--coffee-900);color:#fff;display:grid;place-items:center;font-weight:800;font-size:12px;flex-shrink:0;">1</div>
+                  <div style="font-size:12px;color:#374151;">
+                    Ketuk tombol <strong>Bagikan (Share) <span style="font-size:15px;">⎋</span></strong> di bilah bawah peramban Safari Anda.
+                  </div>
+                </div>
+
+                <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 12px;background:#f9fafb;border-radius:10px;border:1px solid #e5e7eb;">
+                  <div style="width:26px;height:26px;border-radius:50%;background:var(--coffee-900);color:#fff;display:grid;place-items:center;font-weight:800;font-size:12px;flex-shrink:0;">2</div>
+                  <div style="font-size:12px;color:#374151;">
+                    Gulir ke bawah lalu pilih menu <strong>"Tambah ke Layar Utama" (Add to Home Screen ➕)</strong>, kemudian ketuk <strong>Tambah</strong>.
+                  </div>
+                </div>
+
+                <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 12px;background:#f9fafb;border-radius:10px;border:1px solid #e5e7eb;">
+                  <div style="width:26px;height:26px;border-radius:50%;background:var(--coffee-900);color:#fff;display:grid;place-items:center;font-weight:800;font-size:12px;flex-shrink:0;">3</div>
+                  <div style="font-size:12px;color:#374151;">
+                    Buka ikon <strong>Suka Latte</strong> dari Layar Utama HP Anda, lalu ketuk tombol <strong>"Aktifkan Notif HP"</strong>. Pop-up izin resmi Apple akan langsung aktif!
+                  </div>
+                </div>
+              </div>
+
+              <div style="background:#f0fdf4;border:1px solid #86efac;padding:10px 12px;border-radius:10px;font-size:11.5px;color:#166534;">
+                ✓ <em>Alarm lonceng audio dan banner peringatan di layar HP Anda saat ini tetap berfungsi normal 100%!</em>
+              </div>
+
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px;">
+                <button type="button" class="btn btn-outline btn-sm" data-action="test-duty-chime" style="font-size:11.5px;">
+                  🔔 Tes Bunyi Alarm
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" data-action="close-modal" style="font-weight:700;">
+                  Mengerti &amp; Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // J2. MODAL PANDUAN BROWSER INTERNAL CHAT (WHATSAPP / INSTAGRAM / TELEGRAM)
+    if (uiState.modal.type === "in_app_browser_guide") {
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm" style="max-width:440px;">
+            <div class="modal-header">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:24px;">🌐</span>
+                <div>
+                  <h3 style="font-size:16px;font-weight:800;color:var(--coffee-900);margin:0;">Buka di Browser Utama HP Anda</h3>
+                  <div style="font-size:11px;color:var(--stone-500);margin-top:2px;">Peramban Internal Membatasi Izin Notifikasi</div>
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕</button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+              <div class="card-subtle" style="background:#eff6ff;border:1px solid #93c5fd;padding:12px 14px;border-radius:10px;font-size:12px;color:#1e40af;line-height:1.5;">
+                Anda saat ini membuka tautan melalui <strong>browser internal chat</strong> (seperti WhatsApp / Instagram / Telegram) yang membatasi izin notifikasi web sistem.
+              </div>
+
+              <div style="font-size:12px;color:#374151;line-height:1.6;">
+                <strong>Langkah Mudah Mengaktifkan:</strong><br/>
+                1. Ketuk ikon <strong>titik tiga (⋮)</strong> atau tombol Bagikan di sudut atas layar.<br/>
+                2. Pilih opsi <strong>"Buka di Chrome"</strong> (untuk HP Android) atau <strong>"Buka di Safari"</strong> (untuk iPhone).<br/>
+                3. Notifikasi sistem dan getaran akan langsung aktif normal!
+              </div>
+
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
+                <button type="button" class="btn btn-outline btn-sm" data-action="copy-app-link">
+                  📋 Salin Tautan
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" data-action="close-modal">
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // J3. MODAL PANDUAN IZIN DIBLOKIR / DITOLAK
+    if (uiState.modal.type === "notification_denied_guide") {
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm" style="max-width:440px;">
+            <div class="modal-header">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:24px;">⚠️</span>
+                <div>
+                  <h3 style="font-size:16px;font-weight:800;color:#991b1b;margin:0;">Izin Notifikasi Diblokir di Browser</h3>
+                  <div style="font-size:11px;color:var(--stone-500);margin-top:2px;">Ubah Setelan Situs untuk Mengizinkan</div>
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕</button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+              <div class="card-subtle" style="background:#fef2f2;border:1px solid #f87171;padding:12px 14px;border-radius:10px;font-size:12px;color:#991b1b;line-height:1.5;">
+                Izin notifikasi pada browser HP Anda sebelumnya ditolak atau diblokir.
+              </div>
+
+              <div style="font-size:12px;color:#374151;line-height:1.6;">
+                <strong>Cara Membuka Kembali Izin:</strong><br/>
+                1. Ketuk ikon gembok / setelan situs (<strong>🔒</strong>) di sebelah kolom alamat web.<br/>
+                2. Pilih menu <strong>Izin Situs (Permissions)</strong>.<br/>
+                3. Ubah status <strong>Notifikasi</strong> menjadi <strong>Izinkan (Allow)</strong>.<br/>
+                4. Muat ulang (Refresh) halaman web ini.
+              </div>
+
+              <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">
+                <button type="button" class="btn btn-primary btn-sm" data-action="reload-page">
+                  🔄 Segarkan Halaman
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" data-action="close-modal">
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // J4. MODAL PANDUAN JIKA BROWSER TIDAK MENDUKUNG WEB NOTIFICATION SAMA SEKALI
+    if (uiState.modal.type === "notification_unsupported_guide") {
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm" style="max-width:440px;">
+            <div class="modal-header">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:24px;">🔔</span>
+                <div>
+                  <h3 style="font-size:16px;font-weight:800;color:var(--coffee-900);margin:0;">Informasi Notifikasi HP</h3>
+                  <div style="font-size:11px;color:var(--stone-500);margin-top:2px;">Peringatan Suara &amp; Layar Tetap Aktif Normal</div>
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕</button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+              <div class="card-subtle" style="background:#f0fdf4;border:1px solid #86efac;padding:12px 14px;border-radius:10px;font-size:12px;color:#166534;line-height:1.5;">
+                ✓ <strong>Peringatan Suara Lonceng, Getaran HP &amp; Banner Layar Aktif Normal!</strong><br/>
+                Meskipun browser Anda tidak menyediakan fitur pop-up luar, sistem Suka Latte tetap otomatis membunyikan alarm lonceng dan memunculkan peringatan saat jam shift Anda selesai.
+              </div>
+
+              <div style="font-size:12px;color:#374151;line-height:1.6;">
+                <strong>Tips Notifikasi Sistem Terbaik:</strong><br/>
+                Gunakan peramban <strong>Google Chrome</strong> (di Android/Laptop) atau tambahkan ke <strong>Layar Utama (Home Screen)</strong> di iPhone untuk menerima pop-up sistem secara penuh.
+              </div>
+
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
+                <button type="button" class="btn btn-outline btn-sm" data-action="test-duty-chime">
+                  🔊 Tes Bunyi Alarm
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" data-action="close-modal">
+                  Tutup
+                </button>
               </div>
             </div>
           </div>
@@ -5454,39 +5717,82 @@
       }
 
       if (action === "request-duty-notification") {
-        if (typeof Notification === "undefined") {
-          showBanner(
-            false,
-            "Browser ini belum mendukung Notifikasi Web. Peringatan suara dan banner layar tetap berfungsi normal."
-          );
-          return;
-        }
         try {
-          const perm = await Notification.requestPermission();
-          if (Core.state.dutyTracker) {
-            Core.state.dutyTracker.notificationPermission = perm;
+          const permResult = await requestDutyNotificationPermission();
+
+          if (permResult === "ios_home_screen_required") {
+            uiState.modal = { type: "ios_notification_guide" };
+            render();
+            return;
           }
-          if (perm === "granted") {
+
+          if (permResult === "in_app_browser") {
+            uiState.modal = { type: "in_app_browser_guide" };
+            render();
+            return;
+          }
+
+          if (permResult === "denied") {
+            uiState.modal = { type: "notification_denied_guide" };
+            render();
+            return;
+          }
+
+          if (permResult === "granted") {
+            if (Core.state.dutyTracker) {
+              Core.state.dutyTracker.notificationPermission = "granted";
+            }
             playDutyChimeAlert("welcome_back");
-            sendDutyPushNotification(
+            if (typeof navigator !== "undefined" && navigator.vibrate) {
+              navigator.vibrate([200, 100, 200]);
+            }
+            await sendDutyPushNotification(
               "☕ Suka Latte Attendance",
-              "Notifikasi HP aktif! Anda akan menerima pengingat otomatis selama jam shift bertugas.",
+              "Notifikasi HP aktif normal! Pengingat jam shift & lokasi bertugas kini aktif di HP Anda.",
               "test-notif"
             );
             showBanner(
               true,
-              "✓ Notifikasi HP berhasil diaktifkan! Pengingat lokasi dan jam selesai shift akan otomatis muncul di HP Anda."
+              "✓ Notifikasi HP berhasil diaktifkan normal! Pengingat jam shift dan lokasi kini aktif di HP Anda."
             );
             render();
-          } else if (perm === "denied") {
-            showBanner(
-              false,
-              "Izin notifikasi ditolak di pengaturan browser. Aktifkan izin notifikasi pada setelan situs browser HP Anda."
-            );
+            return;
           }
+
+          // Fallback jika tidak didukung sama sekali oleh browser saat ini
+          uiState.modal = { type: "notification_unsupported_guide" };
+          render();
         } catch (e) {
-          showBanner(false, "Gagal meminta izin notifikasi: " + (e?.message || e));
+          showBanner(false, "Pemberitahuan notifikasi: " + (e?.message || e));
         }
+        return;
+      }
+
+      if (action === "test-duty-chime") {
+        playDutyChimeAlert("welcome_back");
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate([150, 80, 150]);
+        }
+        showBanner(true, "🔊 Nada lonceng berbunyi! Peringatan audio berfungsi normal di perangkat Anda.", 4500);
+        return;
+      }
+
+      if (action === "copy-app-link") {
+        const url = window.location.href;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(() => {
+            showBanner(true, "✓ Tautan berhasil disalin! Silakan buka di Google Chrome atau Safari.", 5000);
+          }).catch(() => {
+            prompt("Salin tautan ini dan buka di browser Chrome/Safari:", url);
+          });
+        } else {
+          prompt("Salin tautan ini dan buka di browser Chrome/Safari:", url);
+        }
+        return;
+      }
+
+      if (action === "reload-page") {
+        window.location.reload();
         return;
       }
 
