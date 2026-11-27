@@ -8,9 +8,10 @@
       name="description"
       content="Sistem absensi digital resmi karyawan Suka Latte (Versi 1.1 Produksi Final). Login wajib Akun Google dengan persetujuan Admin satu kali, Check In & Check Out kamera selfie langsung, GPS geofence, waktu server WITA, dan arsip foto bulanan."
     />
-    <link rel="icon" href="assets/branding/suka-logo.png" />
-    <link rel="apple-touch-icon" href="assets/branding/suka-logo.png" />
-    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/branding/favicon-32x32.png?v=20261127e" />
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/branding/favicon-16x16.png?v=20261127e" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/branding/apple-touch-icon.png?v=20261127e" />
+    <link rel="manifest" href="manifest.json?v=20261127e" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Suka Latte" />
@@ -21,7 +22,7 @@
       href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/styles.css?v=20261127d" />
+    <link rel="stylesheet" href="css/styles.css?v=20261127e" />
   </head>
   <body data-theme="classic_latte">
     <div id="app">
@@ -63,22 +64,22 @@
     </div>
 
     <!-- 1. Supabase JS SDK (Self-Hosted Lokal agar Aman & Tanpa CDN Pihak Ketiga) -->
-    <script src="js/vendor/supabase.js?v=20261127d"></script>
+    <script src="js/vendor/supabase.js?v=20261127e"></script>
     <!-- 2. Konfigurasi Produksi -->
-    <script src="js/config.js?v=20261127d"></script>
+    <script src="js/config.js?v=20261127e"></script>
     <!-- 3. Modul Inti Keamanan, Google OAuth, RLS & Private Storage -->
-    <script src="js/core.js?v=20261127d"></script>
+    <script src="js/core.js?v=20261127e"></script>
     <!-- 4. Komponen Antarmuka Terpisah (Anggota vs Pengelola) & Control Panel Full-Edit -->
-    <script src="js/views.js?v=20261127d"></script>
+    <script src="js/views.js?v=20261127e"></script>
     <!-- 5. Pengendali Utama, Kamera Selfie Langsung, GPS Asli & Event Handler -->
-    <script src="js/app.js?v=20261127d"></script>
+    <script src="js/app.js?v=20261127e"></script>
 
     <!-- 6. Registrasi Service Worker untuk Notifikasi Mobile (Android & iOS PWA) -->
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", function () {
           navigator.serviceWorker
-            .register("sw.js?v=20261127d")
+            .register("sw.js?v=20261127e")
             .then(function (reg) {
               console.log("Service Worker aktif normal:", reg.scope);
             })

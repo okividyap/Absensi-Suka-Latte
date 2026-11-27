@@ -1468,8 +1468,8 @@
   async function sendDutyPushNotification(title, body, tag) {
     const options = {
       body,
-      icon: "assets/branding/suka-logo.png",
-      badge: "assets/branding/suka-logo.png",
+      icon: "assets/branding/icon-192.png",
+      badge: "assets/branding/favicon-32x32.png",
       tag: tag || "suka-latte-duty",
       renotify: true,
       vibrate: [250, 100, 250, 100, 400],

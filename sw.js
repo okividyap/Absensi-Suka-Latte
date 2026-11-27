@@ -1,13 +1,13 @@
 /**
  * ============================================================================
  * SUKA LATTE ATTENDANCE SYSTEM - SERVICE WORKER
- * File: sw.js (v20261127d)
+ * File: sw.js (v20261127e)
  * 
  * Mendukung Web Notification API & PWA pada Mobile Browser (Android & iOS)
  * ============================================================================
  */
 
-const CACHE_NAME = "suka-latte-cache-v20261127d";
+const CACHE_NAME = "suka-latte-cache-v20261127e";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -53,8 +53,8 @@ self.addEventListener("message", (event) => {
     const title = event.data.title || "☕ Suka Latte Attendance";
     const options = Object.assign(
       {
-        icon: "assets/branding/suka-logo.png",
-        badge: "assets/branding/suka-logo.png",
+        icon: "assets/branding/icon-192.png",
+        badge: "assets/branding/favicon-32x32.png",
         tag: "suka-latte-duty",
         vibrate: [250, 100, 250, 100, 400],
       },
@@ -70,8 +70,8 @@ self.addEventListener("push", (event) => {
   let data = {
     title: "☕ Suka Latte Attendance",
     body: "Pemberitahuan absensi kehadiran.",
-    icon: "assets/branding/suka-logo.png",
-    badge: "assets/branding/suka-logo.png",
+    icon: "assets/branding/icon-192.png",
+    badge: "assets/branding/favicon-32x32.png",
     tag: "suka-latte-duty",
   };
 

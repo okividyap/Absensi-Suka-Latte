@@ -3,22 +3,35 @@
   "short_name": "Suka Latte",
   "description": "Sistem Absensi Biometrik & GPS Suka Latte Café & Catering",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#120b07",
   "theme_color": "#120b07",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "assets/branding/suka-logo.png",
+      "src": "assets/branding/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "assets/branding/suka-logo.png",
+      "src": "assets/branding/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "assets/branding/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/branding/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
