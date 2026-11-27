@@ -351,6 +351,10 @@ window.SUKA_LATTE_CONFIG = {
     return Boolean(isApprovedUser() && state.currentUser.role === "super_admin");
   }
 
+  function isAdmin() {
+    return Boolean(isApprovedUser() && state.currentUser.role === "admin");
+  }
+
   function isManager() {
     return Boolean(
       isApprovedUser() &&
@@ -1685,6 +1689,7 @@ window.SUKA_LATTE_CONFIG = {
     getServerNow,
     isApprovedUser,
     isSuperAdmin,
+    isAdmin,
     isManager,
     isMemberOnly,
     assertManagerAccess,

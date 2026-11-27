@@ -3691,6 +3691,7 @@
                 const sh = s.shifts.find((x) => x.id === emp.shift_id);
                 const canEditThis =
                   Core.isSuperAdmin() ||
+                  Core.isAdmin() ||
                   emp.role === "member" ||
                   emp.id === s.currentUser.id;
                 const canDeleteThis = Core.canDeleteEmployee(emp);
