@@ -35,6 +35,41 @@
     session_timeout_minutes: 120,
   };
 
+  const DEFAULT_SOP_TEMPLATES = {
+    cafe: {
+      opening: [
+        "Nyalakan mesin espresso & water boiler (pastikan tekanan 9 bar & suhu stabil)",
+        "Nyalakan grinder & kalibrasi dial-in espresso (cek yield 18g/36g & brew time 25-30s)",
+        "Cek stok bahan baku bar (Susu segar, house blend beans, sirup, es batu & cup)",
+        "Nyalakan AC, pencahayaan kafe & sound system / playlist resmi",
+        "Bersihkan seluruh meja bar, rapikan area seating & hitung kas modal laci kasir",
+      ],
+      closing: [
+        "Backflush group head mesin espresso dengan blind basket & chemical espresso",
+        "Bersihkan steam wand (lap basah & rendam air panas), drip tray & kosongkan hopper grinder",
+        "Buang ampas kopi, cuci knock box & bersihkan sink tempat cuci bar",
+        "Matikan mesin espresso, grinder, AC, sound system & seluruh lampu outlet",
+        "Rekap omset transaksi kasir harian & pastikan pintu/jendela terkunci rapat",
+      ],
+    },
+    kitchen: {
+      opening: [
+        "Nyalakan exhaust hood & periksa sirkulasi ventilasi udara dapur",
+        "Periksa suhu chiller (0-4°C) & freezer (-18°C), pastikan semua bahan segar aman",
+        "Siapkan mise en place (potongan sayur, porsi daging, bumbu dasar & saus)",
+        "Nyalakan kompor, deep fryer, rice cooker, dan cek instalasi api & gas LPG",
+        "Sanitasi talenan, pisau, dan seluruh workstation dapur dengan cairan food-grade",
+      ],
+      closing: [
+        "Matikan seluruh kompor gas, regulator api, deep fryer, dan oven",
+        "Simpan dan tutup rapat semua bahan makanan di chiller/freezer dengan label tanggal",
+        "Kuras dan saring minyak goreng / bersihkan grease trap dapur",
+        "Cuci, sterilkan, dan tiriskan seluruh peralatan masak, wajan, panci & pisau dapur",
+        "Sapu, pel lantai dapur dengan desinfektan degreaser & buang sampah organik ke luar",
+      ],
+    },
+  };
+
   // ==========================================================================
   // 1. UTILITAS KEAMANAN (ANTI-XSS), JARAK GPS, & WAKTU SERVER WITA
   // ==========================================================================
@@ -214,6 +249,7 @@
     shiftChecklists: [],
     shiftLogbooks: [],
     announcements: [],
+    sopTemplates: null,
     auditLogs: [],
 
     signedUrls: {}, // path -> { url, exp }
@@ -545,7 +581,7 @@ window.SUKA_LATTE_CONFIG = {
     const [outRes, shRes, setRes, attRes, corrRes, hlRes, schedRes, swapRes, chkRes, logRes, annRes] = await Promise.all([
       state.supabase.from("outlets").select("*").order("created_at", { ascending: true }),
       state.supabase.from("work_shifts").select("*").order("start_time", { ascending: true }),
-      state.supabase.from("system_settings").select("*").eq("key", "operational_config").maybeSingle(),
+      state.supabase.from("system_settings").select("*").in("key", ["operational_config", "sop_templates"]),
       // Untuk Anggota, RLS PostgreSQL otomatis memfilter HANYA miliknya sendiri!
       // Ditambah filter eksplisit employee_id di sisi query jika role === 'member' untuk isolasi berlapis.
       isMemberOnly()
@@ -603,8 +639,22 @@ window.SUKA_LATTE_CONFIG = {
 
     state.outlets = outRes.data || [];
     state.shifts = shRes.data || [];
-    if (setRes.data && setRes.data.value) {
+    if (setRes.data && Array.isArray(setRes.data)) {
+      const opCfg = setRes.data.find((row) => row.key === "operational_config");
+      if (opCfg && opCfg.value) {
+        state.settings = { ...DEFAULT_SETTINGS, ...opCfg.value };
+      }
+      const sopTpl = setRes.data.find((row) => row.key === "sop_templates");
+      if (sopTpl && sopTpl.value && typeof sopTpl.value === "object") {
+        state.sopTemplates = sopTpl.value;
+      } else {
+        state.sopTemplates = DEFAULT_SOP_TEMPLATES;
+      }
+    } else if (setRes.data && setRes.data.value) {
       state.settings = { ...DEFAULT_SETTINGS, ...setRes.data.value };
+      state.sopTemplates = DEFAULT_SOP_TEMPLATES;
+    } else {
+      state.sopTemplates = DEFAULT_SOP_TEMPLATES;
     }
     state.attendance = attRes.data || [];
     state.corrections = corrRes.data || [];
@@ -1706,6 +1756,37 @@ window.SUKA_LATTE_CONFIG = {
   // OPERASIONAL KAFE SUKA LATTE: CHECKLIST, LOGBOOK, ANNOUNCEMENTS, LEAVES, WA DIGEST
   // ==========================================================================
 
+  function getSopTemplate(department, checklistType) {
+    const dept = department === "kitchen" ? "kitchen" : "cafe";
+    const type = checklistType === "closing" ? "closing" : "opening";
+    const tpls = state.sopTemplates || DEFAULT_SOP_TEMPLATES;
+    const items = tpls?.[dept]?.[type];
+    if (Array.isArray(items) && items.length > 0) return items;
+    return DEFAULT_SOP_TEMPLATES[dept][type];
+  }
+
+  async function saveSopTemplates(templates) {
+    if (!state.supabase || !isManager()) {
+      throw new Error("Hanya admin atau manajer yang berwenang mengubah template SOP.");
+    }
+    const { data, error } = await state.supabase.rpc("save_sop_templates", {
+      p_templates: templates,
+    });
+    if (error) {
+      // Fallback direct update jika RPC belum termuat
+      const upRes = await state.supabase.from("system_settings").upsert({
+        key: "sop_templates",
+        value: templates,
+        updated_by: state.currentUser.id,
+        updated_at: new Date().toISOString(),
+      });
+      if (upRes.error) throw upRes.error;
+    }
+    state.sopTemplates = templates;
+    await refreshAllData();
+    return templates;
+  }
+
   async function submitShiftChecklist(payload) {
     if (!state.supabase || !isApprovedUser()) {
       throw new Error("Sesi Anda tidak aktif atau belum disetujui.");
@@ -1716,32 +1797,55 @@ window.SUKA_LATTE_CONFIG = {
     const outletId = payload.outletId || u.outlet_id || state.outlets[0]?.id;
     const workDate = payload.workDate || parts.dateString;
     const shiftId = payload.shiftId || u.shift_id || state.shifts[0]?.id;
-    const checklistType = payload.checklistType;
+    const department = payload.department === "kitchen" ? "kitchen" : "cafe";
+    const checklistType = payload.checklistType === "closing" ? "closing" : "opening";
     const items = payload.items || [];
     const notes = payload.notes || null;
+    const checklistId = payload.checklistId;
 
-    const insRes = await withTimeout(
-      state.supabase
-        .from("shift_checklists")
-        .insert({
-          outlet_id: outletId,
-          work_date: workDate,
-          shift_id: shiftId,
-          checklist_type: checklistType,
-          submitted_by: u.id,
-          submitted_by_name: u.full_name,
-          items: items,
-          notes: notes,
-        })
-        .select()
-        .single(),
-      15000,
-      "Penyimpanan checklist SOP kafe timeout."
-    );
+    let res;
+    if (checklistId) {
+      res = await withTimeout(
+        state.supabase
+          .from("shift_checklists")
+          .update({
+            department: department,
+            checklist_type: checklistType,
+            items: items,
+            notes: notes,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", checklistId)
+          .select()
+          .single(),
+        15000,
+        "Pembaruan checklist SOP timeout."
+      );
+    } else {
+      res = await withTimeout(
+        state.supabase
+          .from("shift_checklists")
+          .insert({
+            outlet_id: outletId,
+            work_date: workDate,
+            shift_id: shiftId,
+            department: department,
+            checklist_type: checklistType,
+            submitted_by: u.id,
+            submitted_by_name: u.full_name,
+            items: items,
+            notes: notes,
+          })
+          .select()
+          .single(),
+        15000,
+        "Penyimpanan checklist SOP kafe timeout."
+      );
+    }
 
-    if (insRes.error) throw insRes.error;
+    if (res.error) throw res.error;
     await refreshAllData();
-    return insRes.data;
+    return res.data;
   }
 
   async function createShiftLogbook(payload) {
@@ -1907,8 +2011,10 @@ window.SUKA_LATTE_CONFIG = {
     const radiusViolations = atts.filter((a) => a.live_status === "outside");
 
     const chkToday = (state.shiftChecklists || []).filter((c) => c.work_date === targetDate);
-    const openingChk = chkToday.find((c) => c.checklist_type === "opening");
-    const closingChk = chkToday.find((c) => c.checklist_type === "closing");
+    const cafeOpening = chkToday.find((c) => (c.department || "cafe") === "cafe" && c.checklist_type === "opening");
+    const cafeClosing = chkToday.find((c) => (c.department || "cafe") === "cafe" && c.checklist_type === "closing");
+    const kitchenOpening = chkToday.find((c) => c.department === "kitchen" && c.checklist_type === "opening");
+    const kitchenClosing = chkToday.find((c) => c.department === "kitchen" && c.checklist_type === "closing");
     const logsToday = (state.shiftLogbooks || []).filter((l) => l.work_date === targetDate);
 
     let text = `☕ *RINGKASAN OPERASIONAL SUKA LATTE*\n`;
@@ -1939,9 +2045,9 @@ window.SUKA_LATTE_CONFIG = {
       text += `🛡️ Status Radius: *Aman di Dalam Area Kafe (0 Pelanggaran)*\n`;
     }
 
-    text += `\n📋 *SOP OPENING & CLOSING KAFE:*\n`;
-    text += `🌅 Opening: ${openingChk ? `✓ Selesai (oleh ${openingChk.submitted_by_name})` : `⏳ Belum Diisi`}\n`;
-    text += `🌙 Closing: ${closingChk ? `✓ Selesai (oleh ${closingChk.submitted_by_name})` : `⏳ Belum Diisi`}\n`;
+    text += `\n📋 *SOP OPERASIONAL KAFE & KITCHEN:*\n`;
+    text += `☕ *SOP Kafe (Bar):* Opening: ${cafeOpening ? `✓ Selesai (${cafeOpening.submitted_by_name})` : `⏳ Belum`} | Closing: ${cafeClosing ? `✓ Selesai (${cafeClosing.submitted_by_name})` : `⏳ Belum`}\n`;
+    text += `🍳 *SOP Kitchen (Dapur):* Opening: ${kitchenOpening ? `✓ Selesai (${kitchenOpening.submitted_by_name})` : `⏳ Belum`} | Closing: ${kitchenClosing ? `✓ Selesai (${kitchenClosing.submitted_by_name})` : `⏳ Belum`}\n`;
 
     if (logsToday.length > 0) {
       text += `\n📝 *LOGBOOK HANDOVER ANTAR SHIFT (${logsToday.length}):*\n`;
@@ -2013,6 +2119,9 @@ window.SUKA_LATTE_CONFIG = {
     getOutletForUser,
     syncDutyLiveLocation,
     submitShiftChecklist,
+    getSopTemplate,
+    saveSopTemplates,
+    DEFAULT_SOP_TEMPLATES,
     createShiftLogbook,
     resolveShiftLogbook,
     createAnnouncement,

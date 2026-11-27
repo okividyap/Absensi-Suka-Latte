@@ -2757,56 +2757,78 @@
       `;
     }
 
-    // MODAL CHECKLIST SOP OPENING & CLOSING KAFE
+    // MODAL CHECKLIST SOP OPENING & CLOSING (KAFE & KITCHEN)
     if (uiState.modal.type === "shift_checklist") {
-      const isOpening = uiState.modal.checklistType === "opening";
+      const dept = uiState.modal.department === "kitchen" ? "kitchen" : "cafe";
+      const isOpening = (uiState.modal.checklistType || "opening") === "opening";
       const todayStr = Core.getTimePartsInTimezone(Core.getServerNow(), tz).dateString;
-      const existing = (s.shiftChecklists || []).find(
-        (c) => c.work_date === todayStr && c.checklist_type === uiState.modal.checklistType
-      );
+      const targetDate = uiState.modal.workDate || todayStr;
+
+      const existing = uiState.modal.checklistId
+        ? (s.shiftChecklists || []).find((c) => c.id === uiState.modal.checklistId)
+        : (s.shiftChecklists || []).find(
+            (c) => c.work_date === targetDate && (c.department || "cafe") === dept && c.checklist_type === (isOpening ? "opening" : "closing")
+          );
       const existingItems = existing?.items || [];
-
-      const defaultOpening = [
-        "Nyalakan mesin espresso & water boiler (pastikan tekanan 9 bar & suhu stabil)",
-        "Nyalakan grinder & kalibrasi dial-in espresso (cek yield 18g/36g & brew time 25-30s)",
-        "Cek stok bahan baku bar (Susu segar, house blend beans, sirup, es batu & cup)",
-        "Nyalakan AC, pencahayaan kafe & sound system / playlist resmi",
-        "Bersihkan seluruh meja bar, rapikan area seating & hitung kas modal laci kasir",
-      ];
-
-      const defaultClosing = [
-        "Backflush group head mesin espresso dengan blind basket & espresso chemical",
-        "Bersihkan steam wand (lap basah & rendam air panas), drip tray & kosongkan hopper grinder",
-        "Buang ampas kopi, cuci knock box & bersihkan sink tempat cuci bar",
-        "Matikan mesin espresso, grinder, AC, sound system & seluruh lampu outlet",
-        "Rekap omset transaksi kasir harian & pastikan pintu/jendela terkunci rapat",
-      ];
-
-      const itemsToUse = isOpening ? defaultOpening : defaultClosing;
+      const itemsToUse = Core.getSopTemplate(dept, isOpening ? "opening" : "closing");
 
       return `
         <div class="modal-backdrop">
-          <div class="modal-window">
+          <div class="modal-window" style="max-width:560px;">
             <div class="modal-header">
-              <h3 style="font-size:16px;font-weight:800;">
-                ${isOpening ? "🌅 SOP Opening Shift Pagi" : "🌙 SOP Closing Shift Malam"} • ${esc(todayStr)}
-              </h3>
+              <div>
+                <div style="font-size:11px;color:var(--coffee-400);font-weight:700;text-transform:uppercase;">
+                  SOP Harian • ${esc(targetDate)}
+                </div>
+                <h3 style="font-size:16px;font-weight:800;margin:2px 0 0 0;">
+                  ${existing ? "✏️ Edit Checklist" : "📝 Isi Checklist"} SOP ${dept === "kitchen" ? "🍳 Kitchen / Dapur" : "☕ Kafe & Bar"} (${isOpening ? "🌅 Opening" : "🌙 Closing"})
+                </h3>
+              </div>
               <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
             </div>
             <div class="modal-body">
-              <div style="margin-bottom:14px;padding:11px 13px;border-radius:12px;background:${isOpening ? "#fffbeb" : "#ecfdf5"};border:1px solid ${isOpening ? "#fde68a" : "#a7f3d0"};color:${isOpening ? "#92400e" : "#065f46"};font-size:12px;line-height:1.5;">
-                ${isOpening ? "Centang seluruh tugas persiapan bar sebelum kafe melayani pelanggan." : "Centang seluruh tugas penutupan & pembersihan bar sebelum meninggalkan outlet."}
+              <!-- Switcher Tab Divisi & Sesi Waktu -->
+              <div style="display:flex;gap:6px;margin-bottom:10px;background:var(--stone-100);padding:4px;border-radius:10px;">
+                <button type="button" class="btn btn-xs ${dept === "cafe" ? "btn-primary" : "btn-outline"}" data-action="switch-sop-checklist-tab" data-department="cafe" data-type="${isOpening ? "opening" : "closing"}" style="flex:1;font-weight:700;padding:6px 10px;">
+                  ☕ SOP Kafe &amp; Bar
+                </button>
+                <button type="button" class="btn btn-xs ${dept === "kitchen" ? "btn-primary" : "btn-outline"}" data-action="switch-sop-checklist-tab" data-department="kitchen" data-type="${isOpening ? "opening" : "closing"}" style="flex:1;font-weight:700;padding:6px 10px;">
+                  🍳 SOP Kitchen / Dapur
+                </button>
+              </div>
+
+              <div style="display:flex;gap:6px;margin-bottom:12px;">
+                <button type="button" class="btn btn-xs ${isOpening ? "btn-amber" : "btn-outline"}" data-action="switch-sop-checklist-tab" data-department="${dept}" data-type="opening" style="flex:1;font-weight:700;padding:5px 10px;">
+                  🌅 Shift Opening (Buka)
+                </button>
+                <button type="button" class="btn btn-xs ${!isOpening ? "btn-amber" : "btn-outline"}" data-action="switch-sop-checklist-tab" data-department="${dept}" data-type="closing" style="flex:1;font-weight:700;padding:5px 10px;">
+                  🌙 Shift Closing (Tutup)
+                </button>
+              </div>
+
+              <div style="margin-bottom:12px;padding:10px 12px;border-radius:10px;background:${isOpening ? "#fffbeb" : "#ecfdf5"};border:1px solid ${isOpening ? "#fde68a" : "#a7f3d0"};color:${isOpening ? "#92400e" : "#065f46"};font-size:12px;line-height:1.5;">
+                ${
+                  existing
+                    ? `ℹ️ Sedang mengedit checklist yang diisi oleh <strong>${esc(existing.submitted_by_name)}</strong>. Anda dapat memperbarui centang dan catatan.`
+                    : dept === "kitchen"
+                    ? (isOpening ? "Centang seluruh tugas persiapan dapur, bahan masakan & alat sebelum operasional dimulai." : "Centang seluruh tugas penutupan dapur, kompor, gas, sanitasi alat & kebersihan sebelum pulang.")
+                    : (isOpening ? "Centang seluruh tugas persiapan bar kopi & kasir sebelum kafe melayani pelanggan." : "Centang seluruh tugas penutupan bar, mesin espresso, kebersihan & kasir sebelum meninggalkan outlet.")
+                }
               </div>
 
               <form id="form-shift-checklist" novalidate>
+                <input type="hidden" name="department" value="${dept}" />
                 <input type="hidden" name="checklist_type" value="${isOpening ? "opening" : "closing"}" />
-                <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+                <input type="hidden" name="checklist_id" value="${esc(existing?.id || "")}" />
+                <input type="hidden" name="work_date" value="${esc(targetDate)}" />
+
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
                   ${itemsToUse.map((text, idx) => {
-                    const matched = existingItems.find((it) => it.index === idx);
+                    const matched = existingItems.find((it) => it.index === idx || it.text === text);
                     const isChecked = matched ? matched.done : false;
                     return `
-                      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--stone-50);border:1px solid var(--stone-200);border-radius:10px;cursor:pointer;font-size:12.5px;line-height:1.45;">
-                        <input type="checkbox" name="item_${idx}" value="1" ${isChecked ? "checked" : ""} style="width:18px;height:18px;margin-top:2px;accent-color:var(--coffee-700);" />
+                      <label style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:var(--stone-50);border:1px solid var(--stone-200);border-radius:10px;cursor:pointer;font-size:12px;line-height:1.45;">
+                        <input type="checkbox" name="item_${idx}" data-item-index="${idx}" data-item-text="${esc(text)}" value="1" ${isChecked ? "checked" : ""} style="width:18px;height:18px;margin-top:2px;accent-color:var(--coffee-700);" />
                         <span style="color:var(--stone-900);font-weight:600;">${idx + 1}. ${esc(text)}</span>
                       </label>
                     `;
@@ -2815,14 +2837,109 @@
 
                 <div class="form-group">
                   <label class="form-label">Catatan Tambahan (Opsional)</label>
-                  <textarea class="form-textarea" name="notes" rows="2" placeholder="Catatan kondisi mesin, kendala, atau hal penting...">${esc(existing?.notes || "")}</textarea>
+                  <textarea class="form-textarea" name="notes" rows="2" placeholder="Catatan kondisi mesin, bahan baku, kendala, atau hal penting...">${esc(existing?.notes || "")}</textarea>
                 </div>
 
                 <div style="display:flex;justify-content:flex-end;gap:8px;">
                   <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
                   <button type="button" class="btn btn-emerald" data-action="submit-shift-checklist" style="font-weight:700;">
-                    ✓ Simpan Checklist SOP
+                    ✓ Simpan ${existing ? "Perubahan" : "Checklist"} SOP
                   </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // MODAL EDIT BUTIR / TEMPLATE SOP (KAFE & KITCHEN) - HANYA ADMIN/MANAJER
+    if (uiState.modal.type === "edit_sop_templates") {
+      const activeDept = uiState.modal.activeDept === "kitchen" ? "kitchen" : "cafe";
+      const isKitchen = activeDept === "kitchen";
+      const openingItems = Core.getSopTemplate(activeDept, "opening");
+      const closingItems = Core.getSopTemplate(activeDept, "closing");
+
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window" style="max-width:620px;">
+            <div class="modal-header">
+              <div>
+                <div style="font-size:11px;color:var(--coffee-400);font-weight:700;text-transform:uppercase;">
+                  Pengaturan Operasional Outlet
+                </div>
+                <h3 style="font-size:16px;font-weight:800;margin:2px 0 0 0;">
+                  ⚙️ Edit Butir Template SOP Kafe &amp; Kitchen
+                </h3>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕ Tutup</button>
+            </div>
+            <div class="modal-body">
+              <p style="font-size:12px;color:var(--stone-600);margin-bottom:12px;line-height:1.5;">
+                Sesuaikan butir-butir tugas checklist harian untuk tim Barista (Kafe) dan tim Dapur (Kitchen). Perubahan akan otomatis tersimpan ke sistem dan berlaku saat staf mengisi checklist.
+              </p>
+
+              <!-- Tab Navigasi Divisi -->
+              <div style="display:flex;gap:8px;margin-bottom:14px;background:var(--stone-100);padding:4px;border-radius:10px;">
+                <button type="button" class="btn btn-sm ${!isKitchen ? "btn-primary" : "btn-outline"}" data-action="switch-sop-template-dept" data-dept="cafe" style="flex:1;font-weight:700;">
+                  ☕ SOP Kafe &amp; Bar
+                </button>
+                <button type="button" class="btn btn-sm ${isKitchen ? "btn-primary" : "btn-outline"}" data-action="switch-sop-template-dept" data-dept="kitchen" style="flex:1;font-weight:700;">
+                  🍳 SOP Kitchen / Dapur
+                </button>
+              </div>
+
+              <form id="form-edit-sop-templates">
+                <input type="hidden" name="current_dept" value="${activeDept}" />
+
+                <!-- Bagian 1: Butir Opening -->
+                <div style="border:1.5px solid #fde68a;background:#fffdf7;border-radius:12px;padding:12px;margin-bottom:14px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <strong style="font-size:13px;color:#92400e;">🌅 Butir SOP Opening (${!isKitchen ? "Kafe" : "Kitchen"})</strong>
+                    <button type="button" class="btn btn-outline btn-xs" data-action="add-sop-template-item" data-section="opening" style="font-size:10.5px;padding:3px 8px;font-weight:700;color:#92400e;border-color:#f59e0b;">
+                      ➕ Tambah Butir Opening
+                    </button>
+                  </div>
+                  <div id="sop-items-opening-container" style="display:flex;flex-direction:column;gap:8px;">
+                    ${openingItems.map((text, idx) => `
+                      <div class="sop-item-row" style="display:flex;gap:8px;align-items:center;">
+                        <span class="mono" style="font-size:11px;font-weight:700;color:var(--stone-500);width:20px;text-align:right;">${idx + 1}.</span>
+                        <input type="text" class="form-input sop-item-input-opening" value="${esc(text)}" placeholder="Deskripsi tugas checklist opening..." style="flex:1;font-size:12px;padding:7px 10px;" />
+                        <button type="button" class="btn btn-outline btn-xs" data-action="remove-sop-template-item" style="color:#ef4444;border-color:#fca5a5;padding:5px 8px;" title="Hapus butir ini">✕</button>
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+
+                <!-- Bagian 2: Butir Closing -->
+                <div style="border:1.5px solid #a7f3d0;background:#f0fdf4;border-radius:12px;padding:12px;margin-bottom:14px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <strong style="font-size:13px;color:#065f46;">🌙 Butir SOP Closing (${!isKitchen ? "Kafe" : "Kitchen"})</strong>
+                    <button type="button" class="btn btn-outline btn-xs" data-action="add-sop-template-item" data-section="closing" style="font-size:10.5px;padding:3px 8px;font-weight:700;color:#065f46;border-color:#10b981;">
+                      ➕ Tambah Butir Closing
+                    </button>
+                  </div>
+                  <div id="sop-items-closing-container" style="display:flex;flex-direction:column;gap:8px;">
+                    ${closingItems.map((text, idx) => `
+                      <div class="sop-item-row" style="display:flex;gap:8px;align-items:center;">
+                        <span class="mono" style="font-size:11px;font-weight:700;color:var(--stone-500);width:20px;text-align:right;">${idx + 1}.</span>
+                        <input type="text" class="form-input sop-item-input-closing" value="${esc(text)}" placeholder="Deskripsi tugas checklist closing..." style="flex:1;font-size:12px;padding:7px 10px;" />
+                        <button type="button" class="btn btn-outline btn-xs" data-action="remove-sop-template-item" style="color:#ef4444;border-color:#fca5a5;padding:5px 8px;" title="Hapus butir ini">✕</button>
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-top:8px;border-top:1px solid #f3f4f6;">
+                  <button type="button" class="btn btn-outline btn-xs" data-action="reset-sop-templates-default" style="color:#dc2626;border-color:#fca5a5;font-size:11px;padding:4px 8px;">
+                    🔄 Reset ke Standar Bawaan
+                  </button>
+                  <div style="display:flex;gap:8px;">
+                    <button type="button" class="btn btn-outline" data-action="close-modal">Batal</button>
+                    <button type="button" class="btn btn-emerald" data-action="save-sop-templates-submit" style="font-weight:700;">
+                      ✓ Simpan Perubahan Template
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -5225,17 +5342,27 @@
     }
   }
 
-  // 17B. Simpan SOP Opening & Closing Checklist
+  // 17B. Simpan / Edit SOP Opening & Closing Checklist (Kafe & Kitchen)
   async function handleShiftChecklistSubmit(btn) {
     const form = document.getElementById("form-shift-checklist");
     if (!form) return;
+    const department = form.department?.value || "cafe";
     const checklistType = form.checklist_type?.value || "opening";
+    const checklistId = form.checklist_id?.value || null;
+    const workDate = form.work_date?.value || null;
     const notes = form.notes?.value?.trim() || "";
+
+    const checkboxes = form.querySelectorAll('input[type="checkbox"][data-item-index]');
     const items = [];
-    for (let i = 0; i < 5; i++) {
-      const chk = form[`item_${i}`];
-      items.push({ index: i, done: Boolean(chk && chk.checked) });
-    }
+    checkboxes.forEach((cb) => {
+      const idx = parseInt(cb.getAttribute("data-item-index"), 10);
+      const text = cb.getAttribute("data-item-text") || "";
+      items.push({
+        index: idx,
+        text: text,
+        done: Boolean(cb.checked),
+      });
+    });
 
     const origText = btn ? btn.innerHTML : "";
     if (btn) {
@@ -5245,12 +5372,15 @@
 
     try {
       await Core.submitShiftChecklist({
+        department,
         checklistType,
+        checklistId,
+        workDate,
         items,
         notes,
       });
       uiState.modal = null;
-      showBanner(true, `✓ Checklist SOP ${checklistType === "opening" ? "Opening" : "Closing"} berhasil disimpan!`);
+      showBanner(true, `✓ Checklist SOP ${department === "kitchen" ? "Kitchen" : "Kafe"} (${checklistType === "opening" ? "Opening" : "Closing"}) berhasil disimpan!`);
       render();
     } catch (err) {
       if (btn) {
@@ -5258,6 +5388,57 @@
         btn.innerHTML = origText || "Simpan Checklist SOP";
       }
       showBanner(false, "Gagal menyimpan checklist: " + (err.message || err));
+    }
+  }
+
+  // 17B-2. Simpan Perubahan Template Butir SOP (Kafe & Kitchen)
+  async function handleSaveSopTemplates(btn) {
+    const form = document.getElementById("form-edit-sop-templates");
+    if (!form) return;
+
+    const activeDept = form.current_dept?.value || "cafe";
+    const openingInputs = form.querySelectorAll(".sop-item-input-opening");
+    const closingInputs = form.querySelectorAll(".sop-item-input-closing");
+
+    const newOpening = [];
+    openingInputs.forEach((inp) => {
+      const v = inp.value.trim();
+      if (v) newOpening.push(v);
+    });
+
+    const newClosing = [];
+    closingInputs.forEach((inp) => {
+      const v = inp.value.trim();
+      if (v) newClosing.push(v);
+    });
+
+    if (newOpening.length === 0 || newClosing.length === 0) {
+      showBanner(false, "Setiap sesi (Opening dan Closing) minimal harus memiliki 1 butir checklist.");
+      return;
+    }
+
+    const currentTpls = JSON.parse(JSON.stringify(Core.state.sopTemplates || Core.DEFAULT_SOP_TEMPLATES));
+    if (!currentTpls[activeDept]) currentTpls[activeDept] = {};
+    currentTpls[activeDept].opening = newOpening;
+    currentTpls[activeDept].closing = newClosing;
+
+    const origText = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Menyimpan Template...";
+    }
+
+    try {
+      await Core.saveSopTemplates(currentTpls);
+      uiState.modal = null;
+      showBanner(true, `✓ Butir template SOP ${activeDept === "kitchen" ? "Kitchen" : "Kafe"} berhasil diperbarui & disimpan!`);
+      render();
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origText || "Simpan Perubahan Template";
+      }
+      showBanner(false, "Gagal menyimpan template SOP: " + (err.message || err));
     }
   }
 
@@ -6368,9 +6549,88 @@
       if (action === "open-shift-checklist-modal") {
         uiState.modal = {
           type: "shift_checklist",
+          department: btn.getAttribute("data-department") || "cafe",
           checklistType: btn.getAttribute("data-type") || "opening",
+          checklistId: btn.getAttribute("data-id") || null,
         };
         render();
+        return;
+      }
+
+      if (action === "switch-sop-checklist-tab") {
+        if (uiState.modal && uiState.modal.type === "shift_checklist") {
+          uiState.modal.department = btn.getAttribute("data-department") || uiState.modal.department || "cafe";
+          uiState.modal.checklistType = btn.getAttribute("data-type") || uiState.modal.checklistType || "opening";
+          uiState.modal.checklistId = null;
+          render();
+        }
+        return;
+      }
+
+      if (action === "open-edit-sop-templates") {
+        Core.assertManagerAccess("OpenEditSopTemplates");
+        uiState.modal = {
+          type: "edit_sop_templates",
+          activeDept: "cafe",
+        };
+        render();
+        return;
+      }
+
+      if (action === "switch-sop-template-dept") {
+        if (uiState.modal && uiState.modal.type === "edit_sop_templates") {
+          uiState.modal.activeDept = btn.getAttribute("data-dept") || "cafe";
+          render();
+        }
+        return;
+      }
+
+      if (action === "add-sop-template-item") {
+        const section = btn.getAttribute("data-section") || "opening";
+        const container = document.getElementById(`sop-items-${section}-container`);
+        if (container) {
+          const rowCount = container.querySelectorAll(".sop-item-row").length;
+          const newRow = document.createElement("div");
+          newRow.className = "sop-item-row";
+          newRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+          newRow.innerHTML = `
+            <span class="mono" style="font-size:11px;font-weight:700;color:var(--stone-500);width:20px;text-align:right;">${rowCount + 1}.</span>
+            <input type="text" class="form-input sop-item-input-${section}" value="" placeholder="Deskripsi tugas checklist ${section}..." style="flex:1;font-size:12px;padding:7px 10px;" />
+            <button type="button" class="btn btn-outline btn-xs" data-action="remove-sop-template-item" style="color:#ef4444;border-color:#fca5a5;padding:5px 8px;" title="Hapus butir ini">✕</button>
+          `;
+          container.appendChild(newRow);
+        }
+        return;
+      }
+
+      if (action === "remove-sop-template-item") {
+        const row = btn.closest(".sop-item-row");
+        const container = row?.parentElement;
+        if (row) row.remove();
+        if (container) {
+          container.querySelectorAll(".sop-item-row").forEach((r, idx) => {
+            const numSpan = r.querySelector(".mono");
+            if (numSpan) numSpan.textContent = `${idx + 1}.`;
+          });
+        }
+        return;
+      }
+
+      if (action === "save-sop-templates-submit") {
+        await handleSaveSopTemplates(btn);
+        return;
+      }
+
+      if (action === "reset-sop-templates-default") {
+        if (!confirm("Reset seluruh butir template SOP Kafe & Kitchen ke standar bawaan sistem?")) return;
+        try {
+          await Core.saveSopTemplates(Core.DEFAULT_SOP_TEMPLATES);
+          uiState.modal = null;
+          showBanner(true, "✓ Seluruh template SOP berhasil di-reset ke standar bawaan!");
+          render();
+        } catch (err) {
+          showBanner(false, "Gagal me-reset template: " + (err.message || err));
+        }
         return;
       }
 

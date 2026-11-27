@@ -1196,37 +1196,73 @@
 
   function renderAnnouncementsBanner(s, isManager) {
     const list = s.announcements || [];
-    if (list.length === 0) return "";
-    return `
-      <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:10px;">
-        ${list.map((ann) => {
-          const isUrgent = ann.priority === "urgent";
-          const isImportant = ann.priority === "penting";
-          const bg = isUrgent ? "#fef2f2" : isImportant ? "#fffbeb" : "linear-gradient(135deg, #fffaf3, #ffffff)";
-          const border = isUrgent ? "#ef4444" : isImportant ? "#f59e0b" : "#d4a373";
-          const badgeBg = isUrgent ? "#ef4444" : isImportant ? "#f59e0b" : "var(--coffee-700)";
-          return `
-            <div class="card" style="border:1.5px solid ${border};background:${bg};padding:12px 16px;position:relative;box-shadow:0 4px 12px rgba(0,0,0,0.04);">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                  <span class="badge" style="background:${badgeBg};color:white;font-weight:800;font-size:10.5px;padding:3px 8px;border-radius:6px;">
-                    ${ann.is_pinned ? "📌 " : ""}${esc(ann.badge_tag || "Pengumuman")}
-                  </span>
-                  <strong style="font-size:14px;color:var(--coffee-950);">${esc(ann.title)}</strong>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;">
-                  <span style="font-size:11px;color:var(--stone-500);">
-                    Oleh ${esc(ann.author_name)} • ${esc(ann.created_at ? ann.created_at.slice(0, 10) : "")}
-                  </span>
-                  ${isManager ? `
-                    <button type="button" class="btn btn-outline btn-xs" data-action="delete-announcement" data-id="${esc(ann.id)}" style="color:#ef4444;border-color:#fca5a5;padding:2px 6px;font-size:10px;" title="Hapus Pengumuman">🗑️</button>
-                  ` : ""}
-                </div>
+    if (list.length === 0) {
+      if (!isManager) return "";
+      return `
+        <div class="card" style="margin-bottom:16px;border:1.5px dashed var(--coffee-300);background:linear-gradient(135deg, #fffaf3, #ffffff);padding:14px 18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:24px;">📢</span>
+              <div>
+                <strong style="font-size:13.5px;color:var(--coffee-950);">Papan Pengumuman Kafe &amp; Outlet</strong>
+                <div style="font-size:11.5px;color:var(--stone-600);">Belum ada pengumuman aktif hari ini. Ingin menyampaikan pengumuman ke seluruh tim kafe &amp; dapur?</div>
               </div>
-              <div style="font-size:12.5px;color:var(--stone-800);line-height:1.5;white-space:pre-wrap;">${esc(ann.content)}</div>
             </div>
-          `;
-        }).join("")}
+            <button type="button" class="btn btn-amber btn-sm" data-action="open-create-announcement" style="font-weight:700;font-size:11.5px;">
+              📢 + Buat Pengumuman Baru
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="card" style="margin-bottom:16px;border:1.5px solid var(--gold-300);background:linear-gradient(135deg, #fffdfa, #ffffff);padding:14px 18px;box-shadow:0 4px 14px rgba(0,0,0,0.04);">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:20px;">📢</span>
+            <div>
+              <strong style="font-size:14px;color:var(--coffee-950);text-transform:uppercase;letter-spacing:0.02em;">Papan Pengumuman Outlet</strong>
+              <div style="font-size:11px;color:var(--stone-500);">Informasi &amp; instruksi penting untuk seluruh staf Suka Latte</div>
+            </div>
+          </div>
+          ${isManager ? `
+            <button type="button" class="btn btn-amber btn-xs" data-action="open-create-announcement" style="font-weight:700;font-size:11px;padding:4px 10px;">
+              ➕ Buat Pengumuman
+            </button>
+          ` : ""}
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${list.map((ann) => {
+            const isUrgent = ann.priority === "urgent";
+            const isImportant = ann.priority === "penting";
+            const bg = isUrgent ? "#fef2f2" : isImportant ? "#fffbeb" : "#fafaf9";
+            const border = isUrgent ? "#ef4444" : isImportant ? "#f59e0b" : "#e7e5e4";
+            const badgeBg = isUrgent ? "#ef4444" : isImportant ? "#f59e0b" : "var(--coffee-700)";
+            return `
+              <div style="border:1px solid ${border};background:${bg};border-radius:10px;padding:11px 14px;position:relative;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span class="badge" style="background:${badgeBg};color:white;font-weight:800;font-size:10px;padding:2px 7px;border-radius:5px;">
+                      ${ann.is_pinned ? "📌 " : ""}${esc(ann.badge_tag || "Pengumuman")}
+                    </span>
+                    <strong style="font-size:13.5px;color:var(--coffee-950);">${esc(ann.title)}</strong>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="font-size:10.5px;color:var(--stone-500);">
+                      Oleh ${esc(ann.author_name)} • ${esc(ann.created_at ? ann.created_at.slice(0, 10) : "")}
+                    </span>
+                    ${isManager ? `
+                      <button type="button" class="btn btn-outline btn-xs" data-action="delete-announcement" data-id="${esc(ann.id)}" style="color:#ef4444;border-color:#fca5a5;padding:1px 5px;font-size:10px;" title="Hapus Pengumuman">🗑️</button>
+                    ` : ""}
+                  </div>
+                </div>
+                <div style="font-size:12px;color:var(--stone-800);line-height:1.5;white-space:pre-wrap;">${esc(ann.content)}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
       </div>
     `;
   }
@@ -1235,8 +1271,10 @@
     const s = Core.state;
     const workDate = parts.dateString;
     const chks = (s.shiftChecklists || []).filter((c) => c.work_date === workDate);
-    const openingChk = chks.find((c) => c.checklist_type === "opening");
-    const closingChk = chks.find((c) => c.checklist_type === "closing");
+    const cafeOpening = chks.find((c) => (c.department || "cafe") === "cafe" && c.checklist_type === "opening");
+    const cafeClosing = chks.find((c) => (c.department || "cafe") === "cafe" && c.checklist_type === "closing");
+    const kitchenOpening = chks.find((c) => c.department === "kitchen" && c.checklist_type === "opening");
+    const kitchenClosing = chks.find((c) => c.department === "kitchen" && c.checklist_type === "closing");
 
     return `
       <div class="card" style="margin-bottom:16px;border:1px solid #e5e7eb;background:#ffffff;">
@@ -1244,51 +1282,120 @@
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:20px;">📋</span>
             <div>
-              <strong style="font-size:14px;color:var(--coffee-950);text-transform:uppercase;letter-spacing:0.02em;">SOP Operasional Kafe: Checklist Shift</strong>
-              <div style="font-size:11px;color:var(--stone-500);">Standar kebersihan mesin kopi, persiapan bar & penutupan kasir</div>
+              <strong style="font-size:14px;color:var(--coffee-950);text-transform:uppercase;letter-spacing:0.02em;">SOP Operasional: Kafe &amp; Kitchen</strong>
+              <div style="font-size:11px;color:var(--stone-500);">2 Jenis Checklist Harian: Tim Barista Kafe &amp; Tim Dapur Kitchen</div>
             </div>
           </div>
-          <span class="badge badge-coffee" style="font-size:11px;">Hari Ini: ${esc(workDate)}</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${isManager ? `
+              <button type="button" class="btn btn-outline btn-xs" data-action="open-edit-sop-templates" style="font-size:11px;padding:3px 9px;font-weight:700;border-color:var(--coffee-400);color:var(--coffee-900);">
+                ⚙️ Edit Butir SOP
+              </button>
+            ` : ""}
+            <span class="badge badge-coffee" style="font-size:11px;">Hari Ini: ${esc(workDate)}</span>
+          </div>
         </div>
 
-        <div class="grid-2" style="gap:12px;">
-          <!-- 1. SOP OPENING -->
-          <div style="background:${openingChk ? "#ecfdf5" : "#fefce8"};border:1.5px solid ${openingChk ? "#a7f3d0" : "#fde047"};border-radius:12px;padding:12px 14px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
-              <div>
-                <strong style="font-size:13px;color:${openingChk ? "#065f46" : "#854d0e"};">🌅 SOP Opening Shift Pagi</strong>
-                <div style="font-size:11px;color:${openingChk ? "#047857" : "#a16207"};margin-top:2px;">
-                  ${openingChk ? `✓ Diisi oleh ${esc(openingChk.submitted_by_name)} (${esc(openingChk.created_at?.slice(11, 16))} WITA)` : "Belum diisi hari ini"}
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <!-- 1. DIVISI KAFE & BAR -->
+          <div style="border:1px solid #fed7aa;border-radius:12px;padding:12px;background:#fffaf5;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:16px;">☕</span>
+                <strong style="font-size:13px;color:#9a3412;text-transform:uppercase;">1. SOP Kafe &amp; Bar (Barista &amp; Kasir)</strong>
+              </div>
+              <span class="badge" style="background:#ea580c;color:#fff;font-size:9.5px;padding:2px 7px;">Area Depan / Bar</span>
+            </div>
+            <div class="grid-2" style="gap:10px;">
+              <!-- Cafe Opening -->
+              <div style="background:${cafeOpening ? "#ecfdf5" : "#ffffff"};border:1.5px solid ${cafeOpening ? "#a7f3d0" : "#fde68a"};border-radius:10px;padding:10px 12px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;">
+                  <div>
+                    <strong style="font-size:12.5px;color:${cafeOpening ? "#065f46" : "#854d0e"};">🌅 Opening Kafe</strong>
+                    <div style="font-size:10.5px;color:${cafeOpening ? "#047857" : "#a16207"};margin-top:2px;">
+                      ${cafeOpening ? `✓ ${esc(cafeOpening.submitted_by_name)} (${esc(cafeOpening.created_at?.slice(11, 16))} WITA)` : "Belum diisi"}
+                    </div>
+                  </div>
+                  <span class="badge ${cafeOpening ? "badge-success" : "badge-amber"}" style="font-size:9.5px;">
+                    ${cafeOpening ? "✓ SELESAI" : "MENUNGGU"}
+                  </span>
+                </div>
+                <div style="display:flex;justify-content:flex-end;">
+                  <button type="button" class="btn ${cafeOpening ? "btn-outline btn-xs" : "btn-amber btn-sm"}" data-action="open-shift-checklist-modal" data-department="cafe" data-type="opening" ${cafeOpening ? `data-id="${esc(cafeOpening.id)}"` : ""} style="font-size:10.5px;padding:3px 9px;font-weight:700;">
+                    ${cafeOpening ? "✏️ Edit Checklist" : "📝 Isi Checklist Opening →"}
+                  </button>
                 </div>
               </div>
-              <span class="badge ${openingChk ? "badge-success" : "badge-amber"}" style="font-size:10px;">
-                ${openingChk ? "✓ SELESAI" : "MENUNGGU"}
-              </span>
-            </div>
-            <div style="display:flex;justify-content:flex-end;">
-              <button type="button" class="btn ${openingChk ? "btn-outline btn-xs" : "btn-amber btn-sm"}" data-action="open-shift-checklist-modal" data-type="opening" style="font-size:11px;padding:4px 10px;font-weight:700;">
-                ${openingChk ? "👁️ Lihat / Edit Checklist" : "📝 Isi Checklist Opening →"}
-              </button>
+              <!-- Cafe Closing -->
+              <div style="background:${cafeClosing ? "#ecfdf5" : "#ffffff"};border:1.5px solid ${cafeClosing ? "#a7f3d0" : "#fde68a"};border-radius:10px;padding:10px 12px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;">
+                  <div>
+                    <strong style="font-size:12.5px;color:${cafeClosing ? "#065f46" : "#854d0e"};">🌙 Closing Kafe</strong>
+                    <div style="font-size:10.5px;color:${cafeClosing ? "#047857" : "#a16207"};margin-top:2px;">
+                      ${cafeClosing ? `✓ ${esc(cafeClosing.submitted_by_name)} (${esc(cafeClosing.created_at?.slice(11, 16))} WITA)` : "Belum diisi"}
+                    </div>
+                  </div>
+                  <span class="badge ${cafeClosing ? "badge-success" : "badge-amber"}" style="font-size:9.5px;">
+                    ${cafeClosing ? "✓ SELESAI" : "MENUNGGU"}
+                  </span>
+                </div>
+                <div style="display:flex;justify-content:flex-end;">
+                  <button type="button" class="btn ${cafeClosing ? "btn-outline btn-xs" : "btn-amber btn-sm"}" data-action="open-shift-checklist-modal" data-department="cafe" data-type="closing" ${cafeClosing ? `data-id="${esc(cafeClosing.id)}"` : ""} style="font-size:10.5px;padding:3px 9px;font-weight:700;">
+                    ${cafeClosing ? "✏️ Edit Checklist" : "📝 Isi Checklist Closing →"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- 2. SOP CLOSING -->
-          <div style="background:${closingChk ? "#ecfdf5" : "#fefce8"};border:1.5px solid ${closingChk ? "#a7f3d0" : "#fde047"};border-radius:12px;padding:12px 14px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
-              <div>
-                <strong style="font-size:13px;color:${closingChk ? "#065f46" : "#854d0e"};">🌙 SOP Closing Shift Malam</strong>
-                <div style="font-size:11px;color:${closingChk ? "#047857" : "#a16207"};margin-top:2px;">
-                  ${closingChk ? `✓ Diisi oleh ${esc(closingChk.submitted_by_name)} (${esc(closingChk.created_at?.slice(11, 16))} WITA)` : "Belum diisi hari ini"}
+          <!-- 2. DIVISI KITCHEN & DAPUR -->
+          <div style="border:1px solid #a7f3d0;border-radius:12px;padding:12px;background:#f0fdf4;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:16px;">🍳</span>
+                <strong style="font-size:13px;color:#065f46;text-transform:uppercase;">2. SOP Kitchen &amp; Dapur (Cook &amp; Makanan)</strong>
+              </div>
+              <span class="badge" style="background:#059669;color:#fff;font-size:9.5px;padding:2px 7px;">Area Belakang / Dapur</span>
+            </div>
+            <div class="grid-2" style="gap:10px;">
+              <!-- Kitchen Opening -->
+              <div style="background:${kitchenOpening ? "#ecfdf5" : "#ffffff"};border:1.5px solid ${kitchenOpening ? "#a7f3d0" : "#a7f3d0"};border-radius:10px;padding:10px 12px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;">
+                  <div>
+                    <strong style="font-size:12.5px;color:${kitchenOpening ? "#065f46" : "#047857"};">🌅 Opening Kitchen</strong>
+                    <div style="font-size:10.5px;color:${kitchenOpening ? "#047857" : "#065f46"};margin-top:2px;">
+                      ${kitchenOpening ? `✓ ${esc(kitchenOpening.submitted_by_name)} (${esc(kitchenOpening.created_at?.slice(11, 16))} WITA)` : "Belum diisi"}
+                    </div>
+                  </div>
+                  <span class="badge ${kitchenOpening ? "badge-success" : "badge-amber"}" style="font-size:9.5px;">
+                    ${kitchenOpening ? "✓ SELESAI" : "MENUNGGU"}
+                  </span>
+                </div>
+                <div style="display:flex;justify-content:flex-end;">
+                  <button type="button" class="btn ${kitchenOpening ? "btn-outline btn-xs" : "btn-emerald btn-sm"}" data-action="open-shift-checklist-modal" data-department="kitchen" data-type="opening" ${kitchenOpening ? `data-id="${esc(kitchenOpening.id)}"` : ""} style="font-size:10.5px;padding:3px 9px;font-weight:700;">
+                    ${kitchenOpening ? "✏️ Edit Checklist" : "📝 Isi Checklist Opening →"}
+                  </button>
                 </div>
               </div>
-              <span class="badge ${closingChk ? "badge-success" : "badge-amber"}" style="font-size:10px;">
-                ${closingChk ? "✓ SELESAI" : "MENUNGGU"}
-              </span>
-            </div>
-            <div style="display:flex;justify-content:flex-end;">
-              <button type="button" class="btn ${closingChk ? "btn-outline btn-xs" : "btn-amber btn-sm"}" data-action="open-shift-checklist-modal" data-type="closing" style="font-size:11px;padding:4px 10px;font-weight:700;">
-                ${closingChk ? "👁️ Lihat / Edit Checklist" : "📝 Isi Checklist Closing →"}
-              </button>
+              <!-- Kitchen Closing -->
+              <div style="background:${kitchenClosing ? "#ecfdf5" : "#ffffff"};border:1.5px solid ${kitchenClosing ? "#a7f3d0" : "#a7f3d0"};border-radius:10px;padding:10px 12px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;">
+                  <div>
+                    <strong style="font-size:12.5px;color:${kitchenClosing ? "#065f46" : "#047857"};">🌙 Closing Kitchen</strong>
+                    <div style="font-size:10.5px;color:${kitchenClosing ? "#047857" : "#065f46"};margin-top:2px;">
+                      ${kitchenClosing ? `✓ ${esc(kitchenClosing.submitted_by_name)} (${esc(kitchenClosing.created_at?.slice(11, 16))} WITA)` : "Belum diisi"}
+                    </div>
+                  </div>
+                  <span class="badge ${kitchenClosing ? "badge-success" : "badge-amber"}" style="font-size:9.5px;">
+                    ${kitchenClosing ? "✓ SELESAI" : "MENUNGGU"}
+                  </span>
+                </div>
+                <div style="display:flex;justify-content:flex-end;">
+                  <button type="button" class="btn ${kitchenClosing ? "btn-outline btn-xs" : "btn-emerald btn-sm"}" data-action="open-shift-checklist-modal" data-department="kitchen" data-type="closing" ${kitchenClosing ? `data-id="${esc(kitchenClosing.id)}"` : ""} style="font-size:10.5px;padding:3px 9px;font-weight:700;">
+                    ${kitchenClosing ? "✏️ Edit Checklist" : "📝 Isi Checklist Closing →"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1696,7 +1803,7 @@ ${esc(rawText)}
               }
               ${
                 !canCheckIn && !canCheckOut && myToday?.check_in_at && myToday?.check_out_at
-                  ? `<div class="hero-completed-card">
+                  ? `<div class="hero-completed-card" style="margin-bottom:6px;">
                       <div class="hero-completed-icon">✓</div>
                       <div>
                         <div class="hero-completed-title">Presensi Hari Ini Lengkap &amp; Selesai</div>
@@ -1710,6 +1817,15 @@ ${esc(rawText)}
                     </div>`
                   : ""
               }
+
+              <!-- TOMBOL GANTI SHIFT BESAR & JELAS PERSIS SEPERTI CHECK IN -->
+              <button class="btn hero-cta-btn" data-action="open-switch-shift-modal" style="background:linear-gradient(135deg, #1e3a8a, #2563eb);color:#ffffff;border:1.5px solid #60a5fa;box-shadow:0 6px 18px rgba(37,99,235,0.35);margin-top:4px;">
+                🔄 Ganti / Tukar Shift Bertugas (${esc(myShift ? myShift.name : "Pilih Shift")})
+              </button>
+              <div style="font-size:11px;color:var(--coffee-300);text-align:center;margin-top:-2px;margin-bottom:8px;">
+                Ketuk jika Anda bertukar jadwal jaga atau pindah shift kerja hari ini
+              </div>
+
               <div class="hero-secondary-btns">
                 <button class="btn btn-outline hero-sub-btn" style="background:rgba(255,255,255,0.12);color:var(--gold-200);border-color:rgba(218,175,118,0.4);" data-action="open-switch-shift-modal" title="Alihkan shift bertugas hari ini">
                   🔄 Alihkan Shift
@@ -3055,21 +3171,21 @@ ${esc(rawText)}
               Shift: <strong style="color:var(--white);">${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
             </p>
             ${renderShiftSelectorHtml(s.shifts, myToday?.shift_id || myShift?.id || u.shift_id, !canCheckIn)}
-            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
               ${
                 canCheckIn
-                  ? `<button class="btn btn-emerald" data-action="open-camera" data-mode="check_in">📷 Check In Pribadi</button>`
+                  ? `<button class="btn btn-emerald" data-action="open-camera" data-mode="check_in" style="font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;">📷 Check In Pribadi</button>`
                   : canCheckOut
-                  ? `<button class="btn btn-amber" data-action="open-camera" data-mode="check_out">📷 Check Out Pribadi</button>`
+                  ? `<button class="btn btn-amber" data-action="open-camera" data-mode="check_out" style="font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;">📷 Check Out Pribadi</button>`
                   : ""
               }
-              <button class="btn btn-outline" style="background:rgba(255,255,255,0.12);color:var(--gold-200);border-color:rgba(218,175,118,0.4);" data-action="open-switch-shift-modal">
-                🔄 Alihkan Shift
+              <button class="btn" style="background:linear-gradient(135deg, #1e3a8a, #2563eb);color:#ffffff;border:1.5px solid #60a5fa;font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;box-shadow:0 4px 14px rgba(37,99,235,0.3);" data-action="open-switch-shift-modal">
+                🔄 Ganti / Alihkan Shift
               </button>
-              <button class="btn btn-gold" data-action="nav" data-target="control_panel">
+              <button class="btn btn-gold" data-action="nav" data-target="control_panel" style="font-weight:700;padding:10px 16px;border-radius:12px;font-size:13.5px;">
                 ⚙️ Control Panel &amp; Edit
               </button>
-              <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);" data-action="nav" data-target="archive">
+              <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);font-weight:700;padding:10px 16px;border-radius:12px;font-size:13.5px;" data-action="nav" data-target="archive">
                 🗂️ Arsip Foto (${esc(parts.archiveFolderLabel)})
               </button>
             </div>
@@ -4749,7 +4865,7 @@ ${esc(rawText)}
     `;
   }
 
-  // 7.7D Riwayat SOP Opening & Closing Checklist Kafe
+  // 7.7D Riwayat SOP Opening & Closing Checklist Kafe & Kitchen
   function renderCpChecklists(uiState) {
     const s = Core.state;
     const list = s.shiftChecklists || [];
@@ -4759,17 +4875,20 @@ ${esc(rawText)}
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
           <div>
             <h3 style="font-size:16px;font-weight:800;margin:0 0 4px 0;color:var(--coffee-950);">
-              📋 Riwayat SOP Opening &amp; Closing Kafe (${list.length})
+              📋 Riwayat SOP Kafe &amp; Kitchen (${list.length})
             </h3>
             <p style="font-size:12px;color:var(--stone-600);margin:0;">
-              Laporan kepatuhan checklist mesin espresso, bar, kebersihan &amp; kasir oleh tim barista.
+              Laporan kepatuhan checklist harian divisi Bar Kafe &amp; Dapur Kitchen oleh seluruh staf.
             </p>
           </div>
+          <button type="button" class="btn btn-outline btn-sm" data-action="open-edit-sop-templates" style="font-weight:700;font-size:12px;border-color:var(--coffee-500);color:var(--coffee-950);">
+            ⚙️ Edit Template Butir SOP
+          </button>
         </div>
 
         ${list.length === 0 ? `
           <div class="card-subtle" style="padding:18px;text-align:center;font-size:12.5px;color:var(--stone-500);font-style:italic;">
-            Belum ada checklist SOP yang diisi oleh karyawan. Checklist dapat diisi saat opening atau closing kafe.
+            Belum ada checklist SOP yang diisi oleh karyawan. Checklist dapat diisi saat opening atau closing kafe &amp; kitchen.
           </div>
         ` : `
           <div style="overflow-x:auto;">
@@ -4777,10 +4896,12 @@ ${esc(rawText)}
               <thead>
                 <tr>
                   <th>Tanggal</th>
+                  <th>Divisi</th>
                   <th>Jenis SOP</th>
                   <th>Pengisi Checklist</th>
                   <th>Item Selesai</th>
                   <th>Catatan Tambahan</th>
+                  <th>Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -4788,9 +4909,16 @@ ${esc(rawText)}
                   const completedItems = (c.items || []).filter((i) => i.done).length;
                   const totalItems = (c.items || []).length || 5;
                   const isOpening = c.checklist_type === "opening";
+                  const dept = c.department || "cafe";
+                  const isKitchen = dept === "kitchen";
                   return `
                     <tr>
                       <td class="mono" style="font-weight:700;">${esc(c.work_date)}</td>
+                      <td>
+                        <span class="badge" style="background:${isKitchen ? "#065f46" : "#9a3412"};color:#ffffff;font-size:10px;font-weight:800;">
+                          ${isKitchen ? "🍳 KITCHEN" : "☕ KAFE"}
+                        </span>
+                      </td>
                       <td>
                         <span class="badge ${isOpening ? "badge-amber" : "badge-coffee"}" style="font-size:10px;">
                           ${isOpening ? "🌅 OPENING" : "🌙 CLOSING"}
@@ -4803,7 +4931,12 @@ ${esc(rawText)}
                       <td>
                         <span class="badge badge-success" style="font-size:10.5px;">✓ ${completedItems}/${totalItems} SOP</span>
                       </td>
-                      <td style="font-size:11.5px;max-width:260px;">${esc(c.notes || "-")}</td>
+                      <td style="font-size:11.5px;max-width:240px;">${esc(c.notes || "-")}</td>
+                      <td>
+                        <button type="button" class="btn btn-outline btn-xs" data-action="open-shift-checklist-modal" data-department="${esc(dept)}" data-type="${esc(c.checklist_type)}" data-id="${esc(c.id)}" style="font-size:10.5px;padding:3px 8px;font-weight:700;">
+                          ✏️ Edit
+                        </button>
+                      </td>
                     </tr>
                   `;
                 }).join("")}
