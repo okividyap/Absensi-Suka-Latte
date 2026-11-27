@@ -1415,13 +1415,39 @@
     }
   }
 
-  // 2A. Deteksi Perangkat & Lingkungan PWA untuk Notifikasi Handphone
+  // 2A. Deteksi Perangkat & Lingkungan PWA untuk Notifikasi Handphone & Instalasi
+  let deferredInstallPrompt = null;
+  if (typeof window !== "undefined") {
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      if (typeof render === "function") {
+        render();
+      }
+    });
+
+    window.addEventListener("appinstalled", () => {
+      deferredInstallPrompt = null;
+      if (typeof showBanner === "function") {
+        showBanner(true, "✓ Aplikasi Suka Latte berhasil dipasang di Layar Utama HP!", 6000);
+      }
+      if (typeof render === "function") {
+        render();
+      }
+    });
+  }
+
   function isIosDevice() {
     if (typeof navigator === "undefined") return false;
     return (
       /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
     );
+  }
+
+  function isAndroidDevice() {
+    if (typeof navigator === "undefined") return false;
+    return /Android/i.test(navigator.userAgent || "");
   }
 
   function isStandalonePwa() {
@@ -3283,6 +3309,85 @@
       `;
     }
 
+    // J5. MODAL PANDUAN LENGKAP PASANG KE LAYAR UTAMA (HOMESCREEN PWA) ANDROID & IPHONE
+    if (uiState.modal.type === "pwa_install_guide") {
+      const hasNativePrompt = Boolean(deferredInstallPrompt);
+
+      return `
+        <div class="modal-backdrop">
+          <div class="modal-window sm" style="max-width:460px;">
+            <div class="modal-header">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:24px;">📲</span>
+                <div>
+                  <h3 style="font-size:16px;font-weight:800;color:var(--coffee-900);margin:0;">Pasang di Layar Utama HP</h3>
+                  <div style="font-size:11px;color:var(--stone-500);margin-top:2px;">Buka cepat langsung seperti aplikasi tanpa lewat Google / Chrome</div>
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" data-action="close-modal">✕</button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+              <div style="background:#fef3c7;border:1px solid #f59e0b;padding:12px 14px;border-radius:10px;font-size:12px;color:#92400e;line-height:1.5;">
+                Dengan memasang ikon di Layar Utama, aplikasi Suka Latte akan terbuka <strong>Layar Penuh (Full Screen)</strong> seperti aplikasi Play Store biasa tanpa bilah pencarian browser Google Chrome.
+              </div>
+
+              ${
+                hasNativePrompt
+                  ? `<div style="text-align:center;padding:6px 0;">
+                      <button type="button" class="btn btn-emerald btn-lg" data-action="trigger-native-install" style="font-weight:800;font-size:14px;padding:12px 24px;border-radius:10px;box-shadow:0 6px 18px rgba(5,150,105,0.35);width:100%;">
+                        📲 Pasang Sekarang ke Layar HP (1-Klik)
+                      </button>
+                    </div>`
+                  : ""
+              }
+
+              <!-- Petunjuk Langkah Demi Langkah Android -->
+              <div style="border:1.5px solid #d1d5db;border-radius:12px;padding:14px;background:#f9fafb;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                  <span style="font-size:18px;">🤖</span>
+                  <strong style="font-size:13px;color:#1f2937;">Petunjuk HP Android (Google Chrome):</strong>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:9px;font-size:12px;color:#374151;">
+                  <div style="display:flex;align-items:flex-start;gap:10px;">
+                    <span style="background:var(--coffee-900);color:#fff;border-radius:50%;width:22px;height:22px;display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;">1</span>
+                    <span>Buka tautan ini di <strong>Google Chrome</strong>, lalu ketuk ikon <strong>Titik Tiga (⋮)</strong> di pojok kanan atas browser.</span>
+                  </div>
+                  <div style="display:flex;align-items:flex-start;gap:10px;">
+                    <span style="background:var(--coffee-900);color:#fff;border-radius:50%;width:22px;height:22px;display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;">2</span>
+                    <span>Pilih menu <strong>"Tambahkan ke Layar Utama"</strong> (atau <strong>"Instal aplikasi"</strong> / <em>Add to Home screen</em>).</span>
+                  </div>
+                  <div style="display:flex;align-items:flex-start;gap:10px;">
+                    <span style="background:var(--coffee-900);color:#fff;border-radius:50%;width:22px;height:22px;display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;">3</span>
+                    <span>Ketuk tombol <strong>"Instal"</strong> atau <strong>"Tambah"</strong>.</span>
+                  </div>
+                  <div style="font-size:11.5px;color:#059669;margin-top:2px;font-weight:700;">
+                    ✓ Selesai! Ikon resmi "Suka Latte" akan langsung muncul di layar depan HP Anda.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Petunjuk Langkah Demi Langkah iPhone -->
+              <div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;background:#fff;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <span style="font-size:18px;">🍎</span>
+                  <strong style="font-size:12.5px;color:#374151;">Petunjuk iPhone (Safari):</strong>
+                </div>
+                <div style="font-size:11.5px;color:#4b5563;line-height:1.5;">
+                  Ketuk tombol <strong>Bagikan (Share ⎋)</strong> di bilah bawah Safari → pilih menu <strong>"Tambah ke Layar Utama" (➕)</strong> → ketuk <strong>Tambah</strong>.
+                </div>
+              </div>
+
+              <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+                <button type="button" class="btn btn-primary btn-sm" data-action="close-modal" style="font-weight:700;">
+                  Mengerti &amp; Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     return "";
   }
 
@@ -3535,6 +3640,13 @@
                 Keluar
               </button>
             </div>
+            ${
+              !isStandalonePwa()
+                ? `<button type="button" class="btn btn-outline btn-xs" style="width:100%;margin-top:10px;background:rgba(218,175,118,0.12);color:var(--gold-200);border-color:rgba(218,175,118,0.3);font-size:11px;font-weight:700;" data-action="install-pwa-app">
+                    📲 Pasang di Layar Depan HP
+                  </button>`
+                : ""
+            }
           </div>
         </aside>
 
@@ -3572,6 +3684,22 @@
               <button class="btn btn-outline btn-sm btn-icon-mobile" data-action="logout" title="Keluar">🚪<span class="hide-mobile"> Keluar</span></button>
             </div>
           </header>
+
+          ${
+            !isStandalonePwa()
+              ? `
+              <div class="pwa-install-strip" style="background:linear-gradient(90deg, #2b1810 0%, #452417 100%);color:#fef3c7;padding:9px 16px;border-bottom:1px solid rgba(218,175,118,0.3);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:18px;">📲</span>
+                  <span><strong>Pasang di Layar Utama HP:</strong> Buka langsung seperti aplikasi tanpa perlu lewat Google / Chrome!</span>
+                </div>
+                <button type="button" class="btn btn-warning btn-xs" data-action="install-pwa-app" style="font-size:11px;font-weight:800;padding:5px 12px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;">
+                  📲 Pasang Aplikasi di HP
+                </button>
+              </div>
+              `
+              : ""
+          }
 
           <main class="page-container">
             ${mainContentHtml}
@@ -5841,6 +5969,30 @@
           "test-alarm-chime"
         );
         showBanner(true, "🔊 Tes alarm speaker berhasil! Suara alarm keras dan getar HP aktif normal.", 5000);
+        return;
+      }
+
+      if (action === "install-pwa-app" || action === "trigger-native-install") {
+        if (deferredInstallPrompt) {
+          try {
+            deferredInstallPrompt.prompt();
+            const choiceResult = await deferredInstallPrompt.userChoice;
+            if (choiceResult && choiceResult.outcome === "accepted") {
+              showBanner(true, "✓ Memasang aplikasi Suka Latte ke Layar Utama HP...", 5000);
+            }
+            deferredInstallPrompt = null;
+            if (uiState.modal?.type === "pwa_install_guide") {
+              uiState.modal = null;
+            }
+            render();
+          } catch (err) {
+            uiState.modal = { type: "pwa_install_guide" };
+            render();
+          }
+        } else {
+          uiState.modal = { type: "pwa_install_guide" };
+          render();
+        }
         return;
       }
 
