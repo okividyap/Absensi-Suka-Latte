@@ -6684,63 +6684,77 @@
         const timing = Core.getShiftTimingInfo ? Core.getShiftTimingInfo(myToday, myShift, tz) : null;
 
         if (timing) {
-          if (!Core.state.dutyTracker.alertsSent) {
-            Core.state.dutyTracker.alertsSent = {};
+          const alertStorageKey = `suka_shift_alerts_${myToday.id}`;
+          let attAlerts = {};
+          try {
+            attAlerts = JSON.parse(localStorage.getItem(alertStorageKey) || "{}");
+          } catch {
+            attAlerts = {};
           }
-          const attAlerts = Core.state.dutyTracker.alertsSent[myToday.id] || {};
-          Core.state.dutyTracker.alertsSent[myToday.id] = attAlerts;
+
+          const saveAlerts = () => {
+            try {
+              localStorage.setItem(alertStorageKey, JSON.stringify(attAlerts));
+            } catch {}
+          };
 
           const diff = timing.diffToEndMins; // menit menuju akhir shift
           const shiftEndLabel = `${timing.formattedShiftEnd} WITA`;
 
-          // 1. MILESTONE H-15 MENIT (Peringatan Awal: Bersiap Selesai)
+          // 1. MILESTONE H-15 MENIT (Peringatan Persiapan Awal)
           if (diff <= 15 && diff > 0 && !attAlerts.before15m) {
             attAlerts.before15m = true;
+            saveAlerts();
             playDutyChimeAlert("welcome_back");
             if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([150, 80, 150]);
             sendDutyPushNotification(
               `🔔 15 Menit Menuju Akhir Shift (${timing.shiftName})`,
-              `Shift Anda berakhir pukul ${shiftEndLabel}. Harap bersiap menyelesaikan tugas dan lakukan absensi Check Out sebelum pulang.`,
+              `15 Menit Menuju Akhir Shift (${timing.shiftName}). Harap bersiap menyelesaikan tugas dan lakukan absensi Check Out sebelum pulang.`,
               "shift-before-15m"
             );
             showBanner(
               true,
-              `🔔 Pengingat: Jam shift Anda (${timing.shiftName}) berakhir dalam ${diff} menit (pukul ${shiftEndLabel}). Bersiaplah untuk Check Out.`,
+              `🔔 15 Menit Menuju Akhir Shift (${timing.shiftName}). Harap bersiap menyelesaikan tugas dan lakukan absensi Check Out sebelum pulang (pukul ${shiftEndLabel}).`,
               12000
             );
           }
 
-          // 2. MILESTONE TEPAT AKHIR SHIFT (0 Menit / Tepat Jam Selesai)
-          if (diff <= 0 && !attAlerts.exactEnd) {
+          // 2. MILESTONE TEPAT JAM SELESAI (0 Menit / Tepat Jam Selesai Shift)
+          if (diff <= 0 && diff > -15 && !attAlerts.exactEnd) {
+            attAlerts.before15m = true;
             attAlerts.exactEnd = true;
+            saveAlerts();
             playDutyChimeAlert("shift_complete");
             if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 500]);
             sendDutyPushNotification(
-              `⏰ Jam Shift Telah Selesai (${shiftEndLabel})!`,
-              `Jam shift ${timing.shiftName} Anda telah berakhir. Tolong segera lakukan absensi Check Out sekarang melalui aplikasi sebelum meninggalkan area kafe.`,
+              `⏰ Jam Shift Anda Telah Selesai (${shiftEndLabel})!`,
+              `Jam Shift Anda Telah Selesai (${shiftEndLabel})! Tolong segera lakukan absensi Check Out sekarang melalui aplikasi sebelum meninggalkan area kafe.`,
               "shift-ended-exact"
             );
             showBanner(
               false,
-              `⏰ Jam shift ${timing.shiftName} sudah selesai (${shiftEndLabel})! Tolong segera lakukan absensi Check Out sekarang.`,
+              `⏰ Jam Shift Anda Telah Selesai (${shiftEndLabel})! Tolong segera lakukan absensi Check Out sekarang melalui aplikasi sebelum meninggalkan area kafe.`,
               18000
             );
             render();
           }
 
           // 3. MILESTONE H+15 MENIT SETELAH SELESAI (Peringatan Keterlambatan Check Out)
-          if (diff <= -15 && !attAlerts.overdue15m) {
+          if (diff <= -15 && diff > -30 && !attAlerts.overdue15m) {
+            attAlerts.before15m = true;
+            attAlerts.exactEnd = true;
             attAlerts.overdue15m = true;
+            saveAlerts();
             playDutyChimeAlert("shift_complete");
             if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([400, 150, 400]);
             sendDutyPushNotification(
               `⚠️ Belum Check Out (Shift Selesai Sejak ${shiftEndLabel})`,
-              `Anda belum melakukan absensi Check Out! Tolong segera Check Out selfie sekarang agar data jam kerja hari ini tidak bermasalah.`,
+              `Anda belum melakukan Check Out! Jam shift Anda telah selesai 15 menit lalu. Segera Check Out selfie sekarang.`,
               "shift-overdue-15m"
             );
             showBanner(
               false,
-              `⚠️ Peringatan: Jam shift Anda telah selesai 15 menit lalu (${shiftEndLabel}). Segera lakukan absensi Check Out!`,
+              `⚠️ Anda belum melakukan Check Out! Jam shift Anda telah selesai 15 menit lalu (${shiftEndLabel}). Segera lakukan absensi Check Out!`,
               15000
             );
           }
@@ -6748,12 +6762,16 @@
           // 4. MILESTONE H+30 MENIT ATAU 8 JAM KERJA (Peringatan Keras Segera Check Out)
           const isOverdue30 = diff <= -30 || elapsedMins >= 480;
           if (isOverdue30 && !attAlerts.overdue30m) {
+            attAlerts.before15m = true;
+            attAlerts.exactEnd = true;
+            attAlerts.overdue15m = true;
             attAlerts.overdue30m = true;
+            saveAlerts();
             playDutyChimeAlert("shift_complete");
             if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
             sendDutyPushNotification(
-              `🚨 PERINGATAN: Segera Lakukan Check Out!`,
-              `Shift Anda telah berakhir lebih dari 30 menit. Tolong segera lakukan Check Out hari ini sekarang sebelum meninggalkan outlet.`,
+              `🚨 PERINGATAN: Jam shift sudah selesai tolong melakukan absensi check out!`,
+              `PERINGATAN: Jam shift sudah selesai tolong melakukan absensi check out! Batas waktu telah terlampaui.`,
               "shift-overdue-30m"
             );
             showBanner(
@@ -6768,16 +6786,17 @@
           const currentHour = parts.hour;
           if (currentHour >= 22 && !attAlerts.endOfDayWarning) {
             attAlerts.endOfDayWarning = true;
+            saveAlerts();
             playDutyChimeAlert("shift_complete");
             if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([400, 100, 400, 100, 600]);
             sendDutyPushNotification(
               `⛔ Wajib Check Out Sebelum Tengah Malam!`,
-              `Anda belum Check Out shift hari ini. Wajib Check Out sebelum 23:59 WITA agar absensi tidak ditutup otomatis oleh sistem.`,
+              `Wajib Check Out Sebelum Tengah Malam! Check In hari ini wajib di-Check Out hari ini juga sebelum 23:59 WITA.`,
               "shift-eod-warning"
             );
             showBanner(
               false,
-              `⛔ Peringatan Hari Ini: Anda belum Check Out! Check In hari ini wajib di-Check Out hari ini juga sebelum tengah malam (23:59 WITA).`,
+              `⛔ Wajib Check Out Sebelum Tengah Malam! Check In hari ini wajib di-Check Out hari ini juga sebelum 23:59 WITA.`,
               25000
             );
           }
