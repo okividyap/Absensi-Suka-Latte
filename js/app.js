@@ -1665,6 +1665,14 @@
       // PENGGUNA KEMBALI KE DALAM AREA OUTLET
       if (prevStatus === "outside") {
         playDutyChimeAlert("welcome_back");
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate([150, 80, 150]);
+        }
+        sendDutyPushNotification(
+          "✓ Kembali ke Area Outlet",
+          `Anda telah kembali ke area ${myOutlet.name}. Selamat melanjutkan kerja!`,
+          "duty-welcome-back"
+        );
         showBanner(true, `✓ Anda telah kembali ke area ${myOutlet.name}. Selamat melanjutkan kerja!`, 5000);
         render(); // render ulang agar card kembali hijau
       }
