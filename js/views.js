@@ -3114,6 +3114,8 @@ ${esc(rawText)}
     } = getHolidayAndLeaveSummary(parts.dateString, u.id);
     const holidaysToShow = upcomingOrActiveHolidays.length > 0 ? upcomingOrActiveHolidays : outletHolidays;
     const recentEmployeeLeaves = (s.holidaysAndLeaves || []).filter((h) => Boolean(h.employee_id));
+    const pendingCorrCount = (s.corrections || []).filter((c) => c.status === "pending").length;
+    const totalPendingBadge = pendingUsers.length + pendingLeaves.length + pendingCorrCount;
 
     // Pastikan Signed URL foto selfie 8 transaksi terbaru termuat
     Core.ensureSignedUrlsForAttendance(s.attendance.slice(0, 8));
@@ -3171,23 +3173,28 @@ ${esc(rawText)}
               Shift: <strong style="color:var(--white);">${esc(myShift ? `${myShift.name} (${String(myShift.start_time).slice(0, 5)}–${String(myShift.end_time).slice(0, 5)})` : "-")}</strong>
             </p>
             ${renderShiftSelectorHtml(s.shifts, myToday?.shift_id || myShift?.id || u.shift_id, !canCheckIn)}
-            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-              ${
-                canCheckIn
-                  ? `<button class="btn btn-emerald" data-action="open-camera" data-mode="check_in" style="font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;">📷 Check In Pribadi</button>`
-                  : canCheckOut
-                  ? `<button class="btn btn-amber" data-action="open-camera" data-mode="check_out" style="font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;">📷 Check Out Pribadi</button>`
-                  : ""
-              }
-              <button class="btn" style="background:linear-gradient(135deg, #1e3a8a, #2563eb);color:#ffffff;border:1.5px solid #60a5fa;font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;box-shadow:0 4px 14px rgba(37,99,235,0.3);" data-action="open-switch-shift-modal">
-                🔄 Ganti / Alihkan Shift
-              </button>
-              <button class="btn btn-gold" data-action="nav" data-target="control_panel" style="font-weight:700;padding:10px 16px;border-radius:12px;font-size:13.5px;">
-                ⚙️ Control Panel &amp; Edit
-              </button>
-              <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);font-weight:700;padding:10px 16px;border-radius:12px;font-size:13.5px;" data-action="nav" data-target="archive">
-                🗂️ Arsip Foto (${esc(parts.archiveFolderLabel)})
-              </button>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;width:100%;">
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                ${
+                  canCheckIn
+                    ? `<button class="btn btn-emerald" data-action="open-camera" data-mode="check_in" style="font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;">📷 Check In Pribadi</button>`
+                    : canCheckOut
+                    ? `<button class="btn btn-amber" data-action="open-camera" data-mode="check_out" style="font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;">📷 Check Out Pribadi</button>`
+                    : ""
+                }
+                <button class="btn" style="background:linear-gradient(135deg, #1e3a8a, #2563eb);color:#ffffff;border:1.5px solid #60a5fa;font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;box-shadow:0 4px 14px rgba(37,99,235,0.3);" data-action="open-switch-shift-modal">
+                  🔄 Ganti / Alihkan Shift
+                </button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;margin-left:auto;">
+                <button type="button" class="btn btn-gold" data-action="toggle-control-drawer" style="font-weight:800;padding:10px 18px;border-radius:12px;font-size:13.5px;box-shadow:0 4px 14px rgba(212,163,97,0.35);display:flex;align-items:center;gap:6px;">
+                  ⚙️ Control Panel ▾
+                  ${totalPendingBadge > 0 ? `<span class="count-pill" style="background:#ef4444;color:#fff;font-size:10px;padding:2px 6px;">${totalPendingBadge} Menunggu</span>` : ""}
+                </button>
+                <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:var(--gold-200);border-color:rgba(218,175,118,0.35);font-weight:700;padding:10px 16px;border-radius:12px;font-size:13.5px;" data-action="nav" data-target="archive">
+                  🗂️ Arsip
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3772,7 +3779,7 @@ ${esc(rawText)}
       { id: "schedule", label: "🗓️ Roster Jadwal Kerja" },
       { id: "shifts", label: "Jadwal Shift" },
       { id: "outlets", label: "Outlet & Geofence GPS" },
-      { id: "checklists_mgr", label: "📋 SOP Checklist Kafe" },
+      { id: "checklists_mgr", label: "📋 SOP Kafe & Kitchen" },
       { id: "logbooks_mgr", label: "📝 Logbook Handover" },
       { id: "announcements_mgr", label: "📢 Pengumuman Kafe" },
       { id: "rules", label: "Aturan & Zona Waktu" },
@@ -3784,17 +3791,44 @@ ${esc(rawText)}
     ];
 
     const tab = uiState.activeControlTab;
+    const currentTabObj = tabs.find((t) => t.id === tab) || tabs[0];
 
     return `
       <div class="hero-banner">
-        <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:10px;">
-          Control Panel Pengelola (${isSuper ? "Super Admin — Akses Penuh" : "Admin Operasional"})
-        </span>
-        <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Pusat Kendali &amp; Manajemen Operasional</h2>
-        <p style="font-size:12.5px;color:var(--coffee-200);margin-bottom:18px;max-width:780px;">
-          Kelola persetujuan akun Google, izin &amp; cuti dokter, SOP opening/closing, logbook handover, pengumuman kafe, promosi Admin 1-klik, jadwal shift, dan radius GPS.
-        </p>
-        <div class="tab-pills">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:8px;">
+          <div>
+            <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:8px;">
+              Control Panel Pengelola (${isSuper ? "Super Admin — Akses Penuh" : "Admin Operasional"})
+            </span>
+            <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Pusat Kendali &amp; Manajemen Operasional</h2>
+            <p style="font-size:12px;color:var(--coffee-200);margin-bottom:0;max-width:780px;">
+              Kelola persetujuan akun Google &amp; karyawan, persetujuan izin &amp; cuti dokter, SOP Kafe/Kitchen, logbook handover, dan pengaturan outlet.
+            </p>
+          </div>
+
+          <!-- Tombol Control Rata Kanan -->
+          <div style="margin-left:auto;">
+            <button type="button" class="btn btn-gold" data-action="toggle-control-drawer" style="font-weight:800;padding:9px 18px;border-radius:12px;font-size:13px;display:flex;align-items:center;gap:6px;box-shadow:0 4px 14px rgba(212,163,97,0.35);">
+              ⚙️ Menu Control Panel ▾
+            </button>
+          </div>
+        </div>
+
+        <!-- Bar Tab Aktif Mobile (HP) -->
+        <div class="cp-mobile-bar show-mobile-only" style="background:rgba(255,255,255,0.06);border:1px solid rgba(218,175,118,0.28);border-radius:14px;padding:10px 14px;margin-top:14px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-size:10px;color:var(--coffee-300);font-weight:700;text-transform:uppercase;">Menu Terpilih:</div>
+            <div style="font-size:13.5px;font-weight:800;color:var(--gold-200);display:flex;align-items:center;gap:6px;">
+              ${esc(currentTabObj.label)}
+              ${currentTabObj.count ? `<span class="count-pill" style="background:#ef4444;color:#fff;font-size:9.5px;padding:1px 5px;">${currentTabObj.count}</span>` : ""}
+            </div>
+          </div>
+          <button type="button" class="btn btn-gold btn-xs" data-action="toggle-control-drawer" style="font-weight:800;padding:6px 12px;border-radius:8px;font-size:11px;">
+            Ganti Menu ▾
+          </button>
+        </div>
+
+        <div class="tab-pills hide-mobile" style="margin-top:16px;">
           ${tabs
             .map(
               (t) => `
@@ -5175,6 +5209,263 @@ ${esc(rawText)}
     `;
   }
 
+  // ==========================================================================
+  // PUSAT KENDALI PENGELOLA RATA KANAN (RIGHT-ALIGNED CONTROL DRAWER)
+  // Menampilkan deretan menurun detail opsi kontrol operasional kafe
+  // ==========================================================================
+  function renderRightControlDrawer(s, uiState, isSuper) {
+    const isOpen = Boolean(uiState.controlDrawerOpen);
+    const activeTab = uiState.activeControlTab || "employees";
+    const currentNav = uiState.activeNav;
+
+    const pendingLogins = s.profiles.filter(
+      (p) => p.status === "pending_approval" || (!p.first_login_approved && p.status !== "rejected")
+    ).length;
+    const pendingLeaves = (s.holidaysAndLeaves || []).filter((h) => h.employee_id && h.status === "pending").length;
+    const pendingCorrections = (s.corrections || []).filter((c) => c.status === "pending").length;
+
+    return `
+      <div class="control-drawer-backdrop ${isOpen ? "open" : ""}" data-action="close-control-drawer"></div>
+      <aside class="control-drawer-right ${isOpen ? "open" : ""}" aria-label="Menu Control Panel">
+        <div class="control-drawer-header">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="brand-logo-wrap sm" style="width:34px;height:34px;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+              <img src="assets/branding/suka-logo.png" alt="Suka Latte" />
+            </div>
+            <div>
+              <div style="font-size:14px;font-weight:800;color:var(--white);letter-spacing:0.02em;">Pusat Kendali Pengelola</div>
+              <div style="font-size:10.5px;color:var(--gold-200);">${isSuper ? "Super Admin (Akses Penuh)" : "Admin Operasional"}</div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-outline btn-xs" data-action="close-control-drawer" style="color:var(--gold-200);border-color:rgba(218,175,118,0.4);padding:4px 8px;font-size:12px;font-weight:800;" title="Tutup Menu">
+            ✕
+          </button>
+        </div>
+
+        <div class="control-drawer-body">
+          <!-- 1. PRIORITAS UTAMA & PERSETUJUAN -->
+          <div class="control-menu-section-title">Persetujuan &amp; Konfirmasi Tim</div>
+
+          <!-- Persetujuan Google & Karyawan -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "employees" ? "active" : ""}" data-action="jump-cp" data-tab="employees">
+            <div class="control-menu-icon-box" style="background:#fef3c7;color:#92400e;">👥</div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <strong style="font-size:13px;color:var(--stone-900);">Persetujuan Google &amp; Karyawan</strong>
+                ${pendingLogins > 0 ? `<span class="badge" style="background:#ef4444;color:#fff;font-size:9.5px;padding:2px 6px;">🔔 ${pendingLogins} Baru</span>` : `<span class="badge badge-success" style="font-size:9px;">✓ Lengkap</span>`}
+              </div>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Verifikasi login pertama akun Google, status aktif, divisi &amp; kelola akun.
+              </div>
+            </div>
+          </button>
+
+          <!-- Persetujuan Izin & Cuti -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "leaves_approval" ? "active" : ""}" data-action="jump-cp" data-tab="leaves_approval">
+            <div class="control-menu-icon-box" style="background:#ecfdf5;color:#065f46;">🏥</div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <strong style="font-size:13px;color:var(--stone-900);">Persetujuan Izin &amp; Cuti</strong>
+                ${pendingLeaves > 0 ? `<span class="badge" style="background:#f59e0b;color:#fff;font-size:9.5px;padding:2px 6px;">🔔 ${pendingLeaves} Pengajuan</span>` : `<span class="badge badge-success" style="font-size:9px;">✓ Selesai</span>`}
+              </div>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Tinjau izin sakit mandiri, periksa foto surat dokter &amp; setujui 1-klik.
+              </div>
+            </div>
+          </button>
+
+          <!-- Koreksi Absensi -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "corrections" ? "active" : ""}" data-action="jump-cp" data-tab="corrections">
+            <div class="control-menu-icon-box" style="background:#fffbeb;color:#b45309;">✏️</div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <strong style="font-size:13px;color:var(--stone-900);">Koreksi Data Absensi</strong>
+                ${pendingCorrections > 0 ? `<span class="badge" style="background:#b45309;color:#fff;font-size:9.5px;padding:2px 6px;">${pendingCorrections} Menunggu</span>` : ""}
+              </div>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Penyesuaian jam check-in/out karyawan dengan catatan resmi manajer.
+              </div>
+            </div>
+          </button>
+
+          <!-- 2. OPERASIONAL KAFE & KITCHEN -->
+          <div class="control-menu-section-title">Operasional Kafe &amp; Dapur</div>
+
+          <!-- SOP Checklist Kafe & Kitchen -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "checklists_mgr" ? "active" : ""}" data-action="jump-cp" data-tab="checklists_mgr">
+            <div class="control-menu-icon-box" style="background:#fff7ed;color:#ea580c;">📋</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">SOP Checklist Kafe &amp; Kitchen</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Kepatuhan checklist opening/closing Bar &amp; Kitchen + edit butir template SOP.
+              </div>
+            </div>
+          </button>
+
+          <!-- Logbook Handover Shift -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "logbooks_mgr" ? "active" : ""}" data-action="jump-cp" data-tab="logbooks_mgr">
+            <div class="control-menu-icon-box" style="background:#eff6ff;color:#1d4ed8;">📝</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Logbook Handover Antar Shift</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Catatan serah terima shift barista &amp; cook, stok habis, kasir &amp; mesin.
+              </div>
+            </div>
+          </button>
+
+          <!-- Papan Pengumuman Kafe -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "announcements_mgr" ? "active" : ""}" data-action="jump-cp" data-tab="announcements_mgr">
+            <div class="control-menu-icon-box" style="background:#fefce8;color:#a16207;">📢</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Papan Pengumuman Kafe</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Kirim broadcast pengumuman resmi ke beranda HP seluruh staf kafe.
+              </div>
+            </div>
+          </button>
+
+          <!-- 3. JADWAL, ROSTER & SHIFT -->
+          <div class="control-menu-section-title">Jadwal &amp; Pengaturan Shift</div>
+
+          <!-- Roster Jadwal Kerja -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "schedule" ? "active" : ""}" data-action="jump-cp" data-tab="schedule">
+            <div class="control-menu-icon-box" style="background:#f3e8ff;color:#7e22ce;">🗓️</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Roster &amp; Jadwal Kerja</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Susun penugasan shift mingguan &amp; bulanan per divisi barista &amp; kitchen.
+              </div>
+            </div>
+          </button>
+
+          <!-- Jadwal Shift -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "shifts" ? "active" : ""}" data-action="jump-cp" data-tab="shifts">
+            <div class="control-menu-icon-box" style="background:#f5f3ff;color:#6b21a8;">⏱️</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Jadwal Shift &amp; Jam Toleransi</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Atur jam mulai/selesai Shift Pagi, Middle, Siang &amp; toleransi keterlambatan.
+              </div>
+            </div>
+          </button>
+
+          <!-- 4. OUTLET, GEOFENCE GPS & ATURAN -->
+          <div class="control-menu-section-title">Outlet &amp; Pengaturan Sistem</div>
+
+          <!-- Outlet & Geofence GPS -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "outlets" ? "active" : ""}" data-action="jump-cp" data-tab="outlets">
+            <div class="control-menu-icon-box" style="background:#ccfbf1;color:#0f766e;">📍</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Outlet &amp; Geofence GPS</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Titik GPS kafe, batas radius meter aman &amp; toleransi patroli bertugas.
+              </div>
+            </div>
+          </button>
+
+          <!-- Role & Hak Akses Pengelola -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "roles" ? "active" : ""}" data-action="jump-cp" data-tab="roles">
+            <div class="control-menu-icon-box" style="background:#e2e8f0;color:#334155;">🛡️</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Role &amp; Hak Akses Pengelola</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Promosi/demote hak Super Admin, Admin Outlet &amp; Anggota Barista.
+              </div>
+            </div>
+          </button>
+
+          <!-- Aturan & Zona Waktu -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "rules" ? "active" : ""}" data-action="jump-cp" data-tab="rules">
+            <div class="control-menu-icon-box" style="background:#f1f5f9;color:#475569;">⚙️</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Aturan Sistem &amp; Zona Waktu</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Waktu resmi WITA, wajib selfie kamera langsung &amp; auto-close hari yang sama.
+              </div>
+            </div>
+          </button>
+
+          <!-- Kalender & Libur -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "calendar" ? "active" : ""}" data-action="jump-cp" data-tab="calendar">
+            <div class="control-menu-icon-box" style="background:#fef3c7;color:#b45309;">📅</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Kalender &amp; Hari Libur Kafe</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Jadwal libur resmi outlet &amp; kalender agenda kerja bersama.
+              </div>
+            </div>
+          </button>
+
+          <!-- Branding & Tampilan -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "branding" ? "active" : ""}" data-action="jump-cp" data-tab="branding">
+            <div class="control-menu-icon-box" style="background:#fae8ff;color:#86198f;">🎨</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Branding &amp; Tampilan Visual</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Nama brand, slogan, tagline &amp; tema warna aplikasi.
+              </div>
+            </div>
+          </button>
+
+          <!-- Audit Log Keamanan -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "audit" ? "active" : ""}" data-action="jump-cp" data-tab="audit">
+            <div class="control-menu-icon-box" style="background:#e0e7ff;color:#3730a3;">🔍</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Audit Log Keamanan</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Catatan jejak rekam sistem, perubahan shift, role &amp; penghapusan data.
+              </div>
+            </div>
+          </button>
+
+          <!-- Keamanan Cloud & Setup -->
+          <button type="button" class="control-menu-item-card ${currentNav === "control_panel" && activeTab === "security" ? "active" : ""}" data-action="jump-cp" data-tab="security">
+            <div class="control-menu-icon-box" style="background:#fef2f2;color:#b91c1c;">🔒</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Keamanan Cloud &amp; Setup</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Koneksi database Supabase, kunci RLS &amp; konfigurasi cloud.
+              </div>
+            </div>
+          </button>
+
+          <!-- 5. NAVIGASI UTAMA LAINNYA -->
+          <div class="control-menu-section-title">Menu Utama Lainnya</div>
+
+          <button type="button" class="control-menu-item-card ${currentNav === "dashboard" ? "active" : ""}" data-action="nav" data-target="dashboard">
+            <div class="control-menu-icon-box" style="background:#f0fdf4;color:#15803d;">🏠</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Dashboard Operasional</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Kembali ke layar utama dashboard, pantau absensi live &amp; ringkasan WA.
+              </div>
+            </div>
+          </button>
+
+          <button type="button" class="control-menu-item-card ${currentNav === "archive" ? "active" : ""}" data-action="nav" data-target="archive">
+            <div class="control-menu-icon-box" style="background:#fefce8;color:#ca8a04;">🗂️</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Arsip Foto Bulanan</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Lihat galeri selfie presensi masuk &amp; pulang per periode bulan.
+              </div>
+            </div>
+          </button>
+
+          <button type="button" class="control-menu-item-card ${currentNav === "reports" ? "active" : ""}" data-action="nav" data-target="reports">
+            <div class="control-menu-icon-box" style="background:#ecfeff;color:#0e7490;">📊</div>
+            <div style="flex:1;min-width:0;">
+              <strong style="font-size:13px;color:var(--stone-900);">Laporan &amp; Ekspor Data</strong>
+              <div style="font-size:11px;color:var(--stone-500);line-height:1.35;margin-top:2px;">
+                Rekap kehadiran bulanan, ekspor Excel/CSV &amp; cetak laporan resmi.
+              </div>
+            </div>
+          </button>
+        </div>
+      </aside>
+    `;
+  }
+
   window.SukaViews = {
     getWeekCalendarRange,
     getMonthCalendarRange,
@@ -5207,5 +5498,6 @@ ${esc(rawText)}
     renderCpAnnouncements,
     renderCpChecklists,
     renderCpLogbooks,
+    renderRightControlDrawer,
   };
 })();

@@ -23,6 +23,7 @@
   const uiState = {
     activeNav: "dashboard", // Manajer: dashboard|schedules|archive|reports|control_panel ; Anggota: absensi_saya|jadwal_saya|riwayat_saya
     activeControlTab: "employees",
+    controlDrawerOpen: false, // Pusat kendali pengelola rata kanan (flyout drawer)
     banner: null, // { ok: boolean, message: string }
 
     // Filter Roster Jadwal Kerja
@@ -4007,6 +4008,14 @@
                   ? `<button class="btn btn-amber btn-sm" data-action="open-camera" data-mode="check_out">📷 <span class="hide-mobile">Check Out</span></button>`
                   : ""
               }
+              ${
+                isManager
+                  ? `<button type="button" class="btn btn-gold btn-sm control-trigger-btn" data-action="toggle-control-drawer" id="btn-topbar-control" title="Pusat Kendali Pengelola (Control Panel)" style="font-weight:800;display:flex;align-items:center;gap:4px;border-radius:10px;padding:6px 11px;box-shadow:0 2px 8px rgba(212,163,97,0.35);">
+                      ⚙️ <span class="hide-mobile">Control</span>▾
+                      ${totalPendingBadge > 0 ? `<span class="count-pill" style="background:#ef4444;color:#fff;font-size:9.5px;padding:1px 5px;margin-left:2px;">${totalPendingBadge}</span>` : ""}
+                    </button>`
+                  : ""
+              }
               <button class="btn btn-outline btn-sm btn-icon-mobile" data-action="refresh-data" title="Segarkan Data">🔄<span class="hide-mobile"> Segarkan</span></button>
               <button class="btn btn-outline btn-sm btn-icon-mobile" data-action="logout" title="Keluar">🚪<span class="hide-mobile"> Keluar</span></button>
             </div>
@@ -4038,7 +4047,7 @@
           ${navItems
             .map(
               (item) => `
-            <button class="mobile-nav-item ${uiState.activeNav === item.id ? "active" : ""}" data-action="nav" data-target="${item.id}">
+            <button class="mobile-nav-item ${uiState.activeNav === item.id || (item.id === "control_panel" && uiState.controlDrawerOpen) ? "active" : ""}" data-action="${item.id === "control_panel" ? "toggle-control-drawer" : "nav"}" data-target="${item.id}">
               <span style="font-size:16px;">${item.icon}</span>
               <span>${esc(item.label.split(" ")[0])}</span>
               ${item.count ? `<span class="count-pill" style="position:absolute;top:2px;right:4px;">${item.count}</span>` : ""}
@@ -4050,6 +4059,7 @@
 
       <div id="global-banner-slot">${renderBannerInnerHtml()}</div>
       <div id="modal-root">${renderActiveModalHtml()}</div>
+      ${isManager ? Views.renderRightControlDrawer(s, uiState, Core.isSuperAdmin()) : ""}
     `;
 
     if (activeElId) {
@@ -5872,6 +5882,20 @@
           Core.assertManagerAccess(`Nav:${target}`);
         }
         uiState.activeNav = target;
+        uiState.controlDrawerOpen = false;
+        render();
+        return;
+      }
+
+      if (action === "toggle-control-drawer") {
+        Core.assertManagerAccess("ToggleControlDrawer");
+        uiState.controlDrawerOpen = !uiState.controlDrawerOpen;
+        render();
+        return;
+      }
+
+      if (action === "close-control-drawer") {
+        uiState.controlDrawerOpen = false;
         render();
         return;
       }
@@ -6065,6 +6089,7 @@
         Core.assertManagerAccess("JumpControlPanel");
         uiState.activeNav = "control_panel";
         uiState.activeControlTab = btn.getAttribute("data-tab") || "employees";
+        uiState.controlDrawerOpen = false;
         render();
         return;
       }
@@ -6072,6 +6097,7 @@
       if (action === "cp-tab") {
         Core.assertManagerAccess("SwitchControlPanelTab");
         uiState.activeControlTab = btn.getAttribute("data-tab") || "employees";
+        uiState.controlDrawerOpen = false;
         render();
         return;
       }
