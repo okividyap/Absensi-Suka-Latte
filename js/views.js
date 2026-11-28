@@ -3791,44 +3791,20 @@ ${esc(rawText)}
     ];
 
     const tab = uiState.activeControlTab;
-    const currentTabObj = tabs.find((t) => t.id === tab) || tabs[0];
 
     return `
       <div class="hero-banner">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:8px;">
-          <div>
-            <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:8px;">
-              Control Panel Pengelola (${isSuper ? "Super Admin — Akses Penuh" : "Admin Operasional"})
-            </span>
-            <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Pusat Kendali &amp; Manajemen Operasional</h2>
-            <p style="font-size:12px;color:var(--coffee-200);margin-bottom:0;max-width:780px;">
-              Kelola persetujuan akun Google &amp; karyawan, persetujuan izin &amp; cuti dokter, SOP Kafe/Kitchen, logbook handover, dan pengaturan outlet.
-            </p>
-          </div>
-
-          <!-- Tombol Control Rata Kanan -->
-          <div style="margin-left:auto;">
-            <button type="button" class="btn btn-gold" data-action="toggle-control-drawer" style="font-weight:800;padding:9px 18px;border-radius:12px;font-size:13px;display:flex;align-items:center;gap:6px;box-shadow:0 4px 14px rgba(212,163,97,0.35);">
-              ⚙️ Menu Control Panel ▾
-            </button>
-          </div>
+        <div>
+          <span class="badge" style="background:rgba(218,175,118,0.18);color:var(--gold-200);border:1px solid rgba(218,175,118,0.3);margin-bottom:8px;">
+            Control Panel Pengelola (${isSuper ? "Super Admin — Akses Penuh" : "Admin Operasional"})
+          </span>
+          <h2 style="font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;">Pusat Kendali &amp; Manajemen Operasional</h2>
+          <p style="font-size:12px;color:var(--coffee-200);margin-bottom:0;max-width:780px;">
+            Kelola persetujuan akun Google &amp; karyawan, persetujuan izin &amp; cuti dokter, SOP Kafe/Kitchen, logbook handover, dan pengaturan outlet.
+          </p>
         </div>
 
-        <!-- Bar Tab Aktif Mobile (HP) -->
-        <div class="cp-mobile-bar show-mobile-only" style="background:rgba(255,255,255,0.06);border:1px solid rgba(218,175,118,0.28);border-radius:14px;padding:10px 14px;margin-top:14px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div style="font-size:10px;color:var(--coffee-300);font-weight:700;text-transform:uppercase;">Menu Terpilih:</div>
-            <div style="font-size:13.5px;font-weight:800;color:var(--gold-200);display:flex;align-items:center;gap:6px;">
-              ${esc(currentTabObj.label)}
-              ${currentTabObj.count ? `<span class="count-pill" style="background:#ef4444;color:#fff;font-size:9.5px;padding:1px 5px;">${currentTabObj.count}</span>` : ""}
-            </div>
-          </div>
-          <button type="button" class="btn btn-gold btn-xs" data-action="toggle-control-drawer" style="font-weight:800;padding:6px 12px;border-radius:8px;font-size:11px;">
-            Ganti Menu ▾
-          </button>
-        </div>
-
-        <div class="tab-pills hide-mobile" style="margin-top:16px;">
+        <div class="tab-pills" style="margin-top:16px;">
           ${tabs
             .map(
               (t) => `

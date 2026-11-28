@@ -24,6 +24,13 @@
     activeNav: "dashboard", // Manajer: dashboard|schedules|archive|reports|control_panel ; Anggota: absensi_saya|jadwal_saya|riwayat_saya
     activeControlTab: "employees",
     controlDrawerOpen: false, // Pusat kendali pengelola rata kanan (flyout drawer)
+    pwaBannerDismissed: (function () {
+      try {
+        return sessionStorage.getItem("suka_latte_pwa_dismissed") === "1";
+      } catch (_) {
+        return false;
+      }
+    })(),
     banner: null, // { ok: boolean, message: string }
 
     // Filter Roster Jadwal Kerja
@@ -4022,16 +4029,19 @@
           </header>
 
           ${
-            !isStandalonePwa()
+            !isStandalonePwa() && !uiState.pwaBannerDismissed
               ? `
-              <div class="pwa-install-strip" style="background:linear-gradient(90deg, #2b1810 0%, #452417 100%);color:#fef3c7;padding:9px 16px;border-bottom:1px solid rgba(218,175,118,0.3);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span style="font-size:18px;">📲</span>
-                  <span><strong>Pasang di Layar Utama HP:</strong> Buka langsung seperti aplikasi tanpa perlu lewat Google / Chrome!</span>
+              <div class="pwa-install-strip" style="background:linear-gradient(90deg, #2b1810 0%, #452417 100%);color:#fef3c7;padding:8px 14px;border-bottom:1px solid rgba(218,175,118,0.3);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;">
+                <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:240px;">
+                  <span style="font-size:16px;">📲</span>
+                  <span><strong>Pasang di Layar Utama HP:</strong> Buka langsung seperti aplikasi tanpa perlu lewat browser!</span>
                 </div>
-                <button type="button" class="btn btn-warning btn-xs" data-action="install-pwa-app" style="font-size:11px;font-weight:800;padding:5px 12px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;">
-                  📲 Pasang Aplikasi di HP
-                </button>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <button type="button" class="btn btn-warning btn-xs" data-action="install-pwa-app" style="font-size:11px;font-weight:800;padding:5px 12px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;">
+                    📲 Pasang Aplikasi di HP
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs" data-action="dismiss-pwa-banner" style="color:var(--coffee-200);padding:3px 7px;font-size:13px;line-height:1;" title="Tutup">✕</button>
+                </div>
               </div>
               `
               : ""
@@ -5900,6 +5910,15 @@
         return;
       }
 
+      if (action === "dismiss-pwa-banner") {
+        uiState.pwaBannerDismissed = true;
+        try {
+          sessionStorage.setItem("suka_latte_pwa_dismissed", "1");
+        } catch (_) {}
+        render();
+        return;
+      }
+
       // KONTROL ROSTER JADWAL KERJA BULANAN & MINGGUAN (SCHEDULE)
       if (action === "schedule-prev-month") {
         uiState.scheduleMonthOffset = (uiState.scheduleMonthOffset || 0) - 1;
@@ -6099,6 +6118,12 @@
         uiState.activeControlTab = btn.getAttribute("data-tab") || "employees";
         uiState.controlDrawerOpen = false;
         render();
+        setTimeout(() => {
+          const activePill = document.querySelector(".tab-pill.active");
+          if (activePill && typeof activePill.scrollIntoView === "function") {
+            activePill.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+          }
+        }, 50);
         return;
       }
 
